@@ -1,0 +1,11 @@
+[
+  {
+    "label": "Deno check",
+    "command": "deno task check"
+  },
+  {
+    "label": "Deno test current file",
+    "command": "deno test --allow-env $ZED_FILE",
+    "tags": ["js-test"]
+  }
+]

@@ -1,0 +1,4 @@
+{
+  "name": "@project-s/config",
+  "exports": "./src/index.ts"
+}

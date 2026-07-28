@@ -1,0 +1,24 @@
+services:
+  api:
+    image: ${APP_IMAGE:-project-s:local}
+    build:
+      context: .
+    command: ["api"]
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  worker:
+    image: ${APP_IMAGE:-project-s:local}
+    build:
+      context: .
+    command: ["worker"]
+    env_file:
+      - .env
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 2m

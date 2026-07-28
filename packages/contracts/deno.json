@@ -1,0 +1,4 @@
+{
+  "name": "@project-s/contracts",
+  "exports": "./src/index.ts"
+}

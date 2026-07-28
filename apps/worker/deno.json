@@ -1,0 +1,4 @@
+{
+  "name": "@project-s/worker",
+  "exports": "./src/worker.ts"
+}
