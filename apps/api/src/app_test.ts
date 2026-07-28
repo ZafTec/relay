@@ -2,7 +2,7 @@ import { assertEquals } from "@std/assert";
 import { createApp } from "./app.ts";
 
 const config = {
-  appName: "Project S Test",
+  appName: "Relay Test",
   port: 8000,
   build: {
     version: "test",

@@ -1,12 +1,12 @@
-# Project S architecture
+# Relay architecture
 
 Status: agreed MVP architecture\
-Working title: Project S\
-Planned domain: `https://<project-name>.zaftech.co`
+Product name: Relay\
+Planned domain: `https://relay.zaftech.co`
 
 ## Product summary
 
-Project S is a multi-tenant storage service exposed through three interfaces:
+Relay is a multi-tenant storage service exposed through three interfaces:
 
 - A web dashboard for files, jobs, usage, and account management
 - A versioned HTTP API
@@ -54,8 +54,8 @@ Use a modular monolith in one repository and one compiled artifact. The artifact
 launches as either an API or worker process:
 
 ```text
-project-s api
-project-s worker
+relay api
+relay worker
 ```
 
 The API and worker share contracts and domain code but run independently. This
@@ -293,7 +293,7 @@ Suggested route layout:
 Suggested protected-resource audience:
 
 ```text
-https://<project-name>.zaftech.co/mcp
+https://relay.zaftech.co/mcp
 ```
 
 Initial OAuth scopes:

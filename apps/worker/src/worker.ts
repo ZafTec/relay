@@ -1,5 +1,5 @@
-import type { RuntimeConfig } from "@project-s/config";
-import { loadRuntimeConfig } from "@project-s/config";
+import type { RuntimeConfig } from "@relay/config";
+import { loadRuntimeConfig } from "@relay/config";
 
 export async function startWorker(
   config: RuntimeConfig = loadRuntimeConfig(),

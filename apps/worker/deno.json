@@ -1,4 +1,4 @@
 {
-  "name": "@project-s/worker",
+  "name": "@relay/worker",
   "exports": "./src/worker.ts"
 }

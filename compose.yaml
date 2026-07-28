@@ -1,6 +1,6 @@
 services:
   api:
-    image: ${APP_IMAGE:-project-s:local}
+    image: ${APP_IMAGE:-relay:local}
     build:
       context: .
     command: ["api"]
@@ -13,7 +13,7 @@ services:
     stop_grace_period: 30s
 
   worker:
-    image: ${APP_IMAGE:-project-s:local}
+    image: ${APP_IMAGE:-relay:local}
     build:
       context: .
     command: ["worker"]

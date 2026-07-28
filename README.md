@@ -1,7 +1,7 @@
-# Project S
+# Relay
 
-Project S is the working title for a multi-tenant storage and image-generation
-service exposed through a dashboard, HTTP API, and remote MCP server.
+Relay is a multi-tenant storage and image-generation service exposed through a
+dashboard, HTTP API, and remote MCP server.
 
 The repository currently contains the initial Deno/Hono runtime and architecture
 documentation. Product features and provider integrations have not been

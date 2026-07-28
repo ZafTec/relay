@@ -1,4 +1,4 @@
 {
-  "name": "@project-s/contracts",
+  "name": "@relay/contracts",
   "exports": "./src/index.ts"
 }

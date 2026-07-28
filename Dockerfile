@@ -11,7 +11,7 @@ RUN mkdir -p /out && \
     deno compile \
       --allow-env \
       --allow-net \
-      --output /out/project-s \
+      --output /out/relay
       src/main.ts
 
 FROM debian:bookworm-slim AS runtime
@@ -21,10 +21,10 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --from=build /out/project-s /app/project-s
+COPY --from=build /out/relay /app/relay
 
 USER 65532:65532
 EXPOSE 8000
 
-ENTRYPOINT ["/app/project-s"]
+ENTRYPOINT ["/app/relay"]
 CMD ["api"]

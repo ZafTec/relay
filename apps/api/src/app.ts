@@ -1,6 +1,6 @@
 import { Hono } from "@hono/hono";
-import type { RuntimeConfig } from "@project-s/config";
-import { loadRuntimeConfig } from "@project-s/config";
+import type { RuntimeConfig } from "@relay/config";
+import { loadRuntimeConfig } from "@relay/config";
 
 export function createApp(config: RuntimeConfig = loadRuntimeConfig()): Hono {
   const app = new Hono();

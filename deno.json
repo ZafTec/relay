@@ -10,7 +10,7 @@
     "dev:worker": "deno run --env-file=.env --allow-env --allow-net --watch src/main.ts worker",
     "start:api": "deno run --env-file=.env --allow-env --allow-net src/main.ts api",
     "start:worker": "deno run --env-file=.env --allow-env --allow-net src/main.ts worker",
-    "compile": "deno compile --allow-env --allow-net --output dist/project-s src/main.ts",
+    "compile": "deno compile --allow-env --allow-net --output dist/relay src/main.ts",
     "test": "deno test --allow-env",
     "check": "deno fmt --check && deno lint && deno check src/main.ts && deno test --allow-env",
     "fmt": "deno fmt",

@@ -1,4 +1,4 @@
-import type { BuildInfo } from "@project-s/contracts";
+import type { BuildInfo } from "@relay/contracts";
 
 export interface RuntimeConfig {
   readonly appName: string;
@@ -25,7 +25,7 @@ export function loadRuntimeConfig(
   env: Record<string, string | undefined> = Deno.env.toObject(),
 ): RuntimeConfig {
   return {
-    appName: env.APP_NAME?.trim() || "Project S",
+    appName: env.APP_NAME?.trim() || "Relay",
     port: readPort(env.PORT),
     build: {
       version: env.APP_VERSION?.trim() || "development",
