@@ -283,6 +283,11 @@ Use `@better-auth/oauth-provider` with its MCP resource-server support.
 Suggested route layout:
 
 ```text
+/                                             Public Relay landing page
+/dashboard                                    Authenticated application
+/docs                                         Documentation
+/changelog                                    Published product changelog
+/status                                       Operational status
 /api/auth/*                                   Better Auth and OAuth provider
 /.well-known/oauth-authorization-server/...  Authorization metadata
 /.well-known/oauth-protected-resource/...    MCP resource metadata
@@ -813,6 +818,18 @@ subprocessors, abuse handling, and consumed-usage refunds.
 Store accepted legal document version and content hash. See `legal.md` for the
 verified URLs and identified changes.
 
+## Changelog publication
+
+Relay uses a Git-assisted, database-published changelog. A Git tag and commit
+SHA identify the release source, while PostgreSQL stores the reviewed public
+entry. CI may create a draft after a release tag, but only a system-level
+superadmin can publish it.
+
+The landing page shows the latest published entries and `/changelog` provides
+the full archive. Raw commits are never published directly. Publication, edits,
+and unpublishing create audit records. See `changelog.md` for the workflow,
+schema, and API boundaries.
+
 ## CI and deployment
 
 ### Pull requests to `main`
@@ -936,7 +953,6 @@ approval.
 
 The following are intentionally unresolved:
 
-- Final product name and domain
 - Dashboard component and styling system
 - Exact database query layer and migration tool
 - BullMQ compile compatibility and final queue selection
