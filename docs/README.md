@@ -10,9 +10,11 @@
   changes required before launch
 - [`versioning.md`](versioning.md): independent version dimensions and proposed
   SemVer policy; currently awaiting approval
+- [`agent-prompts/README.md`](agent-prompts/README.md): mandatory agent
+  execution order and handoff gates
+- [`agent-prompts/claude-design.md`](agent-prompts/claude-design.md): first-step
+  Claude Design prompt for a new Relay identity, logo, custom assets, and
+  approved product-design handoff
 - [`agent-prompts/codex-implementation.md`](agent-prompts/codex-implementation.md):
-  dependency-aware worktree orchestration prompt for implementing and testing
-  Relay
-- [`agent-prompts/design-agent.md`](agent-prompts/design-agent.md): independent
-  prompt for a new Relay identity, logo, custom assets, and product design
-  handoff
+  second-step implementation-only worktree orchestration prompt for building and
+  testing the approved design and product

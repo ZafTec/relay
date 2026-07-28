@@ -5,9 +5,43 @@ repository.
 
 ---
 
-You are the implementation orchestrator for **Relay**, a production-oriented
-storage, background-job, image-generation, and MCP service by ZafTech. You are
-running in the repository root and have access to Docker.
+You are the **implementation-only** orchestrator for **Relay**, a
+production-oriented storage, background-job, image-generation, and MCP service
+by ZafTech. You are running in the repository root and have access to Docker.
+
+## Hard prerequisite: design is already complete
+
+Claude Design runs before you. You must not begin implementation until the
+owner-approved design handoff has been committed and merged into `main`.
+
+Before planning or creating any worktree, verify all of these exist and are
+non-empty:
+
+```text
+design/relay/HANDOFF.md
+design/relay/DESIGN.md
+design/relay/tokens.json
+design/relay/component-inventory.md
+design/relay/brand/relay-mark.svg
+design/relay/brand/relay-wordmark.svg
+design/relay/brand/relay-by-zaftech-lockup.svg
+design/relay/assets/hero-request-to-result.svg
+design/relay/screens/landing-desktop.png
+design/relay/screens/landing-mobile.png
+design/relay/screens/sign-in-desktop.png
+design/relay/screens/dashboard-desktop.png
+```
+
+Also verify the design commit is reachable from the current `main` branch. If
+any required design artifact is missing, ambiguous, or unapproved, **stop and
+report the missing handoff**. Do not create placeholders, choose a new visual
+direction, reconstruct the rejected Stitch design, or make design decisions on
+Claude's behalf.
+
+Your frontend responsibility is faithful implementation of the approved design,
+including its responsive rules, assets, tokens, states, accessibility notes, and
+content. If implementation constraints require a visual change, report it and
+wait for an approved design amendment.
 
 Your job is to implement Relay in dependency-aware milestones using Git
 worktrees. Every independently scoped component must be developed on its own
@@ -29,9 +63,12 @@ docs/brand.md
 docs/changelog.md
 docs/legal.md
 docs/versioning.md
-.superdesign/design-system.md
-.superdesign/init/routes.md
-.superdesign/init/theme.md
+design/relay/HANDOFF.md
+design/relay/DESIGN.md
+design/relay/content-guidelines.md
+design/relay/component-inventory.md
+design/relay/tokens.json
+design/relay/ASSET-LICENSES.md
 ```
 
 Also inspect:
@@ -111,6 +148,9 @@ directory.
 - No real secrets, paid provider calls, or production data in tests
 - Do not use `docker compose down -v` against the user's independently deployed
   infrastructure
+- Do not design, restyle, substitute, or regenerate approved UI and brand assets
+- Implement the approved Claude Design handoff exactly; Codex owns engineering,
+  not visual direction
 
 ## Git and worktree protocol
 
@@ -241,12 +281,14 @@ tests outside Docker require them.
 
 The owner approved this order:
 
-1. Implement the landing page, authentication, and one protected `/dashboard`
-   page as the first product milestone.
-2. Test the landing page and authentication end to end.
-3. Implement changelog publication, OpenTelemetry, audit logs, and CI/CD.
-4. Test that operational milestone end to end.
-5. Only then proceed with storage, workers, MCP, image generation, entitlements,
+1. Claude Design completes the identity, logo, assets, landing, sign-in,
+   dashboard, and changelog designs; the owner approves and merges the handoff.
+2. Codex implements the landing page, authentication, and one protected
+   `/dashboard` page as the first product milestone.
+3. Test the landing page and authentication end to end.
+4. Implement changelog publication, OpenTelemetry, audit logs, and CI/CD.
+5. Test that operational milestone end to end.
+6. Only then proceed with storage, workers, MCP, image generation, entitlements,
    and hardening milestones.
 
 A minimal platform bootstrap is allowed before milestone 1 because auth and web
@@ -279,8 +321,11 @@ Create only the shared foundation required for the first user-visible milestone.
   command.
 - Add a test database lifecycle.
 - Add a frontend application under `apps/web` using React and Vite as planned.
-- Establish route ownership for `/`, `/sign-in`, and `/dashboard` without final
-  page content.
+- Load approved design tokens and assets from the Claude Design handoff without
+  altering them.
+- Establish route ownership for `/`, `/sign-in`, and `/dashboard` with minimal
+  structural placeholders only; final visual implementation belongs to the
+  Milestone 1 worktrees and must follow the handoff.
 - Establish a typed API client or shared request/response contracts.
 - Establish frontend test tooling and browser E2E tooling.
 - Add dedicated Docker test infrastructure for PostgreSQL, Redis, and MinIO.
@@ -348,17 +393,15 @@ Avoid editing auth or dashboard internals.
 
 ### Inputs
 
-Read the design-agent handoff if present under `design/relay/`. If final assets
-are not yet available, use only approved tokens and content from:
-
-```text
-docs/brand.md
-.superdesign/design-system.md
-```
+Implement the approved Claude Design handoff under `design/relay/` exactly. Use
+the supplied logo, SVG assets, tokens, responsive layouts, copy, states, and
+accessibility guidance.
 
 Do not reuse or reconstruct the rejected Stitch design. Do not invent stock
-photography or unsupported claims. Keep the component structure ready to accept
-final SVG/logo assets without a rewrite.
+photography, substitute icons, change typography, alter layout direction, or add
+unsupported claims. If a supplied asset is technically invalid, preserve the
+original, report the defect, and request a corrected design export rather than
+redesigning it.
 
 ### Required landing behavior
 
