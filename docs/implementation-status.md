@@ -2,7 +2,7 @@
 
 Status: repository audit\
 Verified: 2026-08-20\
-Baseline revision: `f4e423b` (`main` before this documentation update)
+Baseline revision: `d4c574b` plus the owner's untracked `design/v3/` package
 
 ## Summary
 
@@ -111,9 +111,11 @@ deno task check
 ```
 
 Result: failed in `deno fmt --check`. The command includes design documents,
-SVGs, and the untracked newer design-system bundle. It reported 50 unformatted
-files out of 89 before lint, type check, or tests could run. This is a
-task-scope problem, not evidence that application source failed formatting.
+SVGs, and the untracked newer design-system bundle. The earlier audit reported
+50 unformatted files out of 89. With the later raw v3 export present, a
+subsequent research pass reported 91 unformatted files out of 141 before lint,
+type check, or tests could run. This is a task-scope problem, not evidence that
+application source failed formatting.
 
 Container command:
 
@@ -173,14 +175,18 @@ container tests, or dependency integration tests.
 Two historical visual handoffs are tracked as versioned snapshots:
 
 - `design/v1/` is the initial Ledger handoff.
-- `design/v2/` is the larger package with more screens and its source canvases.
+- `design/v2/` is the expanded storage-first package.
 
-See [`../design/README.md`](../design/README.md) for their version status.
+A newer untracked `design/v3/` package pivots to Tools, Runs, Artifacts,
+metering, provider administration, and managed sharing. Its embedded handoff
+still marks owner sign-off, current exports, real provider fixtures, and several
+contracts as unresolved. See [`../design/README.md`](../design/README.md) for
+the tracked history and
+[`implementation-handoff/08-web-v3.md`](implementation-handoff/08-web-v3.md) for
+the current implementation assessment.
 
-Neither represents the clarified tool-and-artifact-registry product. The newer
-handoff is more complete for the previous storage-first direction and is useful
-for tokens, identity, shell, auth, jobs, status, notices, drawers, tables, and
-changelog patterns. It lacks the current golden path:
+V1/v2 lack the current golden path; v3 represents it but is not yet a committed,
+approved implementation baseline:
 
 ```text
 browse tool
@@ -193,10 +199,10 @@ browse tool
   -> create managed share link
 ```
 
-Frontend implementation remains blocked until the design agent reconciles that
-flow and the owner approves one canonical tracked handoff. See the design-agent
-backlog at
-[`../design/v2/DESIGN-AGENT-SUGGESTIONS.md`](../design/v2/DESIGN-AGENT-SUGGESTIONS.md).
+Frontend implementation remains blocked until v3 is preserved in Git, its
+precedence and open contracts are resolved, and the owner records approval of an
+exact commit. The raw canvas/runtime files remain provenance rather than
+production source.
 
 ## Decisions required before implementation workstreams fan out
 

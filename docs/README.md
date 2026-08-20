@@ -9,6 +9,9 @@
   of what is implemented, scaffolded, documented, missing, or blocked
 - [`architecture.md`](architecture.md): short architecture index and stable
   technology decisions; detailed authority lives in the canonical document
+- [`implementation-handoff/README.md`](implementation-handoff/README.md):
+  researched, dependency-ordered implementation handoff with parallel
+  workstreams, tests, VPS operations, and blockers
 
 ## Supporting decisions
 
@@ -25,8 +28,9 @@
 
 ## Agent handoffs
 
-- [`agent-prompts/README.md`](agent-prompts/README.md): mandatory agent
-  execution order and handoff gates
+- [`agent-prompts/README.md`](agent-prompts/README.md): earlier agent prompts;
+  the researched implementation handoff supersedes their execution order where
+  they conflict
 - [`agent-prompts/claude-design.md`](agent-prompts/claude-design.md): historical
   prompt for the earlier design direction; do not run it unchanged
 - [`agent-prompts/codex-implementation.md`](agent-prompts/codex-implementation.md):

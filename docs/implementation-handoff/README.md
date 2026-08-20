@@ -106,7 +106,7 @@ Known blockers:
 | [`03-auth-workspaces.md`](03-auth-workspaces.md)                     | Better Auth, social OAuth, personal workspaces, authorization, and auth tests                 |
 | [`04-queue-capacity-scheduling.md`](04-queue-capacity-scheduling.md) | BullMQ, outbox, Redis limits, leases, retries, cancellation, and weighted fairness            |
 | [`05-domain-storage-metering.md`](05-domain-storage-metering.md)     | Tool registry, provider catalog, artifacts, S3, share links, entitlements, and usage ledgers  |
-| [`06-http-mcp-events.md`](06-http-mcp-events.md)                     | HTTP contracts, MCP v2, OAuth resource protection, idempotency, and SSE                       |
+| [`06-http-mcp-events.md`](06-http-mcp-events.md)                     | HTTP contracts, MCP TypeScript SDK v2, OAuth resource protection, idempotency, and SSE        |
 | [`07-observability-audit.md`](07-observability-audit.md)             | Deno OTel, Alloy pipelines, metrics/logs/traces, audit, dashboards, and alerts                |
 | [`08-web-v3.md`](08-web-v3.md)                                       | Raw v3 cleanup, React decomposition, parallel UI routes, accessibility, and visual tests      |
 | [`09-ci-release-deployment.md`](09-ci-release-deployment.md)         | Protected main, CI, Release Please, Docker Hub, Compose, Nginx, migration, and rollback       |
@@ -135,7 +135,8 @@ Known blockers:
 ## Acceptance flexibility
 
 Tests in this handoff specify required behavior, not mandatory test-framework
-syntax. An agent may substitute an equivalent or stronger test when it records:
+syntax. An agent may substitute an equivalent or stronger test only with
+integration-owner approval and a record of:
 
 - Why the original form did not fit the implementation
 - What invariant the replacement proves

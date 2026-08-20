@@ -53,7 +53,9 @@ npm:@opentelemetry/api@1
 
 Do not initialize `NodeSDK`, a second provider, or application-side exporters.
 Deno automatically instruments `Deno.serve`, `fetch`, runtime metrics, and
-console logs.
+console logs. Pin the Deno version because native OTel behavior is
+version-bound. Generate a unique `service.instance.id` for every process start;
+do not reuse a static Compose service value.
 
 ### Required application enrichment
 
@@ -66,6 +68,14 @@ Deno's auto server span lacks Hono route templates. Middleware must:
 - Record route-level custom metrics because native HTTP metrics lack route
 - Treat SSE auto span as handshake only; record connection lifetime separately
 
+Deno automatically records `url.full`, `url.query`, and `url.path` on incoming
+and outgoing HTTP spans. Alloy transforms must delete `url.query`, delete or
+reconstruct `url.full` without query data, and remove or policy-normalize
+`url.path`. Keep templated `http.route` for inbound analysis and allow-list only
+safe outbound paths. This is mandatory for OAuth callback codes/state, route
+IDs, object keys, and presigned S3 credentials; application middleware alone
+cannot reliably sanitize every automatic child `fetch` span.
+
 Manual spans cover PostgreSQL, Redis, BullMQ, S3, provider submission/retrieval,
 authorization, reservation, settlement, outbox, and reconciliation.
 
@@ -74,6 +84,11 @@ authorization, reservation, settlement, outbox, and reconciliation.
 Use the global OTel API to inject W3C trace context when creating a ticket and
 extract it in the worker. Allow only `traceparent` and `tracestate`; omit
 baggage because queue metadata persists in Redis.
+
+At Nginx or another boundary before Deno creates its automatic server span,
+strip or restart untrusted external trace context unless an explicit
+trusted-caller policy allows it. Otherwise a caller can choose trace identity or
+influence parent-based sampling.
 
 If `bullmq-otel` is used, wrap its Telemetry interface. Do not export raw BullMQ
 attributes that may include job IDs, options, results, progress, failure
@@ -131,7 +146,9 @@ OTEL_TRACES_SAMPLER=parentbased_traceidratio
 OTEL_TRACES_SAMPLER_ARG=<approved ratio>
 ```
 
-Metrics and operational errors remain complete regardless of trace sampling.
+Metrics and operational errors are not reduced by trace sampling; they retain
+independent batching, exporter, overflow, shutdown, and redaction loss
+semantics.
 
 ## Metrics
 
@@ -236,9 +253,16 @@ otelcol.receiver.otlp
 
 Requirements:
 
-- Bind receivers only to the private Docker network.
+- Listen on the container interface required by Alloy, publish no host port, and
+  enforce privacy through an exact collector-ingest Docker network membership.
+- Bind Alloy's `12345` administration endpoint to loopback/management interface,
+  front it with a protected sidecar, or use a separate gateway instance. Docker
+  network membership alone cannot hide one port of a multi-homed container.
 - Enable OTLP HTTP 4318; optional private gRPC 4317 for telemetrygen tests.
 - Use bounded request size, memory limiter, queue, and retry.
+- Apply mandatory span/log transforms that remove URL query/full values,
+  normalize or remove `url.path`, drop sensitive headers, and remove unapproved
+  exception messages/stacks before batching.
 - Keep backend queues independent so one outage does not block other signals.
 - Prefer dropping telemetry over applying backpressure to Relay.
 - Scrape Alloy's own metrics and alert on refusal/export/queue saturation.
@@ -253,11 +277,16 @@ version are supplied. See [`10-vps-remediation.md`](10-vps-remediation.md).
 
 ### Prometheus
 
-Use its enabled native OTLP receiver through Alloy:
+Use its enabled native OTLP receiver through Alloy. The final wire URL is:
 
 ```text
 http://prometheus:9090/api/v1/otlp/v1/metrics
 ```
+
+For Alloy `otelcol.exporter.otlphttp.client.endpoint`, use the base
+`http://prometheus:9090/api/v1/otlp`; the exporter appends `/v1/metrics`.
+Alternatively use the component's explicit full `metrics_endpoint`. Validate the
+actual requested URL from exporter metrics/logs.
 
 Add out-of-order ingestion tolerance for batched collectors and a conservative
 resource-attribute promotion list. Do not send duplicate metrics through both
@@ -265,11 +294,14 @@ OTLP and remote write.
 
 ### Loki
 
-Use:
+The final Loki wire URL is:
 
 ```text
 http://loki:3100/otlp/v1/logs
 ```
+
+For Alloy's generic OTLP HTTP client endpoint, use `http://loki:3100/otlp`;
+otherwise configure the explicit full logs endpoint.
 
 Keep only service/environment/namespace as index labels. Instance ID, version,
 revision, trace/span IDs, and application IDs remain structured metadata. Alert
@@ -321,8 +353,31 @@ Audit actions include:
 - Changelog publish/unpublish
 - Billing/subscription changes later
 
-Normal application roles cannot update/delete audit rows. Corrections append new
-events. Snapshots are bounded and redact secrets/content.
+For fail-closed governed changes, insert the audit event in the same PostgreSQL
+transaction as the change. Give retryable actions a unique event/idempotency
+key. Use an insert-only application path or security-definer function; normal
+runtime roles cannot directly update/delete audit rows. Corrections append new
+events. Define partitioning, retention, reader permissions, bounded snapshot
+size, PII policy, and backup/restore coverage. PostgreSQL access control is not
+cryptographic tamper evidence; add hash-chained/signed exports only if that
+stronger requirement is approved.
+
+## Duplicate-signal prevention
+
+Inventory the live Alloy and Prometheus graph before adding Relay:
+
+- Send each Relay metric through exactly one path: OTLP or remote write.
+- Select one canonical HTTP duration metric for SLO dashboards when both Deno
+  native and Relay route-level histograms exist.
+- Emit a unique log canary and prove exactly one Loki record; do not combine
+  Deno console OTLP with Docker-log scraping for Relay.
+- Fan traces to Jaeger only during a bounded smoke window, then remove that
+  path.
+- Verify infrastructure scrape targets are not also forwarded into Prometheus by
+  another Alloy pipeline.
+
+Receiver flags alone do not duplicate data; duplicate exporter/scrape paths do.
+Alert on rejected/out-of-order Prometheus samples and Alloy queue drops.
 
 ## Dashboards
 
@@ -335,8 +390,8 @@ Provision or document:
 4. Usage: reservation denials, settlement lag, reconciliation.
 5. Telemetry pipeline: Alloy accepted/refused/exported, queue saturation,
    backend errors.
-6. Backend health: Prometheus TSDB, Loki ingestion/query, Tempo storage/query,
-   VPS/container resources.
+6. Backend health: Prometheus TSDB, Loki ingestion/query, selected persistent
+   trace-backend storage/query, VPS/container resources.
 7. Release comparison by bounded service version.
 
 Use stable datasource UIDs and version-controlled provisioning where possible.
@@ -358,8 +413,8 @@ Initial categories; thresholds are selected from observed baselines/SLOs:
 - Usage settlement/outbox reconciliation lag
 - Alloy refused/dropped/export failures or queue saturation
 - Loki discarded samples
-- Tempo ingestion/storage/query/compaction failures
-- Prometheus/Loki/Tempo disk or memory pressure
+- Selected persistent trace-backend ingestion/storage/query/compaction failures
+- Prometheus/Loki/trace-backend disk or memory pressure
 - Unexpected absence of application telemetry
 - Notification delivery failure
 
@@ -382,7 +437,8 @@ inhibition.
 ### Redaction/cardinality
 
 Inject canaries representing bearer token, OAuth code/state, signed URL, prompt,
-object key, and SQL value. Assert none appears in Loki/Tempo.
+object key, and SQL value. Assert none appears in Loki or the selected
+persistent trace backend.
 
 Inspect Prometheus series and Loki index labels for prohibited IDs or unbounded
 values. Fail tests for raw path IDs when a route template is expected.
@@ -392,7 +448,7 @@ values. Fail tests for raw path IDs when a route template is expected.
 - `telemetrygen` traces/metrics/logs traverse Alloy to each backend.
 - Alloy restart/backend outage behavior matches documented loss tolerance.
 - Loki log-to-trace derived field works.
-- Tempo trace survives backend restart.
+- A trace survives restart of the selected persistent trace backend.
 - Alert rules pass static/rule tests and send one test notification.
 - Dashboard queries load against representative fixtures.
 

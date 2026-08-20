@@ -18,7 +18,6 @@ There is no email/password, magic-link, OTP, or anonymous signup path.
 ```text
 packages/auth/
   src/auth.ts
-  src/auth-client.ts
   src/config.ts
   src/session.ts
   src/workspaces.ts
@@ -27,7 +26,7 @@ packages/auth/
   src/testing/auth.test-instance.ts
 apps/api/src/routes/auth/
 apps/api/src/middleware/session.ts
-packages/database/migrations/*auth*
+packages/database/src/migrations/<reserved-auth-id>.ts
 ```
 
 The production package entry point must not export the test auth instance.
@@ -51,7 +50,7 @@ Required shape:
 
 ```text
 appName: Relay
-baseURL: https://relay.zaftech.co
+baseURL: validated BETTER_AUTH_URL (`https://relay.zaftech.co` in production)
 basePath: /api/auth
 database: shared pg.Pool
 trustedOrigins: exact environment origins
@@ -103,7 +102,7 @@ Callbacks:
 
 ```text
 https://relay.zaftech.co/api/auth/callback/google
-http://127.0.0.1:8000/api/auth/callback/google
+http://127.0.0.1:5173/api/auth/callback/google  # when Vite proxies /api
 ```
 
 ### GitHub
@@ -120,11 +119,14 @@ Callbacks:
 
 ```text
 https://relay.zaftech.co/api/auth/callback/github
-http://127.0.0.1:8000/api/auth/callback/github
+http://127.0.0.1:5173/api/auth/callback/github  # when Vite proxies /api
 ```
 
 Use one local hostname consistently. `localhost` and `127.0.0.1` create
-different cookie hosts.
+different cookie hosts. The documented local topology uses the browser-visible
+Vite origin and proxies `/api`, `/mcp`, and approved well-known routes to the
+API; if direct API origin is chosen instead, register port 8000 everywhere and
+do not mix the two models.
 
 Provider profiles must include a usable verified email before session creation.
 No provider callback query, authorization code, state value, token, or raw
@@ -227,11 +229,38 @@ Rules:
 - Every privileged request queries a current unrevoked grant.
 - Workspace owner/admin does not imply system permission.
 - System superadmin does not imply membership in every workspace.
-- High-risk publish/provider/entitlement actions require a fresh session.
+- High-risk publish/provider/entitlement actions require a session no older than
+  an approved freshness window (initial design target: 15 minutes).
+- A stale session redirects through an explicit Google/GitHub reauthentication
+  flow or requires sign-out/sign-in if provider reauthentication cannot be
+  guaranteed; account selection alone is not assumed to prove reauthentication.
 - Grant/revoke actions create durable audit events.
 
 Do not add Better Auth's Admin plugin merely to obtain a generic `admin` field
 without reviewing the naming and permission collision.
+
+## MVP organization and account-linking scope
+
+The MVP exposes one single-member personal workspace per user. Organization
+creation, invitations, teams, and workspace switching remain hidden until their
+backend and UI phases are deliberately enabled. The owner/admin/member model is
+still enforced in data and tests so later team support does not require a
+rewrite.
+
+Implicit provider linking remains disabled. Explicit Google/GitHub account
+linking is a separate authenticated UI/service task; until it exists, signing in
+with a second provider is not promised to merge identities by email.
+
+The browser Better Auth client belongs to `apps/web/src/auth/` in the web
+foundation lane. `packages/auth` owns only server configuration, inferred public
+types, and server-side policy.
+
+## Future OAuth Provider config ownership
+
+Wave 4 MCP adds Better Auth's direct OAuth Provider/JWT configuration. The auth
+owner—not the MCP lane—must apply that shared config delta, generate/review its
+schema, reserve a migration through the database owner, and expose the consent
+and workspace-selection contract before MCP is considered complete.
 
 ## Proxy, origin, and cookie policy
 
@@ -278,7 +307,8 @@ Backend auth can be implemented before v3 UI. The following remain UI-blocked:
 
 - Google/GitHub provider buttons and official marks
 - Loading, provider unavailable, callback error, and expired-session screens
-- Workspace selector
+- A non-interactive current-workspace label for the single-workspace MVP;
+  workspace switching remains future
 - Session menu and profile screens
 - OAuth consent and MCP workspace-selection pages
 
@@ -308,7 +338,8 @@ provider fixtures to test:
 - Missing/unverified email rejection
 - `access_denied` and provider-error mapping
 - Existing account sign-in
-- Explicit account linking
+- Explicit account linking is unavailable/rejected safely until its later
+  authenticated service/UI task is approved
 - Implicit same-email linking rejection
 
 A staging smoke test with dedicated provider credentials is separate from PR CI.

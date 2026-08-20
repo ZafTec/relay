@@ -8,37 +8,57 @@ are available
 
 ```mermaid
 flowchart TD
-    W0[Wave 0: compatibility and contract spikes]
+    V3[Owner pre-step: commit and approve v3]
+    W0[Wave 0: parallel compatibility spikes]
+    W0I[Wave 0 integration: pin selections and contracts]
     W1[Wave 1: runtime, database, migrations, CI foundation]
     W2A[Wave 2A: Better Auth and workspaces]
     W2B[Wave 2B: observability and audit]
-    W2C[Wave 2C: v3 package and web foundation]
+    W2C[Wave 2C: web build and visual foundation]
+    W2I[Wave 2 integration: auth plus durable audit]
+    W30[Wave 3.0: canonical domain schema and state machines]
     W3A[Wave 3A: BullMQ and capacity]
-    W3B[Wave 3B: registry, artifacts, and S3]
+    W3B[Wave 3B: registry, artifacts, S3, and metering]
     W3C[Wave 3C: changelog and governance]
+    W3I[Wave 3 integration: admission and cross-domain constraints]
     W4A[Wave 4A: HTTP and SSE]
     W4B[Wave 4B: MCP OAuth and tools]
-    W4C[Wave 4C: product UI routes]
+    W4C[Wave 4C: public/auth/dashboard UI]
+    W4D[Wave 4D: product/admin UI]
     W5[Wave 5: first image-provider vertical slice]
     W6[Wave 6: release, deployment, and production validation]
     W7[Wave 7: multi-provider and commercial expansion]
 
-    W0 --> W1
+    W0 --> W0I
+    W0I --> W1
+    V3 --> W2C
     W1 --> W2A
     W1 --> W2B
     W1 --> W2C
-    W2A --> W3A
-    W2A --> W3B
-    W2A --> W3C
-    W3A --> W4A
-    W3B --> W4A
-    W3C --> W4A
-    W3A --> W4B
-    W3B --> W4B
+    W2A --> W2I
+    W2B --> W2I
+    W2I --> W30
+    W30 --> W3A
+    W30 --> W3B
+    W30 --> W3C
+    W3A --> W3I
+    W3B --> W3I
+    W3C --> W3I
+    W3I --> W4A
+    W3I --> W4B
+    W2A --> W4B
     W2C --> W4C
+    W2A --> W4C
     W4A --> W4C
+    W2C --> W4D
+    W4A --> W4D
+    W4B --> W4D
+    W4C --> W4D
+    W3B --> W4D
+    W3C --> W4D
     W4B --> W5
     W4C --> W5
+    W4D --> W5
     W5 --> W6
     W6 --> W7
 ```
@@ -55,30 +75,51 @@ The following have one owner at a time:
 - Production Compose and release workflows
 
 Parallel lanes propose contract changes through the owning lane instead of
-editing these files independently.
+editing these files independently. The database owner allocates migration IDs,
+updates `packages/database/src/migrations/manifest.ts`, and regenerates database
+types. Feature lanes submit schema specifications or reserved migration modules,
+then rebase after the owner merges the canonical manifest.
 
 Every lane uses a dedicated branch/worktree. Suggested names are illustrative;
 an orchestrator may use equivalent names while keeping write scopes disjoint.
+
+## Owner pre-step — preserve and approve v3
+
+Before any design/web worktree is created, commit the raw `design/v3/` snapshot,
+record its exact commit and owner approval, and add a precedence/route/state/
+viewport manifest at `design/v3/IMPLEMENTATION-MANIFEST.md`. It lists source
+precedence, routes, states, viewports, fixtures, missing assets, approved
+exceptions, owner, and commit. Untracked files do not appear in other Git
+worktrees. Backend spikes may proceed while this pre-step is pending.
 
 ## Wave 0 — compatibility and contract spikes
 
 Goal: remove runtime uncertainty before permanent dependencies or schemas land.
 
-All lanes may run in parallel from the same clean `main`.
+All technical lanes may run in parallel from the same clean `main`. They use
+disposable files or isolated branches and do not each edit the real import map
+or lockfile.
 
-| Lane              | Suggested branch                    | Output                                                                              | Required proof                                                                                  |
-| ----------------- | ----------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Runtime/container | `impl/00-runtime-spike`             | Corrected experimental Dockerfile outside production path or disposable spike files | Compiled API/worker starts in source-free Linux image with only intended permissions            |
-| Database/auth     | `impl/00-auth-db-spike`             | Disposable Better Auth + `pg` + Kysely probe                                        | PostgreSQL 18 migration generation, connection, auth health, compiled execution, clean shutdown |
-| BullMQ            | `impl/00-bullmq-spike`              | Disposable queue probe                                                              | Live enqueue/consume/delay/retry/cancel/stall/reconnect/SIGTERM in compiled Linux image         |
-| Storage           | `impl/00-s3-spike`                  | Disposable AWS SDK and Deno-native adapter comparison                               | MinIO presign/PUT/HEAD/GET/delete/checksum/expiry from compiled image                           |
-| MCP               | `impl/00-mcp-spike`                 | Disposable SDK v2/Hono endpoint                                                     | Official client/conformance, Origin/Host rejection, compiled Deno execution                     |
-| Telemetry         | `impl/00-otel-spike`                | Disposable Deno native OTel probe                                                   | API span, custom metric, correlated log reach Alloy and all selected backends                   |
-| v3 reconciliation | `design/03-implementation-contract` | Design manifest/decision report only                                                | Owner records exact v3 commit, precedence, routes, missing assets, and approved fixture policy  |
+| Lane                                                                           | Suggested branch        | Output                                                                              | Required proof                                                                                                              |
+| ------------------------------------------------------------------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Runtime/container                                                              | `impl/00-runtime-spike` | Corrected experimental Dockerfile outside production path or disposable spike files | Compiled API/worker starts in source-free Linux image with only intended permissions                                        |
+| Database/auth                                                                  | `impl/00-auth-db-spike` | Disposable Better Auth + `pg` + Kysely probe                                        | PostgreSQL 18 migration generation, compiled auth health, and concurrent idempotent personal-workspace/session provisioning |
+| BullMQ                                                                         | `impl/00-bullmq-spike`  | Disposable queue probe                                                              | Live enqueue/consume/delay/retry/cancel/stall/reconnect/SIGTERM in compiled Linux image                                     |
+| Storage                                                                        | `impl/00-s3-spike`      | Disposable AWS SDK and Deno-native adapter comparison                               | MinIO presign/PUT/HEAD/GET/delete/checksum/expiry from compiled image                                                       |
+| MCP                                                                            | `impl/00-mcp-spike`     | Disposable SDK v2/Hono endpoint                                                     | Official client/conformance, Origin/Host rejection, compiled Deno execution                                                 |
+| Telemetry                                                                      | `impl/00-otel-spike`    | Disposable Deno native OTel probe                                                   | API span, custom metric, correlated log reach Alloy and all selected backends                                               |
+| Spikes do not create production abstractions. They answer pass/fail questions, |                         |                                                                                     |                                                                                                                             |
+| record binary size and permissions, and are removed or isolated before         |                         |                                                                                     |                                                                                                                             |
+| production work.                                                               |                         |                                                                                     |                                                                                                                             |
 
-Spikes do not create production abstractions. They answer pass/fail questions,
-record binary size and permissions, and are removed or isolated before
-production work.
+### Wave 0 integration
+
+After spikes report, one integration worktree selects exact successful versions,
+records pass/fail evidence, updates the real import map and frozen lockfile, and
+publishes shared adapter contracts. It may merge a partial baseline when all
+Wave 1 runtime/database prerequisites pass; a failed BullMQ, MCP, storage,
+telemetry, or web spike blocks only its dependent lane. No spike branch merges
+its experimental lockfile directly.
 
 ### Wave 0 gate
 
@@ -91,6 +132,7 @@ production work.
 - Storage adapter is selected through the same MinIO contract suite.
 - MCP package/protocol and OAuth-provider path are recorded.
 - Telemetry backend choice is recorded: Tempo or a remediated persistent Jaeger.
+- Personal workspace provisioning is proven under concurrent session creation.
 - v3 path and owner approval are resolved before UI production work.
 
 A failed spike blocks only dependent lanes. For example, UI token extraction may
@@ -101,12 +143,15 @@ continue while BullMQ compatibility is unresolved.
 One integration owner establishes shared contracts first:
 
 ```text
+apps/api/
+apps/worker/
 packages/config/
 packages/contracts/
 packages/database/
 src/main.ts
 Dockerfile
-deploy/ or compose production skeleton
+compose.dev.yaml
+compose.test.yaml
 ```
 
 Then these lanes may run in parallel:
@@ -169,7 +214,8 @@ auth-related migrations and tests
 ```
 
 Deliver Google/GitHub-only auth, personal workspace provisioning, session
-middleware, organization roles, system superadmin grants, and auth audit events.
+middleware, organization roles, system superadmin grants, and calls to the Wave
+1 audit interface. Integrate durable audit persistence after Lane 2B merges.
 
 ### Lane 2B — observability and audit
 
@@ -197,15 +243,19 @@ apps/web/src/components/layout/
 apps/web/src/lib/
 ```
 
-Deliver React/Vite scaffold, router, session client, design tokens, fonts,
-approved copied assets, shared primitives, layouts, browser-test harness, and
-fixture boundary. Do not implement all product routes in this lane.
+Deliver React/Vite scaffold, router, auth-agnostic session adapter boundary,
+design tokens, fonts, approved copied assets, shared primitives, layouts,
+browser-test harness, and fixture boundary. Integrate the real Better Auth
+client after Lane 2A and the real SSE client after Lane 4A; do not invent those
+contracts inside this lane.
 
 ### Wave 2 gate
 
 - OAuth-only session integration tests pass without live provider calls.
 - First sign-in creates exactly one personal workspace and owner membership.
 - Workspace and system roles cannot cross privilege boundaries.
+- A short serial Wave 2 integration connects auth/governance actions to the
+  transaction-aware audit port after both lanes merge.
 - Audit records are durable and immutable by normal application code.
 - A trace correlates HTTP, database, log, and audit identifiers safely.
 - Web foundation builds without importing design runtime/canvas files or remote
@@ -213,8 +263,25 @@ fixture boundary. Do not implement all product routes in this lane.
 
 ## Wave 3 — execution, resources, and governance
 
-After Wave 2 auth/database contracts merge, three substantial lanes can proceed
-in parallel. Database migration ownership remains centralized.
+### Wave 3.0 — canonical domain contract and schema
+
+Before parallel Wave 3 lanes, one contract/database integration owner merges:
+
+- Tool run state machine and canonical `tool_runs` schema
+- Job/attempt/outbox state and submission-certainty enums
+- Tool/version/provider/capacity-pool references
+- Global-tool, workspace-total, and workspace-tool queue/running counters
+- Versioned capacity and scheduling policies
+- Workspace scheduling-profile assignment controlled only by the server
+- Idempotency records
+- Usage reservation interface
+- Artifact/output-set reference contracts
+- Deterministic migration IDs and generated database types
+
+Only after this subwave merges and dependent worktrees rebase may the three Wave
+3 lanes proceed in parallel. Identity tables may be created without final
+foreign keys when the referenced catalog/artifact table belongs to a parallel
+lane; the integration lane adds the reviewed cross-domain constraints.
 
 ### Lane 3A — BullMQ, capacity, and fairness
 
@@ -248,9 +315,18 @@ This lane may split after shared schema merges:
 - Legal document and acceptance records
 - Governance audit integration
 
+### Wave 3 integration
+
+After 3A/3B/3C merge, one integration worktree adds cross-domain foreign keys
+and implements the shared admission service that atomically resolves catalog
+binding, authorization, queue counters, reservation, run/job, and outbox intent.
+HTTP and MCP lanes depend on this integration commit, not directly on partially
+merged 3A/3B schemas.
+
 ### Wave 3 gate
 
-- Multiple workers cannot exceed global or workspace limits.
+- Multiple workers cannot exceed global, workspace-total, or workspace-tool
+  limits.
 - Weighted fairness converges under saturation without starving any positive
   class.
 - Accepted jobs survive Redis/process failures through outbox reconciliation.
@@ -271,6 +347,11 @@ This lane may split after shared schema merges:
 - Share resolver and short-lived download redirect
 
 ### Lane 4B — MCP and OAuth resource server
+
+Before MCP implementation, the auth owner adds the direct OAuth Provider/JWT
+configuration, regenerates and reviews the Better Auth schema, obtains a
+reserved migration from the database owner, and defines
+consent/workspace-selection UI contracts. The MCP lane then adds:
 
 - Better Auth direct OAuth Provider
 - Protected-resource and authorization-server metadata
@@ -303,6 +384,7 @@ Parallel worktrees:
 - Usage/settings/profile
 - Changelog/docs/status
 - Superadmin registry/providers/changelog
+- MCP consent, workspace selection, and operator client-registration UI
 
 ### Wave 4 gate
 
@@ -366,7 +448,9 @@ Integration is serial:
 3. Build, scan, SBOM, provenance, image publication
 4. Digest manifest
 5. Manual VPS pull/migrate/up
-6. Production smoke and rollback rehearsal
+6. Non-destructive production health/telemetry smoke; rollback and billable job
+   rehearsals run in isolated staging unless a separately approved synthetic
+   production check is defined
 7. Customer changelog draft and superadmin publication
 
 ### Wave 6 gate

@@ -34,11 +34,13 @@ packages/domain/
 packages/storage/
 packages/providers/
 packages/contracts/
-packages/database/migrations/*catalog*artifact*usage*
+packages/database/src/migrations/<reserved-domain-ids>.ts
 ```
 
-One contract owner defines IDs, state enums, schemas, and migration names before
-parallel lanes begin.
+Wave 3.0 defines IDs, the canonical `tool_runs` state machine, capacity pools,
+reservation interface, state enums, and reserved migration IDs before parallel
+lanes begin. The database owner alone updates the migration manifest and shared
+generated types.
 
 ## Parallel lanes
 
@@ -134,7 +136,27 @@ relay.tool_provider_bindings
   capacity_pool_id
   routing_order
   enabled
-  routing_policy jsonb
+  routing_policy_id
+
+relay.routing_policies
+  id
+  revision
+  policy jsonb
+  effective_at
+  immutable_hash
+
+relay.routing_decisions
+  id
+  tool_run_id unique
+  routing_policy_id
+  routing_policy_revision
+  selected_binding_id
+  provider_id
+  provider_model_id
+  requested_model_version nullable
+  fallback_used
+  fallback_reason nullable
+  selected_at
 ```
 
 Published tool versions are immutable. Updating schema, handler, meter, or
@@ -148,7 +170,14 @@ draft -> internal -> published -> deprecated -> retired
 ```
 
 Every publish/disable/deprecate/retire/routing change is system-superadmin only
-and audited.
+and audited. Tool schema semantics remain immutable, while operational routing
+may change only through a versioned routing policy. Every run references an
+immutable routing-decision record containing policy ID/revision, selected
+binding, requested provider/model, fallback outcome/reason, and selection
+timestamp. The decision owns the one-to-one relationship through unique
+`tool_run_id`; the run does not store a redundant reverse ID. Attempts reference
+the decision and record the actual provider model version observed at execution,
+so history never depends on mutable binding rows.
 
 Provider and model names in v3 (`Halide XL`, `Aurora Fast`) remain fixtures
 until the owner selects real integrations.
@@ -161,13 +190,17 @@ Code registers handlers by stable key:
 interface ToolHandler<I, O> {
   key: string;
   inputSchemaVersion: number;
-  execute(context: ToolExecutionContext, input: I): Promise<O>;
+  validate(input: unknown): I;
+  prepare(context: RestrictedToolContext, input: I): Promise<PreparedOperation>;
+  normalize(result: ProviderResult): Promise<O>;
 }
 ```
 
 Database `handler_key` selects only a handler that exists in the deployed
 registry. Unknown handlers make the tool version unavailable; database content
-never becomes executable code.
+never becomes executable code. Handlers receive capability-limited orchestration
+APIs and cannot bypass admission, reservation, capacity permits, retry
+classification, artifact ingestion, or settlement.
 
 A startup validation reports:
 
@@ -298,13 +331,17 @@ the compiled container unless separately approved.
 
 ### Direct upload
 
-1. Create pending artifact/version and immutable key transactionally.
-2. Return short-lived signed PUT URL plus exact required headers.
-3. Browser/client uploads directly.
-4. Completion endpoint performs `HEAD`.
-5. Verify expected key, size, content type, upload ID, and portable checksum.
-6. Mark available and compare-and-swap current version.
-7. On mismatch, mark failed and enqueue deletion.
+1. Reserve storage/quota and create a pending upload plus artifact/version and
+   immutable key transactionally.
+2. Set a short pending-upload expiry.
+3. Return short-lived signed PUT URL plus exact required headers.
+4. Browser/client uploads directly.
+5. Completion is idempotent and performs `HEAD`.
+6. Verify expected key, size, content type, upload ID, and portable checksum.
+7. Mark available and compare-and-swap current version.
+8. On mismatch, mark failed and enqueue deletion.
+9. A sweeper expires abandoned uploads, releases quota, and reconciles orphaned
+   objects.
 
 Use `Content-MD5` as a portable single-part transfer check when supported, and
 store SHA-256 as Relay provenance. Do not assume ETag equals MD5. A worker may
@@ -330,8 +367,8 @@ relay.share_links
   token_hash
   follow_current
   expires_at nullable
-  max_downloads nullable
-  download_count
+  max_resolutions nullable
+  resolution_count
   require_auth
   content_disposition
   revoked_at nullable
@@ -341,7 +378,10 @@ relay.share_links
 
 A Relay share link is durable policy. Resolution authorizes the token, applies
 limits, selects a version, then creates a short S3 signature or proxies bytes
-when future requirements demand it.
+when future requirements demand it. With redirect/presign delivery Relay can
+enforce URL issuance/resolution count, not actual byte downloads because one
+issued bearer URL may be reused. Name the policy `max_resolutions`; an
+enforceable `max_downloads` feature requires Relay-proxied delivery.
 
 Revocation prevents future Relay resolutions. It cannot invalidate a previously
 issued S3 bearer URL immediately, so storage signatures remain short-lived.
@@ -446,7 +486,9 @@ Run the same suite against MinIO and selected external provider sandboxes:
 - Partial output preserves successful items
 - Soft delete/purge/restore behavior
 - Pinned versus follow-current share links
-- Expiry, limit exhaustion, revocation, and concurrent download counting
+- Expiry, resolution-limit exhaustion, revocation, and concurrent resolution
+  counting
+- Pending-upload TTL, quota release, idempotent completion, and orphan cleanup
 - Raw provider/storage URL never appears in durable result
 
 ### Metering

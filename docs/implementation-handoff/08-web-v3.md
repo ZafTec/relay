@@ -2,7 +2,8 @@
 
 Phase: Wave 2C foundation and Wave 4 route groups\
 Primary owner: web foundation worktree, then route-specific worktrees\
-Depends on: committed/approved v3, auth/session contracts, API schemas\
+Depends on: committed/approved v3 for Wave 2C; auth/API/SSE contracts for later
+route integration\
 Current status: design reference exists but is untracked and internally marks
 owner sign-off pending
 
@@ -31,7 +32,9 @@ Before UI implementation:
 
 1. Commit v3 as a preserved versioned snapshot.
 2. Record owner sign-off and exact commit.
-3. Add a precedence/route/state/viewport manifest.
+3. Add `design/v3/IMPLEMENTATION-MANIFEST.md` containing source precedence,
+   routes, states, viewports, fixtures, missing assets, approved exceptions,
+   owner, and exact commit.
 4. Resolve product assumptions listed below.
 5. Re-export current canvases or explicitly approve `.dc.html` as temporary
    visual source while browser snapshots become the implementation baseline.
@@ -106,10 +109,10 @@ One worktree must establish before route parallelism:
 - Vite/React app and production build
 - Router and route-error boundaries
 - API client/error/idempotency conventions
-- Better Auth client and session provider
-- Protected route and safe return URL
-- Workspace context
-- SSE client with reconnect/resync contract
+- Browser-safe auth/session adapter interfaces and fixture implementation
+- Protected-route boundary and safe-return-URL contract
+- Workspace-context interface
+- Event-client interface without inventing final SSE payloads
 - CSS tokens generated from the approved JSON
 - Self-hosted font declarations
 - Brand/diagram asset copy procedure
@@ -119,7 +122,10 @@ One worktree must establish before route parallelism:
 - Unit, browser, accessibility, and screenshot harness
 
 Parallel branches must not each create their own token system, router, session
-provider, or primitives.
+provider, or primitives. After Better Auth merges, one short serial integration
+replaces the auth fixtures with the real browser client/session provider. After
+Wave 4A, another serial integration replaces the event fixture with the real SSE
+client and resynchronization contract.
 
 ## Route implementation order
 
@@ -128,9 +134,9 @@ provider, or primitives.
 Run in parallel after shared foundation:
 
 ```text
-/apps/web/src/features/landing
-/apps/web/src/features/auth
-/apps/web/src/features/dashboard-overview
+apps/web/src/features/landing
+apps/web/src/features/auth
+apps/web/src/features/dashboard-overview
 ```
 
 Merge and pass browser gate together. This preserves the agreed first user

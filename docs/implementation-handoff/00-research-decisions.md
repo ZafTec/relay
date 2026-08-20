@@ -303,8 +303,10 @@ markup.
   private/loopback interface once Docker-network administration is sufficient.
 - Production should not use `docker compose down -v`.
 - Infrastructure `latest` tags should become tested pinned versions/digests.
-- Nginx must proxy `/api/*`, `/mcp`, `/.well-known/*`, and managed share routes
-  to the API, with buffering disabled for SSE.
+- Nginx must proxy `/api/`, `/mcp`, the exact approved OAuth/OIDC and
+  protected-resource metadata locations, and managed share routes to the API,
+  with buffering disabled for SSE. It must not capture unrelated `/.well-known/`
+  paths such as ACME.
 
 ## Primary sources
 

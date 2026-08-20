@@ -27,13 +27,22 @@ packages/database/
 packages/contracts/
 src/main.ts
 Dockerfile
-compose.yaml
+compose.dev.yaml
 compose.test.yaml
+deploy/compose.prod.yaml
 scripts/
 ```
 
-One lane owns `deno.json`, `deno.lock`, `src/main.ts`, and the migration
-manifest. Other agents request changes rather than editing them concurrently.
+Retain the existing topology: `apps/api` and `apps/worker` contain process code,
+while root `src/main.ts` remains the compiled command dispatcher. Do not migrate
+all code back into root `src/` or create competing app entry points.
+
+One lane owns `deno.json`, `deno.lock`, `src/main.ts`, and
+`packages/database/src/migrations/manifest.ts`. The database owner reserves
+migration IDs and regenerates shared database types; feature lanes submit schema
+specifications or reserved migration modules rather than editing the manifest
+concurrently. Root `compose.yaml` remains the current scaffold until
+deliberately replaced by distinct development, test, and production files.
 
 ## Parallel work inside this phase
 
@@ -290,9 +299,14 @@ Checks without mutation:
 - Configuration parsed
 - Expected migration range is compatible
 - PostgreSQL reachable
-- Redis reachable for API/worker functions that require it
+- Redis reachable for workers, schedulers, SSE instances, and any API operation
+  that requires immediate coordination
+- API may remain ready in a documented degraded mode while PostgreSQL can accept
+  a bounded durable backlog through the outbox; it must expose coordination
+  degradation and must not promise live dispatch
 - Storage reachable when the process needs storage
-- Worker queue initialized for worker readiness
+- Worker/scheduler queue initialized and Redis state reconciled before worker
+  readiness
 - Required startup policy/catalog state loaded
 
 Telemetry backends do not control readiness. An Alloy/Loki/Tempo outage must not
@@ -319,6 +333,15 @@ Fix the current missing continuation in `Dockerfile`, then implement:
 
 The backend image serves API, worker, and migration commands. The web image is
 separate and covered later.
+
+## Shared audit port
+
+Wave 1 contracts define a transaction-aware audit port that accepts an existing
+Kysely/PostgreSQL transaction plus a unique event key. Auth and domain lanes can
+compile against this port; Wave 2B implements storage, permissions, and
+retention. A serial Wave 2 integration owner wires auth/governance actions after
+both lanes merge, avoiding parallel edits or non-transactional best-effort audit
+for fail-closed actions.
 
 ## Expected tests
 

@@ -2,7 +2,8 @@
 
 Phase: Wave 3A after a mandatory Wave 0 spike\
 Primary owner: queue/worker worktree\
-Depends on: PostgreSQL jobs/outbox, Redis configuration, auth workspace IDs\
+Depends on: merged Wave 3.0 run/job/outbox/capacity contracts, Redis
+configuration, auth workspace IDs\
 Blocks: asynchronous tools, MCP execution, provider work, live run UI
 
 ## Objective
@@ -26,11 +27,12 @@ packages/capacity/
   src/fair-scheduler.ts
   src/leases.ts
 apps/worker/src/
-packages/database/migrations/*jobs*outbox*capacity*
+packages/database/src/migrations/<reserved-execution-ids>.ts
 ```
 
-One owner controls durable job transitions and migration fields. Queue and
-capacity agents may work in parallel only after those contracts merge.
+Wave 3.0 owns durable run/job transitions, counter schemas, capacity pools, and
+migration IDs. Queue and capacity agents may work in parallel only after those
+contracts merge and their worktrees rebase.
 
 ## BullMQ compatibility gate
 
@@ -117,20 +119,71 @@ The HTTP/MCP application service performs one PostgreSQL transaction:
 1. Resolve idempotency and return the existing run for a matching replay.
 2. Authorize workspace, tool version, provider binding, and scheduling class.
 3. Validate tool/queue policy.
-4. Lock the exact tool queue-counter row.
-5. Reject if global or workspace queued depth is full.
+4. Lock global-tool, workspace-total, then workspace-tool queue-counter rows in
+   that deterministic order.
+5. Reject if any configured global, workspace-total, or workspace-tool queued
+   depth is full.
 6. Reserve usage.
 7. Create run and job.
-8. Store `eligible_at`, `queue_deadline_at`, class, cost units, and policy
-   revisions.
+8. Store `eligible_at`, `admission_deadline_at`, `run_deadline_at`, class, cost
+   units, and policy revisions.
 9. Increment durable queued depth.
 10. Insert outbox `job.ready`.
 11. Commit and return `202`.
 
 Redis availability is not inside this transaction. If Redis is down, outbox
-reconciliation can publish later until durable backlog limits are reached.
+reconciliation can publish later until durable backlog limits are reached. The
+API may remain ready in a documented degraded-admission mode while PostgreSQL is
+healthy; it reports `coordination_unavailable` and no live-dispatch promise.
+Workers and schedulers fail readiness and start no provider work until Redis
+state is healthy and reconciled.
 
 ## Suggested durable fields
+
+The canonical run is defined before the transport job:
+
+```text
+relay.tool_runs
+  id
+  workspace_id
+  tool_version_id
+  status
+  result_completeness nullable
+  input jsonb
+  output_set_id nullable
+  reservation_id
+  idempotency_record_id
+  created_by
+  accepted_at
+  started_at nullable
+  terminal_at nullable
+```
+
+Run transitions use the canonical states `queued`, `running`, `succeeded`,
+`failed`, `cancel_requested`, and `cancelled`. Partial output is terminal
+`succeeded` plus explicit completeness/warnings unless the tool contract defines
+zero acceptable outputs, in which case it fails.
+
+Capacity pools and policies are also Wave 3.0 contracts:
+
+```text
+relay.capacity_pools
+  id
+  key unique
+  provider_model_id nullable
+  region nullable
+  execution_class
+  enabled
+
+relay.capacity_policies
+  id
+  scope_type
+  scope_id
+  revision
+  configuration jsonb
+  effective_at
+  expires_at nullable
+```
 
 ```text
 relay.execution_jobs
@@ -145,13 +198,17 @@ relay.execution_jobs
   estimated_cost_units
   accepted_at
   eligible_at
-  queue_deadline_at
+  admission_deadline_at
+  attempt_deadline_at nullable
+  run_deadline_at nullable
   dispatch_generation
   attempt_count
   deferral_count
   lease_epoch
   lease_owner
   lease_expires_at
+  capacity_lease_id nullable
+  capacity_policy_revision nullable
   cancel_requested_at
   terminal_at
   state_version
@@ -166,6 +223,8 @@ relay.job_attempts
   submission_state
   provider_idempotency_key
   provider_operation_id
+  routing_decision_id
+  actual_model_version nullable
   started_at
   heartbeat_at
   finished_at
@@ -180,10 +239,41 @@ relay.tool_queue_counters
   queued_count
   running_count
   updated_at
+
+relay.workspace_queue_counters
+  workspace_id primary key
+  queued_count
+  running_count
+  updated_at
+
+relay.workspace_tool_queue_counters
+  workspace_id
+  tool_id
+  queued_count
+  running_count
+  updated_at
+  primary key (workspace_id, tool_id)
+
+relay.execution_capacity_leases
+  id
+  job_id
+  lease_epoch
+  tool_id
+  workspace_id
+  capacity_pool_id
+  units
+  acquired_at
+  expires_at
+  released_at nullable
+  policy_revision
 ```
 
 Every counter change occurs in the same transaction as the state transition.
-Periodic reconciliation detects and repairs drift.
+Admission locks global-tool, workspace-total, then workspace-tool counter rows
+in one documented order to avoid deadlocks. Scheduling class/profile assignment
+is loaded from a server-owned workspace grant; clients cannot request `paid`,
+`enterprise`, or `internal`. Periodic reconciliation detects and repairs
+counter/lease drift.
 
 ## Transactional outbox
 
@@ -236,6 +326,7 @@ inspectCapacity
 
 - Global tool active limit
 - Capacity-pool/provider active limit
+- Workspace-total active limit
 - Workspace tool active limit
 - Optional scheduling-class share limit
 
@@ -254,24 +345,36 @@ weighted quotas. Do not use fixed windows for provider limits.
 
 ## Redis keys and leases
 
-Use environment and pool namespaces with Cluster-aware hash tags:
+The MVP capacity coordinator supports one standalone Redis authority. Place all
+keys needed by one all-or-none acquisition in one explicit coordination hash
+domain:
 
 ```text
-relay:production:{pool}:rate:tool:<tool-key>
-relay:production:{pool}:rate:provider:<provider-model>
-relay:production:{pool}:active:tool:<tool-key>
-relay:production:{pool}:active:workspace:<workspace-id>
-relay:production:{pool}:cooldown
-relay:production:{pool}:scheduler:*
+relay:production:{capacity}:rate:tool:<tool-key>
+relay:production:{capacity}:rate:provider:<provider-model>
+relay:production:{capacity}:active:tool:<tool-key>
+relay:production:{capacity}:active:workspace:<workspace-id>
+relay:production:{capacity}:active:workspace:<workspace-id>:tool:<tool-key>
+relay:production:{capacity}:active:pool:<pool-id>
+relay:production:{capacity}:cooldown:<pool-id>
+relay:production:{capacity}:scheduler:*
 ```
+
+This deliberately concentrates coordination so Lua can enforce global tool,
+provider, and workspace constraints atomically. Redis Cluster capacity sharding
+is unsupported in the MVP. A future multi-region/Cluster design requires an ADR
+and allocation protocol; pool-specific hash tags must not accidentally turn a
+"global per-tool" limit into one limit per provider pool.
 
 Concurrency uses expiring sorted-set leases. Scripts remove expired entries,
 check units, add a lease, and return lease ID/expiry. Renew near one-third of
 TTL. Release only when owner and lease ID match.
 
-After Redis state loss, pause new provider submissions, reconcile active
-PostgreSQL jobs/heartbeats, rehydrate leases, and apply a conservative cooldown
-before dispatch resumes.
+After Redis state loss, pause new provider submissions, reconcile durable
+`execution_capacity_leases`, active PostgreSQL jobs, and worker heartbeats,
+rehydrate leases, and apply a conservative cooldown before dispatch resumes. If
+lease facts cannot be reconstructed, remain paused longer than every applicable
+lease/rate window rather than risk an overshoot.
 
 ## Capacity deferral
 
@@ -308,15 +411,20 @@ PostgreSQL enforces exact queue depth atomically. A BullMQ `count` followed by
 Define queued depth as ready, deferred, outbox-pending, and waiting-ticket jobs.
 Running work has its own limit.
 
-At acceptance:
+Use separate deadlines:
 
 ```text
-queue_deadline_at = accepted_at + policy.max_queue_wait
+admission_deadline_at = accepted_at + policy.max_initial_queue_wait
+attempt_deadline_at   = retry scheduling decision + policy.max_retry_wait
+run_deadline_at       = accepted_at + policy.max_total_run_time
 ```
 
-Enforce deadline in scheduler, immediately before provider submission, and in a
-sweeper. Expired work becomes terminal `queue_wait_timeout`, releases
-reservation, records no provider cost, and never calls the provider.
+The initial admission deadline applies only before the first provider attempt.
+Retries use their own attempt deadline and remain bounded by the overall run
+deadline, so a long valid provider attempt does not make a storage/retrieval
+retry expire immediately. A sweeper terminalizes the applicable timeout,
+releases or settles reservation by policy, and never calls the provider after
+expiry.
 
 ## Weighted fair scheduling
 
@@ -338,11 +446,25 @@ relay.scheduler_classes
   max_share nullable
   enabled
   policy_version
+
+relay.workspace_scheduling_profiles
+  workspace_id primary key
+  class_key
+  policy_version
+  granted_by
+  granted_at
+  expires_at nullable
 ```
 
 Every job stores its class, policy revision, and estimated cost units.
 Production may initially map every workspace to `standard`; the engine and tests
 support all classes from day one.
+
+Scheduler replicas call one atomic Redis script that promotes due work, updates
+bounded deficits, selects one candidate, and moves it to a short fenced
+`dispatching` lease before BullMQ publication. PostgreSQL/outbox reconciliation
+recovers an expired dispatch lease. Deficit and cursor state survive scheduler
+process crashes in Redis and can be rebuilt conservatively from durable jobs.
 
 Algorithm:
 
@@ -350,11 +472,12 @@ Algorithm:
 2. Fair workspace selection within each class.
 3. FIFO within a workspace.
 4. Deduct estimated cost units, not always one.
-5. Cap accumulated idle deficit.
+5. Cap accumulated idle deficit, but never below the maximum valid single-job
+   cost; every valid job must eventually accumulate enough deficit.
 6. Borrow unused capacity when a class is empty.
 7. Ensure every positive-weight backlogged class eventually progresses.
-8. Apply `internal.max_share` so internal/test work cannot consume all customer
-   capacity.
+8. Apply a documented hard `internal.max_share` while customer classes are
+   backlogged; unused customer capacity remains borrowable when they are empty.
 9. Keep critical control-plane work in a separate bounded operational queue.
 
 BullMQ OSS priorities do not satisfy this because sustained high priority can
