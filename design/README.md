@@ -26,19 +26,26 @@ The handoff adds docs, status, files, jobs, usage, settings, and profile, but it
 still represents the earlier storage-first direction. It is a component and
 state reference, not an approved implementation target for the current product.
 
-Read [`v2/DESIGN-AGENT-SUGGESTIONS.md`](v2/DESIGN-AGENT-SUGGESTIONS.md) for the
-required registry-first revision.
+### `v3`
+
+The registry-first Ledger handoff. It adds Tools, Runs, Artifacts, metering,
+provider administration, managed sharing, accessibility requirements, and ten
+raw `.dc.html` source canvases. The package is normalized at `design/v3/` with
+its handoff, tokens, assets, brand files, screens, source runtime, and
+provenance files at one predictable root.
+
+Read [`v3/IMPLEMENTATION-MANIFEST.md`](v3/IMPLEMENTATION-MANIFEST.md) for source
+precedence and implementation status. The owner authorized preserving and
+committing v3 as the current implementation reference. Fixture provider names,
+prices, route choices, stale screenshots, and other listed open items remain
+non-authoritative until resolved.
 
 ## Current implementation gate
 
-Neither v1 nor v2 is approved for implementing the clarified Relay product.
-Frontend implementation remains blocked until the owner approves a new handoff
-that covers the tool registry, image-generation run flow, metering, artifacts,
-and managed share URLs.
-
-The next revision should be created under `design/v3/` so v1 and v2 remain
-reviewable historical snapshots. After owner approval, active implementation
-instructions must reference that exact version and commit.
+V1 and v2 remain historical. V3 is the current registry-first reference, but
+frontend implementation follows the conditions in its manifest and the
+implementation handoff under `docs/implementation-handoff/`.
 
 Do not silently overwrite an earlier version or treat the numerically newest
-folder as approved. Approval is explicit and recorded by commit hash.
+folder as fully production-approved. Approval and unresolved exceptions are
+recorded explicitly.

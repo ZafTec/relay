@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/base.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/styles.css">
+<script src="./image-slot.js"></script>
+<style>body { background: #0E1310; }</style>
+</helmet>
+
+<div style="background: #0E1310; color: #F5F4ED; font-family: var(--font-sans); padding: 48px; display: flex; flex-direction: column; gap: 56px; min-height: 100vh;">
+
+  <div style="display: flex; flex-direction: column; gap: 12px; max-width: 900px;">
+    <p class="kicker"><span class="kicker-num">// 13</span> Dashboard · Artifacts</p>
+    <h1 style="margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05;">Artifact gallery, detail, and managed sharing</h1>
+    <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #B4C0B6; max-width: 72ch; text-wrap: pretty;">An artifact is a durable output owned by the workspace. A share link is a revocable Relay resource with its own expiry and policy — separate from the short-lived S3 signature Relay uses internally to move bytes. Revoking a share link blocks future Relay resolutions; it cannot retroactively invalidate a signature already handed out before revocation.</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/dashboard/artifacts · gallery + detail drawer · 1440 × 980</p>
+    <div data-screen-label="Artifacts gallery desktop" style="width: 1440px; height: 980px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <aside style="width: 260px; flex: none; border-right: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column;">
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#6B7C74"></rect><rect x="6" y="15.5" width="20" height="5" fill="#9BA9A1"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em;">Relay</span>
+        </div>
+        <button type="button" style="padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; color: #F5F4ED; text-align: left; min-height: 44px;">
+          <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace</span><span style="font-size: 15px; font-weight: 500;">Euaell’s workspace</span><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC;">ws_a1f9</span></span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+        <nav aria-label="Sections" style="display: flex; flex-direction: column; padding: 12px 0; gap: 2px;">
+          <a href="/dashboard" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Overview</a>
+          <a href="/dashboard/tools" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Tools</a>
+          <a href="/dashboard/runs" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Runs</a>
+          <a href="/dashboard/artifacts" aria-current="page" style="display: flex; align-items: center; padding: 0 20px; min-height: 44px; color: #F5F4ED; font-size: 15px; background: #1D251F; border-left: 3px solid #63C8BC;">Artifacts</a>
+          <a href="/dashboard/usage" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Usage</a>
+          <a href="/dashboard/settings" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Settings</a>
+        </nav>
+        <button type="button" style="margin-top: auto; width: 100%; padding: 14px 20px; background: transparent; border: none; border-top: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; cursor: pointer; min-height: 56px; text-align: left;">
+          <span style="width: 32px; height: 32px; background: #2E3830; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">EA</span>
+          <span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 14px; color: #F5F4ED;">Euaell A.</span><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">PROFILE · SIGN OUT</span></span>
+          <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+      </aside>
+
+      <main style="flex: 1; display: flex; overflow: hidden;">
+        <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+          <div style="padding: 24px 32px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex: none;">
+            <div><p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace ws_a1f9</p><h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em;">Artifacts</h1></div>
+            <div role="group" aria-label="Layout" style="display: flex; border: 1px solid #414D45;">
+              <button type="button" aria-pressed="true" style="height: 40px; width: 44px; background: #1D251F; border: none; border-right: 1px solid #414D45; color: #F5F4ED; cursor: pointer;">&#9638;</button>
+              <button type="button" aria-pressed="false" style="height: 40px; width: 44px; background: transparent; border: none; color: #8E9A92; cursor: pointer;">&#9776;</button>
+            </div>
+          </div>
+          <div style="padding: 16px 32px; border-bottom: 1px solid #2E3830; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; flex: none;">
+            <div style="flex: 1 1 240px; min-width: 200px; height: 40px; border: 1px solid #414D45; display: flex; align-items: center; gap: 10px; padding: 0 12px;"><span style="font-family: var(--font-mono); color: #8E9A92;" aria-hidden="true">&#9906;</span><label for="art-search" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">Search artifacts</label><input id="art-search" type="text" placeholder="Search artifacts" style="flex: 1; background: transparent; border: none; outline: none; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;"></div>
+            <label style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 1px solid #414D45; color: #B4C0B6; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;">Tool <select style="background: transparent; border: none; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px;"><option>All</option><option>image.generate</option><option>image.upscale</option></select></label>
+            <label style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 1px solid #414D45; color: #B4C0B6; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;">Sharing <select style="background: transparent; border: none; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px;"><option>All</option><option>Shared</option><option>Not shared</option></select></label>
+            <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: #8E9A92;">18 ARTIFACTS &#183; 41 VERSIONS</span>
+          </div>
+          <div style="padding: 24px 32px; overflow: auto; flex: 1;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px;">
+              <a href="#" style="border: 1px solid #63C8BC; background: #1D251F; display: flex; flex-direction: column; color: #F5F4ED;">
+                <image-slot id="a1" shape="rect" style="width: 100%; height: 160px;" placeholder="Halide XL output"></image-slot>
+                <div style="padding: 12px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">art_9f21c4 &#183; v1</span><span style="font-family: var(--font-mono); font-size: 10px; color: #63C8BC;">SHARED &#183; run_9f3192</span></div>
+              </a>
+              <a href="#" style="border: 1px solid #2E3830; display: flex; flex-direction: column; color: #F5F4ED;">
+                <image-slot id="a2" shape="rect" style="width: 100%; height: 160px;" placeholder="Aurora Fast output"></image-slot>
+                <div style="padding: 12px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">art_41ba07 &#183; v1</span><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">run_9f3180 &#183; 2 of 4 siblings</span></div>
+              </a>
+              <div style="border: 1px solid #2E3830; display: flex; flex-direction: column; color: #F5F4ED;">
+                <div style="width: 100%; height: 160px; background: #121815; display: flex; align-items: center; justify-content: center;"><span style="width: 22px; height: 22px; border: 2px solid #8E9A92; border-right-color: transparent; border-radius: 50%;"></span></div>
+                <div style="padding: 12px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-family: var(--font-mono); color: #8E9A92;">art_c70e83</span><span style="font-family: var(--font-mono); font-size: 10px; color: #63C8BC;">PREVIEW PROCESSING</span></div>
+              </div>
+              <div style="border: 1px solid #F5F4ED; display: flex; flex-direction: column; color: #F5F4ED;">
+                <div style="width: 100%; height: 160px; background: #121815; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px;"><span style="font-family: var(--font-mono); color: #F5F4ED;">&#9650;</span><span style="font-family: var(--font-mono); font-size: 10px; color: #F5F4ED;">BYTES UNAVAILABLE</span></div>
+                <div style="padding: 12px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-family: var(--font-mono); color: #8E9A92;">art_bb1907</span><span style="font-family: var(--font-mono); font-size: 10px; color: #F5F4ED;">metadata intact, store unreachable</span></div>
+              </div>
+              <a href="#" style="border: 1px solid #2E3830; display: flex; flex-direction: column; color: #F5F4ED;">
+                <image-slot id="a5" shape="rect" style="width: 100%; height: 160px;" placeholder="Halide XL output"></image-slot>
+                <div style="padding: 12px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">art_70cc31 &#183; v2</span><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">run_9f3130</span></div>
+              </a>
+              <div style="border: 1px dashed #414D45; display: flex; flex-direction: column; color: #8E9A92; opacity: 0.7;">
+                <div style="width: 100%; height: 160px; background: #121815; display: flex; align-items: center; justify-content: center;"><span style="font-family: var(--font-mono); font-size: 10px;">DELETED</span></div>
+                <div style="padding: 12px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 13px; font-family: var(--font-mono);">art_2d80af</span><span style="font-family: var(--font-mono); font-size: 10px;">PURGE PENDING &#183; 6 DAYS LEFT</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside aria-label="Artifact detail" style="width: 480px; flex: none; border-left: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="padding: 20px 24px; border-bottom: 1px solid #2E3830; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;">
+            <div style="min-width: 0;"><p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Artifact</p><h2 style="margin: 0; font-family: var(--font-mono); font-size: 18px; font-weight: 700;">art_9f21c4</h2></div>
+            <button type="button" aria-label="Close artifact detail" style="width: 44px; height: 44px; flex: none; background: transparent; border: 1px solid #414D45; color: #F5F4ED; cursor: pointer; font-family: var(--font-mono);">&#215;</button>
+          </div>
+          <image-slot id="detail-preview" shape="rect" style="width: 100%; height: 220px;" placeholder="Full artifact preview"></image-slot>
+          <div style="padding: 18px 24px; border-bottom: 1px solid #2E3830; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">VERSION</span><span style="font-family: var(--font-mono); font-size: 12px; color: #63C8BC;">v1 · current</span></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">CONTENT TYPE</span><span style="font-family: var(--font-mono); font-size: 12px;">image/png · 2048×2048</span></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">SIZE / CHECKSUM</span><span style="font-family: var(--font-mono); font-size: 12px;">2.1 MB · sha 9f21c4</span></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">SOURCE RUN</span><a href="/dashboard/runs" style="font-family: var(--font-mono); font-size: 12px; color: #63C8BC;">run_9f3192 &#8594;</a></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">TOOL / PROVIDER</span><span style="font-family: var(--font-mono); font-size: 12px;">image.generate v3 · Halide XL</span></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">OUTPUT SET</span><span style="font-family: var(--font-mono); font-size: 12px;">1 of 2 outputs</span></span>
+          </div>
+          <div style="padding: 18px 24px; border-bottom: 1px solid #2E3830; display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" style="height: 40px; padding: 0 14px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Create share link</button>
+            <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Download</button>
+            <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Copy managed URL</button>
+            <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #F5F4ED; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Delete</button>
+          </div>
+          <div style="padding: 18px 24px; border-bottom: 1px solid #2E3830;">
+            <p style="margin: 0 0 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Output set siblings</p>
+            <div style="display: flex; gap: 8px;">
+              <span style="width: 56px; height: 56px; border: 2px solid #63C8BC; background: #1D251F; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10px;">THIS</span>
+              <a href="#" style="width: 56px; height: 56px; border: 1px solid #2E3830; background: #1D251F; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10px; color: #B4C0B6;">2/2</a>
+            </div>
+          </div>
+          <div style="padding: 18px 24px; overflow: auto; flex: 1;">
+            <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Share links · 1 active</p>
+            <div style="border: 1px solid #63C8BC; padding: 14px; display: flex; flex-direction: column; gap: 8px;">
+              <span style="display: flex; justify-content: space-between; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700;">/share/8f31c0a2</span><span style="font-family: var(--font-mono); font-size: 10px; color: #63C8BC;">ACTIVE</span></span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">Expires 2026-08-27 · no download limit · pinned to v1</span>
+              <span style="display: flex; gap: 8px;"><button type="button" style="height: 36px; padding: 0 10px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; cursor: pointer;">Copy</button><button type="button" style="height: 36px; padding: 0 10px; background: transparent; border: 1px solid #F5F4ED; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; cursor: pointer;">Revoke</button></span>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 560px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Share-link policy · create form + states</p>
+      <div style="border: 1px solid #414D45; background: #141A16; padding: 22px; display: flex; flex-direction: column; gap: 16px;">
+        <h3 style="margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">Create share link · art_9f21c4</h3>
+        <div style="display: flex; flex-direction: column; gap: 8px;"><label for="sl-version" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Version policy</label><select id="sl-version" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;"><option>Pin to v1 (current)</option><option>Follow current version</option></select></div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div style="display: flex; flex-direction: column; gap: 8px;"><label for="sl-exp" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Expires</label><select id="sl-exp" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;"><option>7 days</option><option>30 days</option><option>Never</option></select></div>
+          <div style="display: flex; flex-direction: column; gap: 8px;"><label for="sl-dl" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Download limit</label><input id="sl-dl" type="number" placeholder="unlimited" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;"></div>
+        </div>
+        <label style="display: flex; gap: 12px; align-items: flex-start; cursor: pointer;"><input type="checkbox" style="width: 18px; height: 18px; margin-top: 2px; accent-color: #63C8BC;"><span style="font-size: 14px; color: #B4C0B6;">Require sign-in to view (otherwise anyone with the link can open it)</span></label>
+        <div style="display: flex; flex-direction: column; gap: 8px;"><label for="sl-disp" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Content-disposition</label><select id="sl-disp" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;"><option>View inline</option><option>Force download</option></select></div>
+        <button type="button" style="height: 44px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Create link</button>
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #6B776F;">REVOKING BLOCKS FUTURE RELAY RESOLUTIONS. A SIGNATURE ALREADY ISSUED TO A VIEWER BEFORE REVOCATION MAY REMAIN VALID UNTIL IT EXPIRES ON ITS OWN, TYPICALLY WITHIN MINUTES.</p>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">LINK CREATED · ONE-TIME COPY</p>
+        <div style="border: 1px solid #63C8BC; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <code style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED; overflow-wrap: anywhere;">https://relay.zaftech.co/share/8f31c0a2</code>
+          <button type="button" style="height: 40px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; align-self: flex-start; padding: 0 14px;">Copy link</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 560px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Share link · row states</p>
+      <div style="border: 1px solid #2E3830; overflow: hidden;">
+        <div style="border-bottom: 1px solid #2E3830; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;"><span style="display: flex; justify-content: space-between;"><span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700;">/share/8f31c0a2</span><span style="font-family: var(--font-mono); font-size: 10px; color: #63C8BC;">ACTIVE</span></span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">expires in 6 days</span></div>
+        <div style="border-bottom: 1px solid #2E3830; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;"><span style="display: flex; justify-content: space-between;"><span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700;">/share/2d80af41</span><span style="font-family: var(--font-mono); font-size: 10px; color: #F5F4ED;">EXPIRING SOON</span></span><span style="font-family: var(--font-mono); font-size: 11px; color: #B4C0B6;">expires in 4 hours</span></div>
+        <div style="border-bottom: 1px solid #2E3830; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; opacity: 0.6;"><span style="display: flex; justify-content: space-between;"><span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; text-decoration: line-through;">/share/c70e83bb</span><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">EXPIRED</span></span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">expired 2026-08-10</span></div>
+        <div style="border-bottom: 1px solid #2E3830; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; opacity: 0.6;"><span style="display: flex; justify-content: space-between;"><span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; text-decoration: line-through;">/share/70cc3141</span><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">EXHAUSTED</span></span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">download limit (5) reached</span></div>
+        <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; opacity: 0.6;"><span style="display: flex; justify-content: space-between;"><span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; text-decoration: line-through;">/share/bb190799</span><span style="font-family: var(--font-mono); font-size: 10px; color: #F5F4ED;">REVOKED</span></span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">revoked by Euaell A. · 2026-08-15</span></div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">Every non-active row uses strikethrough on the path plus a text status — never color alone.</p>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Public recipient page · /share/8f31c0a2 · 900 × 700</p>
+      <div data-screen-label="Public share view" style="width: 900px; height: 700px; background: #F5F4ED; color: #141A16; border: 1px solid #2E3830; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 16px 32px; border-bottom: 1px solid #D8D5C8; display: flex; align-items: center; gap: 10px;"><svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#8E9A92"></rect><rect x="6" y="15.5" width="20" height="5" fill="#46514B"></rect><rect x="9" y="7.5" width="20" height="5" fill="#1F776E"></rect></svg><span style="font-size: 18px; font-weight: 500;">Relay</span></div>
+        <div style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px;">
+          <div style="display: flex; flex-direction: column; gap: 16px; max-width: 560px; width: 100%;">
+            <image-slot id="pub" shape="rect" style="width: 100%; height: 360px;" placeholder="Shared artifact preview"></image-slot>
+            <div style="display: flex; justify-content: space-between; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 12px; color: #46514B;">image/png &#183; 2048&#215;2048 &#183; 2.1 MB</span><a href="#" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: #141A16; color: #F5F4ED; padding: 10px 14px;">Download</a></div>
+            <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #7A8C84;">SHARED VIA RELAY &#183; EXPIRES 2026-08-27 &#183; GENERATED BY IMAGE.GENERATE, NOT UPLOADED</p>
+          </div>
+        </div>
+      </div>
+      <div data-screen-label="Public share view expired" style="width: 900px; height: 320px; background: #F5F4ED; color: #141A16; border: 1px solid #2E3830; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 16px 32px; border-bottom: 1px solid #D8D5C8; display: flex; align-items: center; gap: 10px;"><svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#8E9A92"></rect><rect x="6" y="15.5" width="20" height="5" fill="#46514B"></rect><rect x="9" y="7.5" width="20" height="5" fill="#1F776E"></rect></svg><span style="font-size: 18px; font-weight: 500;">Relay</span></div>
+        <div style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px; text-align: center;">
+          <div style="max-width: 420px;"><p style="margin: 0 0 8px; font-size: 22px; font-weight: 700; letter-spacing: -0.03em;">This link is no longer available</p><p style="margin: 0; font-size: 15px; line-height: 1.6; color: #46514B;">It has expired, been revoked, or reached its download limit. Ask whoever shared it for a new link.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 500px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Artifact detail · mobile full-screen sheet · 390 × 844</p>
+      <div data-screen-label="Artifact detail mobile" style="width: 390px; height: 844px; border: 1px solid #2E3830; background: #141A16; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 14px 16px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; flex: none;"><button type="button" aria-label="Close" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #F5F4ED; cursor: pointer; font-family: var(--font-mono);">&#8592;</button><span style="font-family: var(--font-mono); font-size: 13px; font-weight: 700;">art_9f21c4</span></div>
+        <image-slot id="m1" shape="rect" style="width: 100%; height: 300px;" placeholder="Artifact preview"></image-slot>
+        <div style="padding: 16px; display: flex; flex-direction: column; gap: 14px; overflow: auto;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;"><span>v1 &#183; current</span><span>2.1 MB</span><span>image.generate v3</span><span>Halide XL</span></div>
+          <div style="display: flex; gap: 8px;"><button type="button" style="flex:1; height: 48px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;">Share</button><button type="button" style="flex:1; height: 48px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">Download</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

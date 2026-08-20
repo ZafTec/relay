@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/base.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/styles.css">
+<script src="./image-slot.js"></script>
+<style>body { background: #0E1310; } table { border-collapse: collapse; width: 100%; }</style>
+</helmet>
+
+<div style="background: #0E1310; color: #F5F4ED; font-family: var(--font-sans); padding: 48px; display: flex; flex-direction: column; gap: 56px; min-height: 100vh;">
+
+  <div style="display: flex; flex-direction: column; gap: 12px; max-width: 900px;">
+    <p class="kicker"><span class="kicker-num">// 11</span> Dashboard · Tools</p>
+    <h1 style="margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05;">The catalog, a tool's contract, and the composer</h1>
+    <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #B4C0B6; max-width: 72ch; text-wrap: pretty;">Two fixtures carry every example on this page: <strong style="color:#F5F4ED; font-weight:600;">Halide XL</strong> (higher fidelity, per-image, ~18s) and <strong style="color:#F5F4ED; font-weight:600;">Aurora Fast</strong> (draft speed, per-megapixel, ~4s, supports a reference image). Provider/model names are illustrative fixtures for this design pass. Tables use real <code style="font-family: var(--font-mono); font-size: 13px;">&lt;table&gt;</code> markup, not styled grids.</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/dashboard/tools · catalog, populated · 1440 × 980</p>
+    <div data-screen-label="Tools catalog desktop" style="width: 1440px; height: 980px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <aside style="width: 260px; flex: none; border-right: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column;">
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#6B7C74"></rect><rect x="6" y="15.5" width="20" height="5" fill="#9BA9A1"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em;">Relay</span>
+        </div>
+        <button type="button" style="padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; color: #F5F4ED; text-align: left; min-height: 44px;">
+          <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace</span><span style="font-size: 15px; font-weight: 500;">Euaell’s workspace</span><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC;">ws_a1f9</span></span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+        <nav aria-label="Sections" style="display: flex; flex-direction: column; padding: 12px 0; gap: 2px;">
+          <a href="/dashboard" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Overview</a>
+          <a href="/dashboard/tools" aria-current="page" style="display: flex; align-items: center; padding: 0 20px; min-height: 44px; color: #F5F4ED; font-size: 15px; background: #1D251F; border-left: 3px solid #63C8BC;">Tools</a>
+          <a href="/dashboard/runs" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Runs</a>
+          <a href="/dashboard/artifacts" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Artifacts</a>
+          <a href="/dashboard/usage" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Usage</a>
+          <a href="/dashboard/settings" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Settings</a>
+        </nav>
+        <button type="button" style="margin-top: auto; width: 100%; padding: 14px 20px; background: transparent; border: none; border-top: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; cursor: pointer; min-height: 56px; text-align: left;">
+          <span style="width: 32px; height: 32px; background: #2E3830; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">EA</span>
+          <span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 14px; color: #F5F4ED;">Euaell A.</span><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">PROFILE · SIGN OUT</span></span>
+          <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+      </aside>
+
+      <main style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+        <div style="padding: 24px 32px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex: none;">
+          <div><p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace ws_a1f9</p><h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em;">Tools</h1></div>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: #8E9A92;">2 PUBLISHED · 1 DEPRECATED</span>
+        </div>
+
+        <div style="padding: 16px 32px; border-bottom: 1px solid #2E3830; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; flex: none;">
+          <div style="flex: 1 1 240px; min-width: 200px; height: 40px; border: 1px solid #414D45; display: flex; align-items: center; gap: 10px; padding: 0 12px;">
+            <span style="font-family: var(--font-mono); color: #8E9A92;" aria-hidden="true">&#9906;</span>
+            <label for="tool-search" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0);">Search tools</label>
+            <input id="tool-search" type="text" placeholder="Search tools" style="flex: 1; background: transparent; border: none; outline: none; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">
+          </div>
+          <label style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 1px solid #414D45; color: #B4C0B6; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;">
+            Category
+            <select style="background: transparent; border: none; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px;"><option>All</option><option>Image generate</option><option>Image edit</option></select>
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 1px solid #414D45; color: #B4C0B6; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;">
+            Provider
+            <select style="background: transparent; border: none; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px;"><option>All</option><option>Halide XL</option><option>Aurora Fast</option></select>
+          </label>
+          <div role="group" aria-label="Layout" style="margin-left: auto; display: flex; border: 1px solid #414D45;">
+            <button type="button" aria-pressed="true" style="height: 40px; width: 44px; background: #1D251F; border: none; border-right: 1px solid #414D45; color: #F5F4ED; cursor: pointer;">&#9638;</button>
+            <button type="button" aria-pressed="false" style="height: 40px; width: 44px; background: transparent; border: none; color: #8E9A92; cursor: pointer;">&#9776;</button>
+          </div>
+        </div>
+
+        <div style="padding: 24px 32px; overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px;">
+            <a href="/dashboard/tools/image-generate" style="border: 1px solid #2E3830; background: #141A16; padding: 22px; display: flex; flex-direction: column; gap: 14px; color: #F5F4ED;" style-hover="border-color: #63C8BC;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                <span style="display: flex; align-items: center; gap: 10px;"><img src="design/relay/brand/icon-tool-generate.svg" width="24" height="24" alt=""><span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">image.generate</span></span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #63C8BC; border: 1px solid #63C8BC; padding: 3px 7px; white-space: nowrap;">PUBLISHED · v3</span>
+              </div>
+              <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Text-to-image. Returns 1-4 outputs per run.</p>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92; border: 1px solid #2E3830; padding: 3px 7px;">HALIDE XL &#183; PER IMAGE</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92; border: 1px solid #2E3830; padding: 3px 7px;">AURORA FAST &#183; PER MP</span>
+              </div>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #63C8BC;">Open contract &#8594;</span>
+            </a>
+            <a href="/dashboard/tools/image-upscale" style="border: 1px solid #2E3830; background: #141A16; padding: 22px; display: flex; flex-direction: column; gap: 14px; color: #F5F4ED;" style-hover="border-color: #63C8BC;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                <span style="display: flex; align-items: center; gap: 10px;"><img src="design/relay/brand/icon-tool-edit.svg" width="24" height="24" alt=""><span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">image.upscale</span></span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #63C8BC; border: 1px solid #63C8BC; padding: 3px 7px; white-space: nowrap;">PUBLISHED · v1</span>
+              </div>
+              <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Takes one reference artifact, returns a higher-resolution version.</p>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92; border: 1px solid #2E3830; padding: 3px 7px;">HALIDE XL &#183; PER IMAGE</span></div>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #63C8BC;">Open contract &#8594;</span>
+            </a>
+            <div style="border: 1px solid #2E3830; background: #141A16; padding: 22px; display: flex; flex-direction: column; gap: 14px; opacity: 0.7;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                <span style="display: flex; align-items: center; gap: 10px;"><img src="design/relay/brand/icon-tool-generate.svg" width="24" height="24" alt=""><span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">image.generate.legacy</span></span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #F5F4ED; border: 1px solid #F5F4ED; padding: 3px 7px; white-space: nowrap;">DEPRECATED</span>
+              </div>
+              <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Superseded by <a href="/dashboard/tools/image-generate" style="color:#63C8BC;">image.generate v3</a>. Retires 2026-10-01.</p>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">Runnable until retirement &#8594;</span>
+            </div>
+          </div>
+          <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #6B776F;">CARDS ARE FOCUSABLE LINKS · ENTER OPENS THE TOOL CONTRACT · GRID/LIST TOGGLE ABOVE PERSISTS PER USER.</p>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px; flex: 1 1 700px; min-width: 620px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Catalog · dense list mode (real &lt;table&gt;)</p>
+      <div style="border: 1px solid #2E3830; overflow: auto;">
+        <table style="font-size: 14px;">
+          <caption style="text-align: left; padding: 14px 16px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92; background: #141A16;">Tools · 3 rows</caption>
+          <thead><tr style="background: #141A16; border-bottom: 1px solid #2E3830;">
+            <th scope="col" style="text-align: left; padding: 10px 16px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Tool</th>
+            <th scope="col" style="text-align: left; padding: 10px 16px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Lifecycle</th>
+            <th scope="col" style="text-align: left; padding: 10px 16px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Provider/model</th>
+            <th scope="col" style="text-align: left; padding: 10px 16px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Meter unit</th>
+            <th scope="col" style="text-align: left; padding: 10px 16px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">p50 latency</th>
+          </tr></thead>
+          <tbody style="color: #F5F4ED;">
+            <tr style="border-bottom: 1px solid #2E3830;"><td style="padding: 12px 16px;"><a href="/dashboard/tools/image-generate" style="color:#F5F4ED;">image.generate</a></td><td style="padding: 12px 16px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #63C8BC; border: 1px solid #63C8BC; padding: 2px 6px;">PUBLISHED</span></td><td style="padding: 12px 16px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">Halide XL, Aurora Fast</td><td style="padding: 12px 16px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">per output</td><td style="padding: 12px 16px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">4–18s</td></tr>
+            <tr style="border-bottom: 1px solid #2E3830;"><td style="padding: 12px 16px;"><a href="/dashboard/tools/image-upscale" style="color:#F5F4ED;">image.upscale</a></td><td style="padding: 12px 16px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #63C8BC; border: 1px solid #63C8BC; padding: 2px 6px;">PUBLISHED</span></td><td style="padding: 12px 16px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">Halide XL</td><td style="padding: 12px 16px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">per output</td><td style="padding: 12px 16px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">9s</td></tr>
+            <tr><td style="padding: 12px 16px; opacity: 0.7;">image.generate.legacy</td><td style="padding: 12px 16px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #F5F4ED; border: 1px solid #F5F4ED; padding: 2px 6px;">DEPRECATED</span></td><td style="padding: 12px 16px; font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">Halide v2</td><td style="padding: 12px 16px; font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">per output</td><td style="padding: 12px 16px; font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">22s</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">Screen readers announce row/column headers via <code style="font-family: var(--font-mono); font-size: 12px;">scope="col"</code> and a table caption — this is a real table, not a styled grid, wherever data is genuinely tabular.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 520px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Catalog · states</p>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">LOADING</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div style="border: 1px solid #2E3830; padding: 22px; height: 132px; display: flex; flex-direction: column; gap: 10px;"><span style="height: 14px; width: 60%; background: #2E3830;"></span><span style="height: 10px; width: 90%; background: #2E3830;"></span><span style="height: 10px; width: 70%; background: #2E3830;"></span></div>
+          <div style="border: 1px solid #2E3830; padding: 22px; height: 132px; display: flex; flex-direction: column; gap: 10px;"><span style="height: 14px; width: 50%; background: #2E3830;"></span><span style="height: 10px; width: 90%; background: #2E3830;"></span><span style="height: 10px; width: 60%; background: #2E3830;"></span></div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">NO MATCH</p>
+        <div style="border: 1px solid #2E3830; padding: 22px;">
+          <p style="margin: 0 0 6px; font-size: 15px; font-weight: 700;">No tools match “video.”</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">The catalog is image-only today. 2 tools are published.</p>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">ENTITLEMENT-BLOCKED</p>
+        <div style="border: 1px solid #2E3830; padding: 22px; opacity: 0.75;">
+          <p style="margin: 0 0 6px; display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700;"><img src="design/relay/brand/icon-tool-generate.svg" width="18" height="18" alt="">image.generate.pro</p>
+          <p style="margin: 0 0 10px; font-size: 13px; line-height: 1.6; color: #B4C0B6;">Not included in your workspace's plan.</p>
+          <a href="mailto:relay@zaftech.co" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC;">Request access &#8594;</a>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">PROVIDER DEGRADED</p>
+        <div style="border: 1px solid #414D45; border-left-width: 4px; padding: 16px 18px;">
+          <p style="margin: 0 0 6px; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9650;</span> Aurora Fast degraded</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">Elevated latency since 13:40 UTC. Halide XL is unaffected. New runs may route to Halide XL automatically per fallback policy.</p>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">UNAVAILABLE · MODEL RETIRED</p>
+        <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 16px 18px;">
+          <p style="margin: 0 0 6px; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9650;</span> Halide v2 retired</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">This model was retired after your run was configured. Select Halide XL or Aurora Fast to continue.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/dashboard/tools/image-generate · contract + composer · 1440 × 1180</p>
+    <div data-screen-label="Tool detail desktop" style="width: 1440px; height: 1180px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; border-right: 1px solid #2E3830;">
+        <div style="padding: 24px 32px; border-bottom: 1px solid #2E3830; flex: none;">
+          <nav aria-label="Breadcrumb" style="display: flex; gap: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #8E9A92; margin-bottom: 10px;"><a href="/dashboard/tools" style="color:#8E9A92;">Tools</a><span>/</span><span style="color:#F5F4ED;">image.generate</span></nav>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+            <span style="display: flex; align-items: center; gap: 12px;"><img src="design/relay/brand/icon-tool-generate.svg" width="28" height="28" alt=""><h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em;">image.generate</h1><span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #63C8BC; border: 1px solid #63C8BC; padding: 3px 8px;">v3 · PUBLISHED</span></span>
+          </div>
+          <p style="margin: 10px 0 0; font-size: 15px; line-height: 1.6; color: #B4C0B6; max-width: 70ch;">Text-to-image generation. Accepts a prompt and returns one to four output artifacts. Two provider models are available; pick one explicitly or accept the default routing policy.</p>
+        </div>
+
+        <div style="overflow: auto; flex: 1; padding: 28px 32px; display: flex; flex-direction: column; gap: 28px;">
+          <div>
+            <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Provider / model options</p>
+            <div style="border: 1px solid #2E3830; overflow: auto;">
+              <table style="font-size: 13px;">
+                <thead><tr style="background: #121815; border-bottom: 1px solid #2E3830;">
+                  <th scope="col" style="text-align: left; padding: 10px 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92;">Model</th>
+                  <th scope="col" style="text-align: left; padding: 10px 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92;">Meter</th>
+                  <th scope="col" style="text-align: left; padding: 10px 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92;">p50 latency</th>
+                  <th scope="col" style="text-align: left; padding: 10px 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92;">Max outputs</th>
+                  <th scope="col" style="text-align: left; padding: 10px 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92;">Reference image</th>
+                </tr></thead>
+                <tbody style="color: #F5F4ED;">
+                  <tr style="border-bottom: 1px solid #2E3830;"><td style="padding: 10px 14px; font-weight: 700;">Halide XL</td><td style="padding: 10px 14px; font-family: var(--font-mono); color: #B4C0B6;">per output</td><td style="padding: 10px 14px; font-family: var(--font-mono); color: #B4C0B6;">~18s</td><td style="padding: 10px 14px; font-family: var(--font-mono); color: #B4C0B6;">4</td><td style="padding: 10px 14px; font-family: var(--font-mono); color: #8E9A92;">not supported</td></tr>
+                  <tr><td style="padding: 10px 14px; font-weight: 700;">Aurora Fast</td><td style="padding: 10px 14px; font-family: var(--font-mono); color: #B4C0B6;">per megapixel</td><td style="padding: 10px 14px; font-family: var(--font-mono); color: #B4C0B6;">~4s</td><td style="padding: 10px 14px; font-family: var(--font-mono); color: #B4C0B6;">8</td><td style="padding: 10px 14px; font-family: var(--font-mono); color: #63C8BC;">supported</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Input schema</p>
+            <pre style="margin: 0; border: 1px solid #2E3830; background: #121815; padding: 16px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65; color: #B4C0B6; overflow-x: auto;"><code>{
+  <span style="color:#63C8BC">"prompt"</span>: <span style="color:#8E9A92">"string, required, max 2000 chars"</span>,
+  <span style="color:#63C8BC">"negative_prompt"</span>: <span style="color:#8E9A92">"string, optional"</span>,
+  <span style="color:#63C8BC">"aspect_ratio"</span>: <span style="color:#8E9A92">"1:1 | 16:9 | 9:16, default 1:1"</span>,
+  <span style="color:#63C8BC">"output_count"</span>: <span style="color:#8E9A92">"integer 1-4, default 1"</span>,
+  <span style="color:#63C8BC">"seed"</span>: <span style="color:#8E9A92">"integer, optional"</span>,
+  <span style="color:#63C8BC">"reference_artifact_id"</span>: <span style="color:#8E9A92">"string, optional, Aurora Fast only"</span>,
+  <span style="color:#63C8BC">"provider_model"</span>: <span style="color:#8E9A92">"halide-xl | aurora-fast, optional"</span>
+}</code></pre>
+          </div>
+
+          <div>
+            <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Limits, safety, estimate method</p>
+            <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.55; color: #B4C0B6;">
+              <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> Prompts are checked against a safety policy before submission; rejections do not retry.</li>
+              <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> Estimate is exact for Halide XL (fixed per-output price) and ranged for Aurora Fast (depends on resolved megapixels).</li>
+              <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> Concurrency: 4 running attempts per workspace for this tool.</li>
+            </ul>
+          </div>
+
+          <div>
+            <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Generated examples · illustrative, provenance shown</p>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+              <figure style="margin: 0; border: 1px solid #2E3830; background: #121815;">
+                <image-slot id="ex1" shape="rect" style="width: 100%; height: 140px;" placeholder="Drop a real Halide XL sample"></image-slot>
+                <figcaption style="padding: 10px 12px; font-family: var(--font-mono); font-size: 10px; line-height: 1.6; color: #8E9A92;">HALIDE XL &#183; "a lighthouse at dusk, watercolor" &#183; seed 4471</figcaption>
+              </figure>
+              <figure style="margin: 0; border: 1px solid #2E3830; background: #121815;">
+                <image-slot id="ex2" shape="rect" style="width: 100%; height: 140px;" placeholder="Drop a real Aurora Fast sample"></image-slot>
+                <figcaption style="padding: 10px 12px; font-family: var(--font-mono); font-size: 10px; line-height: 1.6; color: #8E9A92;">AURORA FAST &#183; same prompt &#183; seed 4471</figcaption>
+              </figure>
+              <figure style="margin: 0; border: 1px dashed #414D45; display: flex; align-items: center; justify-content: center; padding: 20px;">
+                <figcaption style="text-align: center; font-family: var(--font-mono); font-size: 10px; line-height: 1.7; color: #8E9A92;">NEEDS REAL OUTPUT<br>from an approved run<br>before this ships</figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <div>
+            <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Version history</p>
+            <div style="border: 1px solid #2E3830;">
+              <div style="padding: 14px 16px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; gap: 16px;"><span style="font-family: var(--font-mono); font-size: 15px; font-weight: 700;">v3</span><span style="font-family: var(--font-mono); font-size: 11px; color: #63C8BC;">ACTIVE</span><span style="flex:1; font-size: 13px; color: #B4C0B6;">Adds reference_artifact_id for Aurora Fast.</span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">2026-08-14</span></div>
+              <div style="padding: 14px 16px; display: flex; align-items: baseline; gap: 16px; opacity: 0.75;"><span style="font-family: var(--font-mono); font-size: 15px; font-weight: 700;">v2</span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">DEPRECATED</span><span style="flex:1; font-size: 13px; color: #B4C0B6;">Original contract, Halide only.</span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">2026-06-02</span></div>
+            </div>
+          </div>
+
+          <div>
+            <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Invocation</p>
+            <div style="border: 1px solid #414D45;">
+              <div style="display: flex; border-bottom: 1px solid #2E3830;">
+                <span style="height: 40px; padding: 0 16px; display: flex; align-items: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #141A16; background: #63C8BC;">MCP</span>
+                <span style="height: 40px; padding: 0 16px; display: flex; align-items: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #8E9A92;">HTTP /api/v1</span>
+              </div>
+              <pre style="margin: 0; padding: 16px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65; color: #B4C0B6; overflow-x: auto;"><code>&#8594; <span style="color:#63C8BC">relay.run_tool</span> {
+  tool: <span style="color:#F5F4ED">"image.generate"</span>, version: <span style="color:#F5F4ED">3</span>,
+  input: { prompt: <span style="color:#F5F4ED">"a lighthouse at dusk"</span>, output_count: <span style="color:#F5F4ED">2</span> }
+}
+&#8592; { run_id: <span style="color:#F5F4ED">"run_9f21c4"</span>, state: <span style="color:#63C8BC">"QUEUED"</span>,
+    estimate: { min: <span style="color:#F5F4ED">0.08</span>, max: <span style="color:#F5F4ED">0.08</span>, currency: <span style="color:#F5F4ED">"USD"</span> } }</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside aria-label="Run this tool" style="width: 460px; flex: none; background: #121815; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 20px 24px; border-bottom: 1px solid #2E3830;"><h2 style="margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.02em;">Run image.generate</h2></div>
+        <form style="overflow: auto; flex: 1; padding: 20px 24px; display: flex; flex-direction: column; gap: 18px;">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label for="f-prompt" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Prompt <span style="color:#F5F4ED;">*</span></label>
+            <textarea id="f-prompt" rows="3" required style="background: #1D251F; border: 1px solid #414D45; padding: 10px 12px; font-family: var(--font-sans); font-size: 14px; color: #F5F4ED; resize: vertical;">a lighthouse at dusk, watercolor</textarea>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label for="f-neg" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Negative prompt</label>
+            <input id="f-neg" type="text" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-sans); font-size: 14px; color: #F5F4ED;">
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <label for="f-ar" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Aspect ratio</label>
+              <select id="f-ar" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;"><option>1:1</option><option>16:9</option><option>9:16</option></select>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <label for="f-count" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Output count</label>
+              <input id="f-count" type="number" min="1" max="4" value="2" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label for="f-model" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Provider / model</label>
+            <select id="f-model" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;"><option>Halide XL &#183; per image, ~18s</option><option>Aurora Fast &#183; per megapixel, ~4s</option></select>
+          </div>
+          <details style="border: 1px solid #2E3830;">
+            <summary style="padding: 12px 14px; cursor: pointer; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #B4C0B6;">Advanced (Halide XL-specific)</summary>
+            <div style="padding: 0 14px 14px; display: flex; flex-direction: column; gap: 12px;">
+              <div style="display: flex; flex-direction: column; gap: 8px;"><label for="f-seed" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Seed</label><input id="f-seed" type="number" value="4471" style="height: 40px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;"></div>
+            </div>
+          </details>
+          <div style="border-top: 1px solid #2E3830; padding-top: 16px; display: flex; flex-direction: column; gap: 10px;">
+            <span style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;"><span>ESTIMATE</span><span style="color:#F5F4ED;">$0.08 &#8211; $0.08 (2 outputs, fixed)</span></span>
+            <span style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;"><span>RESERVATION</span><span style="color:#F5F4ED;">$0.08 held on submit</span></span>
+            <span style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;"><span>WORKSPACE BALANCE</span><span style="color:#63C8BC;">$41.90 available</span></span>
+          </div>
+          <button type="submit" style="height: 48px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Run image.generate</button>
+          <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #6B776F;">RESULT IS A NEW OUTPUT SET. NO INPUT ARTIFACT IS MODIFIED.</p>
+        </form>
+      </aside>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 520px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Composer · validation &amp; submit states</p>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">FIELD-LEVEL VALIDATION</p>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <label for="v-prompt" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Prompt <span style="color:#F5F4ED;">*</span></label>
+          <textarea id="v-prompt" rows="2" aria-invalid="true" aria-describedby="v-prompt-err" style="background: #1D251F; border: 1px solid #F5F4ED; padding: 10px 12px; font-family: var(--font-sans); font-size: 14px; color: #F5F4ED;"></textarea>
+          <p id="v-prompt-err" role="alert" style="margin: 0; display: flex; gap: 8px; font-size: 13px; color: #F5F4ED;"><span aria-hidden="true">&#9650;</span> Prompt is required.</p>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <label for="v-count" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Output count</label>
+          <input id="v-count" type="number" value="9" aria-invalid="true" aria-describedby="v-count-err" style="height: 44px; background: #1D251F; border: 1px solid #F5F4ED; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">
+          <p id="v-count-err" role="alert" style="margin: 0; display: flex; gap: 8px; font-size: 13px; color: #F5F4ED;"><span aria-hidden="true">&#9650;</span> Halide XL allows 1–4 outputs per run.</p>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">SUBMITTING</p>
+        <button type="button" disabled aria-busy="true" style="height: 48px; padding: 0 16px; background: #2E3830; border: none; color: #8E9A92; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; cursor: wait; display: flex; align-items: center; gap: 10px; justify-content: center;"><span style="width: 14px; height: 14px; border: 2px solid #8E9A92; border-right-color: transparent;"></span> Reserving $0.08…</button>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">The label names the reservation step, not a generic spinner.</p>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">DUPLICATE SUBMIT · IDEMPOTENT REPLAY</p>
+        <div style="border: 1px solid #63C8BC; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start;">
+          <span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Same idempotency key as a request 4s ago. Returning the existing run <code style="font-family: var(--font-mono); font-size: 13px; color:#F5F4ED;">run_9f21c4</code> instead of starting a second one — no second reservation was made.</p>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">BLOCKED · RESERVATION INSUFFICIENT</p>
+        <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 16px 18px;">
+          <p style="margin: 0 0 6px; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9650;</span> Insufficient balance to reserve $0.32</p>
+          <p style="margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Workspace balance is $0.11. No run was created and nothing was reserved.</p>
+          <a href="/dashboard/usage" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: #F5F4ED; color: #141A16; padding: 10px 12px; display: inline-block;">Review usage</a>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">SUBMITTED · CONFIRMATION</p>
+        <div style="border: 1px solid #63C8BC; padding: 14px 16px; display: flex; gap: 12px; align-items: center;">
+          <span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span>
+          <p style="margin: 0; flex: 1; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Run <code style="font-family: var(--font-mono); font-size: 13px; color:#F5F4ED;">run_9f21c4</code> queued. $0.08 reserved.</p>
+          <a href="/dashboard/runs" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC; white-space: nowrap;">View run &#8594;</a>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Mobile 390 × 844</p>
+      <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+        <div data-screen-label="Tools catalog mobile" style="width: 390px; height: 844px; border: 1px solid #2E3830; background: #141A16; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="padding: 14px 16px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; flex: none;">
+            <button type="button" aria-label="Open navigation" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #F5F4ED; cursor: pointer; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;"><span style="width: 16px; height: 2px; background: currentColor;"></span><span style="width: 16px; height: 2px; background: currentColor;"></span><span style="width: 16px; height: 2px; background: currentColor;"></span></button>
+            <h1 style="margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.02em;">Tools</h1>
+          </div>
+          <div style="padding: 12px 16px; border-bottom: 1px solid #2E3830; flex: none;">
+            <div style="height: 40px; border: 1px solid #414D45; display: flex; align-items: center; gap: 8px; padding: 0 10px;"><span style="font-family: var(--font-mono); color: #8E9A92;">&#9906;</span><input type="text" placeholder="Search tools" style="flex: 1; background: transparent; border: none; outline: none; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;"></div>
+          </div>
+          <div style="overflow: auto; display: flex; flex-direction: column; padding: 12px 16px; gap: 12px;">
+            <a href="#" style="border: 1px solid #2E3830; padding: 16px; display: flex; flex-direction: column; gap: 8px; color: #F5F4ED;"><span style="display: flex; justify-content: space-between; align-items: center;"><span style="font-size: 15px; font-weight: 700;">image.generate</span><span style="font-family: var(--font-mono); font-size: 9px; color: #63C8BC; border: 1px solid #63C8BC; padding: 2px 6px;">v3</span></span><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">HALIDE XL &#183; AURORA FAST</span></a>
+            <a href="#" style="border: 1px solid #2E3830; padding: 16px; display: flex; flex-direction: column; gap: 8px; color: #F5F4ED;"><span style="display: flex; justify-content: space-between; align-items: center;"><span style="font-size: 15px; font-weight: 700;">image.upscale</span><span style="font-family: var(--font-mono); font-size: 9px; color: #63C8BC; border: 1px solid #63C8BC; padding: 2px 6px;">v1</span></span><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">HALIDE XL</span></a>
+          </div>
+        </div>
+
+        <div data-screen-label="Tool detail mobile" style="width: 390px; height: 844px; border: 1px solid #2E3830; background: #141A16; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="padding: 14px 16px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; flex: none;">
+            <a href="#" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #8E9A92;">&#8592; Tools</a>
+          </div>
+          <div style="overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px;">
+            <div><h1 style="margin: 0 0 6px; font-size: 22px; font-weight: 700; letter-spacing: -0.03em;">image.generate</h1><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #63C8BC; border: 1px solid #63C8BC; padding: 3px 7px;">v3 · PUBLISHED</span></div>
+            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Text-to-image. 1–4 outputs per run. Two provider models.</p>
+            <a href="#" style="height: 48px; background: #63C8BC; color: #141A16; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;">Run this tool</a>
+            <div style="border: 1px solid #2E3830; padding: 14px;"><p style="margin: 0 0 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #8E9A92;">MODELS</p><p style="margin:0 0 4px; font-size: 13px; color: #F5F4ED;">Halide XL &#183; per image &#183; ~18s</p><p style="margin:0; font-size: 13px; color: #F5F4ED;">Aurora Fast &#183; per megapixel &#183; ~4s</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

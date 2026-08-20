@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a108-8152db6c01cc/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a108-8152db6c01cc/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a108-8152db6c01cc/tokens/base.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a108-8152db6c01cc/styles.css">
+<style>body { background: #0E1310; } table { border-collapse: collapse; width: 100%; }</style>
+</helmet>
+
+<div style="background: #0E1310; color: #F5F4ED; font-family: var(--font-sans); padding: 48px; display: flex; flex-direction: column; gap: 56px; min-height: 100vh;">
+
+  <div style="display: flex; flex-direction: column; gap: 12px; max-width: 900px;">
+    <p class="kicker"><span class="kicker-num">// 15</span> Superadmin · Tool registry, providers, audit</p>
+    <h1 style="margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05;">Registry administration is platform-scoped, not a workspace feature</h1>
+    <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #B4C0B6; max-width: 72ch; text-wrap: pretty;">Superadmin publishes tool versions and manages provider/model bindings for every workspace at once. There is no code-upload control here — publishing binds a handler key that was deployed separately by engineering. No workspace switcher appears on these screens.</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/admin/tools · registry list · 1440 × 900</p>
+    <div data-screen-label="Admin tools list" style="width: 1440px; height: 900px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <aside style="width: 260px; flex: none; border-right: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column;">
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 10px;"><svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#6B7C74"></rect><rect x="6" y="15.5" width="20" height="5" fill="#9BA9A1"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg><span style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em;">Relay</span></div>
+        <div style="padding: 16px 20px; border-bottom: 1px solid #2E3830;"><p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Scope</p><p style="margin: 0; font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.06em; color: #F5F4ED;">PLATFORM</p><p style="margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: #8E9A92;">Superadmin. No workspace is selected and none can be.</p></div>
+        <nav aria-label="Superadmin sections" style="display: flex; flex-direction: column; padding: 12px 0; gap: 2px;">
+          <a href="/admin/tools" aria-current="page" style="display: flex; align-items: center; padding: 0 20px; min-height: 44px; color: #F5F4ED; font-size: 15px; background: #1D251F; border-left: 3px solid #63C8BC;">Tools</a>
+          <a href="/admin/providers" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Providers</a>
+          <a href="/admin/changelog" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Changelog</a>
+          <a href="/admin/audit" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Audit log</a>
+        </nav>
+        <a href="/dashboard" style="margin-top: auto; border-top: 1px solid #2E3830; padding: 0 20px; min-height: 56px; display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8E9A92;">&#8592; Back to workspace</a>
+      </aside>
+      <main style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 24px 32px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; justify-content: space-between; gap: 20px;">
+          <div><p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Platform · registry</p><h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em;">Tools</h1></div>
+          <a href="/admin/tools/new" style="background: #63C8BC; color: #141A16; height: 44px; padding: 0 18px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">New tool draft</a>
+        </div>
+        <div style="padding: 20px 32px; display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid #2E3830;">
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; background: #63C8BC; color: #141A16; height: 36px; padding: 0 12px; display: inline-flex; align-items: center;">All 6</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center;">Draft 1</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center;">Published 2</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center;">Deprecated 1</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center;">Disabled 1</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center;">Retired 1</span>
+        </div>
+        <div style="padding: 0 32px; overflow: auto; flex: 1;">
+          <table style="font-size: 13px;">
+            <caption style="text-align: left; padding: 14px 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Registered tools</caption>
+            <thead><tr style="border-bottom: 1px solid #2E3830;"><th scope="col" style="text-align:left; padding: 8px 12px 8px 0; font-family: var(--font-mono); font-size: 10px; color:#8E9A92;">Tool</th><th scope="col" style="text-align:left; padding: 8px 12px; font-family: var(--font-mono); font-size: 10px; color:#8E9A92;">Active version</th><th scope="col" style="text-align:left; padding: 8px 12px; font-family: var(--font-mono); font-size: 10px; color:#8E9A92;">Lifecycle</th><th scope="col" style="text-align:left; padding: 8px 12px; font-family: var(--font-mono); font-size: 10px; color:#8E9A92;">Handler key</th><th scope="col" style="text-align:left; padding: 8px 0; font-family: var(--font-mono); font-size: 10px; color:#8E9A92;">Updated</th></tr></thead>
+            <tbody style="color:#F5F4ED;">
+              <tr style="border-bottom: 1px solid #2E3830;"><td style="padding: 14px 12px 14px 0;"><a href="#" style="color:#F5F4ED;">image.generate</a></td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color:#B4C0B6;">v3</td><td style="padding: 14px 12px;"><span style="font-family: var(--font-mono); font-size: 10px; color:#63C8BC; border:1px solid #63C8BC; padding:3px 7px;">PUBLISHED</span></td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">handler.image_generate.v3</td><td style="padding: 14px 0; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">2026-08-14</td></tr>
+              <tr style="border-bottom: 1px solid #2E3830;"><td style="padding: 14px 12px 14px 0;"><a href="#" style="color:#F5F4ED;">image.upscale</a></td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color:#B4C0B6;">v1</td><td style="padding: 14px 12px;"><span style="font-family: var(--font-mono); font-size: 10px; color:#63C8BC; border:1px solid #63C8BC; padding:3px 7px;">PUBLISHED</span></td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">handler.image_upscale.v1</td><td style="padding: 14px 0; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">2026-06-02</td></tr>
+              <tr style="border-bottom: 1px solid #2E3830;"><td style="padding: 14px 12px 14px 0; opacity:0.75;">image.generate.legacy</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">v2</td><td style="padding: 14px 12px;"><span style="font-family: var(--font-mono); font-size: 10px; color:#F5F4ED; border:1px solid #F5F4ED; padding:3px 7px;">DEPRECATED</span></td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">handler.image_generate.v2</td><td style="padding: 14px 0; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">retires 2026-10-01</td></tr>
+              <tr style="border-bottom: 1px solid #2E3830; background: #1D251F;"><td style="padding: 14px 12px 14px 0;">image.generate.pro</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">v1 draft</td><td style="padding: 14px 12px;"><span style="font-family: var(--font-mono); font-size: 10px; color:#141A16; background:#63C8BC; padding:3px 7px;">DRAFT</span></td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">handler.image_generate_pro.v1</td><td style="padding: 14px 0; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">2026-08-16</td></tr>
+              <tr style="border-bottom: 1px solid #2E3830;"><td style="padding: 14px 12px 14px 0; opacity: 0.6;">video.generate</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">—</td><td style="padding: 14px 12px;"><span style="font-family: var(--font-mono); font-size: 10px; color:#F5F4ED; border:1px solid #F5F4ED; padding:3px 7px;">DISABLED</span></td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">handler.video_generate.v1</td><td style="padding: 14px 0; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">disabled 2026-08-10</td></tr>
+              <tr style="opacity: 0.5;"><td style="padding: 14px 12px 14px 0; text-decoration: line-through;">image.generate.v1</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">v1</td><td style="padding: 14px 12px;"><span style="font-family: var(--font-mono); font-size: 10px; color:#8E9A92; border:1px dashed #414D45; padding:3px 7px;">RETIRED</span></td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">handler.image_generate.v1</td><td style="padding: 14px 0; font-family: var(--font-mono); font-size: 12px; color:#8E9A92;">retired 2026-06-01</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/admin/tools/image-generate-pro · draft editor + publish checks · 1440 × 940</p>
+    <div data-screen-label="Admin tool editor" style="width: 1440px; height: 940px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <main style="flex: 1; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid #2E3830;">
+        <div style="padding: 20px 28px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+          <div style="display: flex; align-items: center; gap: 14px;"><a href="/admin/tools" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8E9A92;">&#8592; Tools</a><h1 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em;">image.generate.pro · v1</h1><span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: #141A16; background: #63C8BC; padding: 4px 8px;">DRAFT</span></div>
+          <div style="display: flex; gap: 10px;"><button type="button" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Save draft</button><button type="button" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Diff vs v3</button><button type="button" style="height: 44px; padding: 0 18px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Publish…</button></div>
+        </div>
+        <div style="padding: 28px; overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 24px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <label style="display: flex; flex-direction: column; gap: 8px;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Handler key</span><input type="text" value="handler.image_generate_pro.v1" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;"></label>
+            <label style="display: flex; flex-direction: column; gap: 8px;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Entitlement</span><select style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;"><option>Pro plan only</option><option>All workspaces</option></select></label>
+          </div>
+          <div><p style="margin: 0 0 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Provider bindings</p><div style="border: 1px solid #2E3830; overflow: auto;"><table style="font-size: 13px;"><thead><tr style="border-bottom: 1px solid #2E3830;"><th scope="col" style="text-align:left; padding: 10px 14px; font-family: var(--font-mono); font-size: 10px; color:#8E9A92;">Provider / model</th><th scope="col" style="text-align:left; padding: 10px 14px; font-family: var(--font-mono); font-size: 10px; color:#8E9A92;">Meter</th><th scope="col" style="text-align:left; padding: 10px 14px; font-family: var(--font-mono); font-size: 10px; color:#8E9A92;">Fallback order</th></tr></thead><tbody style="color:#F5F4ED;"><tr><td style="padding: 10px 14px;">Halide XL Pro</td><td style="padding: 10px 14px; font-family: var(--font-mono); font-size: 12px; color:#B4C0B6;">per output</td><td style="padding: 10px 14px; font-family: var(--font-mono); font-size: 12px; color:#B4C0B6;">1 (primary)</td></tr></tbody></table></div></div>
+          <div><p style="margin: 0 0 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Examples · provenance required before publish</p><div style="border: 1px dashed #414D45; padding: 16px; font-size: 13px; color: #8E9A92;">0 of 2 minimum examples attached. Publish is blocked until examples with recorded prompt/parameter provenance are added.</div></div>
+        </div>
+      </main>
+      <aside style="width: 340px; flex: none; background: #121815; display: flex; flex-direction: column; overflow: auto;">
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830;">
+          <p style="margin: 0 0 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Publish checks</p>
+          <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.5;">
+            <li style="display: flex; gap: 10px; color: #B4C0B6;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> Handler key resolves</li>
+            <li style="display: flex; gap: 10px; color: #B4C0B6;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> At least one provider binding</li>
+            <li style="display: flex; gap: 10px; color: #F5F4ED;"><span style="font-family: var(--font-mono);">&#9650;</span> Minimum 2 examples with provenance</li>
+            <li style="display: flex; gap: 10px; color: #F5F4ED;"><span style="font-family: var(--font-mono);">&#9650;</span> Meter unit not yet confirmed with billing</li>
+          </ul>
+        </div>
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830;">
+          <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Audit history</p>
+          <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px;">
+            <li style="display: flex; flex-direction: column; gap: 3px;"><span style="font-family: var(--font-mono); font-size: 11px; color: #B4C0B6;">2026-08-16 09:14</span><span style="font-size: 13px; color: #F5F4ED;">Draft created</span><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">EUAELL A. · SUPERADMIN</span></li>
+          </ol>
+        </div>
+        <p style="margin: 20px; font-family: var(--font-mono); font-size: 10px; line-height: 1.8; letter-spacing: 0.04em; color: #46514B;">EVERY EDIT, PUBLISH, DISABLE, DEPRECATE AND RETIRE IS RECORDED WITH ACTOR AND TIMESTAMP. THE LOG IS APPEND-ONLY.</p>
+      </aside>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 560px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Tool lifecycle · confirmation dialogs</p>
+      <div style="border: 1px solid #414D45; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">DEPRECATE</p>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Deprecating <strong style="color:#F5F4ED;">image.generate.legacy v2</strong> keeps it callable, marks it deprecated in the catalog, and requires a retirement date. Existing integrations keep working until then.</p>
+      </div>
+      <div style="border: 1px solid #414D45; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">DISABLE</p>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Disabling <strong style="color:#F5F4ED;">video.generate</strong> rejects new runs immediately with a typed error. Runs already in flight are allowed to finish. Reversible via Restore.</p>
+      </div>
+      <div style="border: 1px solid #F5F4ED; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">RETIRE</p>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Retiring <strong style="color:#F5F4ED;">image.generate.v1</strong> is permanent. It disappears from the catalog and can never be called again. Historical runs and artifacts remain readable.</p>
+        <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: #B4C0B6;"><input type="checkbox" style="width:16px;height:16px;margin-top:2px;accent-color:#63C8BC;"><span>I understand this cannot be undone.</span></label>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; flex: 1 1 700px; min-width: 620px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/admin/providers · health, models, routing · 1440 × 860</p>
+      <div data-screen-label="Admin providers" style="width: 1400px; height: 860px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+        <aside style="width: 240px; flex: none; border-right: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column;">
+          <div style="padding: 20px; border-bottom: 1px solid #2E3830; font-family: var(--font-mono); font-size: 13px; font-weight: 700;">Relay · admin</div>
+          <nav aria-label="Superadmin sections" style="display: flex; flex-direction: column; padding: 12px 0; gap: 2px;"><a href="/admin/tools" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Tools</a><a href="/admin/providers" aria-current="page" style="display: flex; align-items: center; padding: 0 20px; min-height: 44px; color: #F5F4ED; font-size: 15px; background: #1D251F; border-left: 3px solid #63C8BC;">Providers</a><a href="/admin/changelog" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Changelog</a><a href="/admin/audit" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Audit log</a></nav>
+        </aside>
+        <main style="flex: 1; display: flex; flex-direction: column; overflow: auto; padding: 24px 32px; gap: 20px;">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.03em;">Providers &amp; models</h1>
+          <div style="display: flex; flex-direction: column; gap: 1px; background: #2E3830; border: 1px solid #2E3830;">
+            <div style="background: #141A16; padding: 18px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+              <span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span>
+              <span style="flex: 1 1 200px; font-size: 15px; font-weight: 700;">Halide XL</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #B4C0B6;">Credentials: valid, rotated 2026-08-01</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #B4C0B6;">Region: eu-west</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #B4C0B6;">Rate limit: 40/min</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #63C8BC; border: 1px solid #63C8BC; padding: 3px 7px;">HEALTHY</span>
+            </div>
+            <div style="background: #141A16; padding: 18px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+              <span style="font-family: var(--font-mono); color: #F5F4ED;">&#9650;</span>
+              <span style="flex: 1 1 200px; font-size: 15px; font-weight: 700;">Aurora Fast</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #B4C0B6;">Credentials: valid</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #B4C0B6;">Region: us-east</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #F5F4ED;">Elevated latency since 13:40 UTC</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #F5F4ED; border: 1px solid #F5F4ED; padding: 3px 7px;">DEGRADED</span>
+              <button type="button" style="height: 36px; padding: 0 12px; background: transparent; border: 1px solid #F5F4ED; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; cursor: pointer;">Disable incident</button>
+            </div>
+            <div style="background: #141A16; padding: 18px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; opacity: 0.6;">
+              <span style="font-family: var(--font-mono); color: #8E9A92;">&#8213;</span>
+              <span style="flex: 1 1 200px; font-size: 15px; font-weight: 700; text-decoration: line-through;">Halide v2</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">Retired 2026-06-01, superseded by Halide XL</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92; border: 1px dashed #414D45; padding: 3px 7px;">RETIRED</span>
+            </div>
+          </div>
+          <div style="border: 1px solid #2E3830; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+            <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Routing / fallback policy · image.generate</p>
+            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Default model: <strong style="color:#F5F4ED;">Halide XL</strong>. If a run explicitly requests Aurora Fast while it is degraded, the run proceeds on Aurora Fast — degraded status warns, it does not silently reroute a user's explicit choice.</p>
+          </div>
+          <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 16px 18px;">
+            <p style="margin: 0 0 6px; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9650;</span> Incident preview · disabling Aurora Fast</p>
+            <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">204 runs in the last 24h used this model. New runs requesting it will be rejected with <code style="font-family: var(--font-mono); font-size: 12px;">provider_unavailable</code> until re-enabled. Runs already in flight are unaffected.</p>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">MCP client onboarding · connect + test from a representative client · 900 × 760</p>
+    <div data-screen-label="MCP onboarding" style="width: 900px; height: 760px; border: 1px solid #2E3830; background: #141A16; display: flex; flex-direction: column; overflow: hidden;">
+      <div style="padding: 24px 32px; border-bottom: 1px solid #2E3830;"><h1 style="margin: 0 0 6px; font-size: 24px; font-weight: 700; letter-spacing: -0.03em;">Connect an MCP client</h1><p style="margin: 0; font-size: 14px; color: #B4C0B6;">Workspace: Euaell’s workspace (ws_a1f9)</p></div>
+      <div style="padding: 24px 32px; overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 24px;">
+        <div style="display: flex; gap: 1px; background: #2E3830; border: 1px solid #2E3830;">
+          <div style="flex:1; background:#1D251F; padding: 16px; display:flex; flex-direction:column; gap:6px;"><span style="font-family: var(--font-mono); font-size: 22px; color:#63C8BC;">1</span><span style="font-size: 13px; color:#F5F4ED;">Choose scope</span></div>
+          <div style="flex:1; background:#141A16; padding: 16px; display:flex; flex-direction:column; gap:6px;"><span style="font-family: var(--font-mono); font-size: 22px; color:#8E9A92;">2</span><span style="font-size: 13px; color:#8E9A92;">Copy config</span></div>
+          <div style="flex:1; background:#141A16; padding: 16px; display:flex; flex-direction:column; gap:6px;"><span style="font-family: var(--font-mono); font-size: 22px; color:#8E9A92;">3</span><span style="font-size: 13px; color:#8E9A92;">Test connection</span></div>
+        </div>
+        <div>
+          <p style="margin: 0 0 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Tool scope for this client</p>
+          <label style="display: flex; gap: 10px; align-items: center; font-size: 14px; color: #F5F4ED; margin-bottom: 8px;"><input type="checkbox" checked style="width:18px;height:18px;accent-color:#63C8BC;"> image.generate</label>
+          <label style="display: flex; gap: 10px; align-items: center; font-size: 14px; color: #F5F4ED;"><input type="checkbox" style="width:18px;height:18px;accent-color:#63C8BC;"> image.upscale</label>
+        </div>
+        <div>
+          <p style="margin: 0 0 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Configuration for Claude Desktop</p>
+          <pre style="margin: 0; border: 1px solid #2E3830; background: #121815; padding: 16px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; color: #B4C0B6; overflow-x: auto;"><code>{
+  <span style="color:#63C8BC">"mcpServers"</span>: {
+    <span style="color:#63C8BC">"relay"</span>: {
+      <span style="color:#63C8BC">"url"</span>: <span style="color:#F5F4ED">"https://relay.zaftech.co/mcp"</span>,
+      <span style="color:#63C8BC">"headers"</span>: { <span style="color:#63C8BC">"Authorization"</span>: <span style="color:#F5F4ED">"Bearer rly_mcp_…"</span> }
+    }
+  }
+}</code></pre>
+          <button type="button" style="margin-top: 10px; height: 40px; padding: 0 14px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Copy configuration</button>
+        </div>
+        <div style="border: 1px solid #63C8BC; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px;">
+          <p style="margin: 0; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #63C8BC;"><span>&#9632;</span> Connected — 1 tool listed</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">The client successfully listed <code style="font-family: var(--font-mono); font-size: 12px; color:#F5F4ED;">image.generate</code> under this workspace's scope.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

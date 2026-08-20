@@ -1,0 +1,203 @@
+/* ZafTech — Base resets + shared utility classes
+   Ported from zaf_tech_landing src/styles/global.css */
+
+* { box-sizing: border-box; }
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { text-decoration: none; color: var(--color-accent); }
+a:hover { color: var(--color-accent-hover); }
+
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+::selection {
+  background: var(--color-accent-selection);
+  color: var(--color-ivory-100);
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--color-bg); }
+::-webkit-scrollbar-thumb { background: var(--color-border); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-accent-selection); }
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--color-accent) !important;
+  box-shadow: 0 0 0 1px var(--color-accent) !important;
+}
+
+/* ============================================================
+   Decorative blueprint grid — used behind hero/careers sections
+   ============================================================ */
+.technical-grid {
+  background-size: 48px 48px;
+  background-image:
+    linear-gradient(to right, var(--color-surface-2) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-surface-2) 1px, transparent 1px);
+}
+
+/* ============================================================
+   Buttons — sharp corners, mono uppercase label, spruce primary
+   ============================================================ */
+.btn-primary, .btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.75rem;
+  padding: 0 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color var(--dur-hover) ease, border-color var(--dur-hover) ease,
+    color var(--dur-hover) ease, transform var(--dur-press) var(--ease-out-strong);
+}
+.btn-primary {
+  background: var(--color-accent);
+  color: var(--color-onyx-950);
+  font-weight: 700;
+  border-color: var(--color-accent);
+}
+.btn-primary:hover { background: var(--color-accent-hover); color: var(--color-onyx-950); }
+.btn-ghost {
+  background: transparent;
+  color: var(--color-ink);
+  font-weight: 500;
+  border-color: var(--color-border);
+}
+.btn-ghost:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.btn-primary:active, .btn-ghost:active { transform: scale(0.97); }
+
+/* ============================================================
+   Kicker — mono section-number label. e.g. "// 01  Engineering"
+   ============================================================ */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin: 0;
+}
+.kicker-muted { color: var(--color-ink-muted); }
+.kicker .kicker-num { color: var(--color-onyx-500); margin-right: 0.25rem; }
+
+/* ============================================================
+   Card with animated top accent bar on hover/focus
+   ============================================================ */
+.card-accent-bar { position: relative; overflow: hidden; }
+.card-accent-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur-hover) var(--ease-out-strong);
+}
+.card-accent-bar:hover::before, .card-accent-bar:focus-within::before { transform: scaleX(1); }
+
+/* ============================================================
+   Tech tag — small bordered mono pill (sharp corners)
+   ============================================================ */
+.tech-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--color-ink-muted);
+  border: 1px solid var(--color-border-subtle);
+  padding: 2px 8px;
+  display: inline-block;
+}
+
+/* ============================================================
+   Metric tile
+   ============================================================ */
+.metric-tile { border: 1px solid var(--color-border-subtle); padding: 1.25rem 1.5rem; }
+.metric-tile .value {
+  font-family: var(--font-mono);
+  font-size: 1.75rem;
+  font-weight: 500;
+  color: var(--color-ink);
+  letter-spacing: -0.01em;
+}
+.metric-tile .label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+  margin-top: 0.25rem;
+}
+
+/* ============================================================
+   Window chrome — used to frame product screenshots
+   ============================================================ */
+.window-chrome { border: 1px solid var(--color-border-subtle); background: var(--color-surface); }
+.window-chrome-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.window-chrome-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-border); }
+.window-chrome-filename {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--color-ink-muted);
+  letter-spacing: 0.08em;
+  margin-left: 0.5rem;
+}
+
+/* ============================================================
+   Display heading tracking
+   ============================================================ */
+.display-tight { letter-spacing: var(--tracking-tight); line-height: 0.95; }
+
+/* ============================================================
+   Entry animation — opacity + translateY reveal
+   ============================================================ */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.reveal-up {
+  animation: fade-up var(--dur-reveal) var(--ease-out-strong) both;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-up { animation: none; }
+  .btn-primary:active, .btn-ghost:active { transform: none; }
+  .card-accent-bar::before { transition: none; }
+}
+
+/* Image treatment: grayscale in dark mode, desaturate in light, both restore on hover */
+.img-treated { filter: grayscale(100%) contrast(110%); transition: filter 0.4s ease; }
+.img-treated:hover, .group:hover .img-treated { filter: grayscale(0%) contrast(100%); }
+@media (prefers-color-scheme: light) {
+  .img-treated { filter: saturate(30%) brightness(103%) contrast(92%); }
+  .img-treated:hover, .group:hover .img-treated { filter: saturate(100%) brightness(100%) contrast(100%); }
+}

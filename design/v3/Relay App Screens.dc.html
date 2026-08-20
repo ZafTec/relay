@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/base.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/styles.css">
+<script src="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/_ds_bundle.js"></script>
+<style>body { background: #0E1310; }</style>
+</helmet>
+
+<div style="background: #0E1310; color: #F5F4ED; font-family: var(--font-sans); padding: 48px; display: flex; flex-direction: column; gap: 56px; min-height: 100vh;">
+
+  <div style="display: flex; flex-direction: column; gap: 12px; max-width: 860px;">
+    <p class="kicker"><span class="kicker-num">// 06</span> Auth &amp; dashboard · Ledger identity</p>
+    <h1 style="margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05;">Sign-in and the first protected page</h1>
+    <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #B4C0B6; max-width: 70ch; text-wrap: pretty;">The authenticated product is dark onyx; the public site is paper. Both use the same Ledger mark, the same mono metadata notation, and sharp corners throughout. Artboards are 1440 × 900 and 390 × 844. Nothing here shows operational data that does not exist yet.</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/sign-in · desktop 1440 × 900</p>
+    <div data-screen-label="Sign-in desktop" style="width: 1440px; height: 900px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <div class="technical-grid" style="flex: 1 1 55%; padding: 56px; display: flex; flex-direction: column; justify-content: space-between; border-right: 1px solid #2E3830;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="2" y="24" width="20" height="4" fill="#4C5A52"></rect><rect x="4.5" y="17.5" width="20" height="4" fill="#6B7C74"></rect><rect x="7" y="11" width="20" height="4" fill="#9BA9A1"></rect><rect x="9.5" y="4.5" width="20" height="4" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 22px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+          <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">by ZafTech</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+          <h2 style="margin: 0; font-size: 58px; font-weight: 700; letter-spacing: -0.04em; line-height: 1.0;">Call the tool.<br>Track the work.<br>Share the result.</h2>
+          <p style="margin: 0; font-size: 17px; line-height: 1.6; color: #B4C0B6; max-width: 46ch;">Durable object storage, observable background jobs, and signed delivery URLs for MCP clients and engineering teams.</p>
+        </div>
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.8; letter-spacing: 0.06em; color: #8E9A92;">RLY-01 · WORKSPACE-SCOPED · OAUTH ONLY</p>
+      </div>
+      <div style="flex: 1 1 45%; display: flex; align-items: center; justify-content: center; padding: 56px; background: #141A16;">
+        <div style="width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 28px;">
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <h1 style="margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.03em;">Sign in to Relay</h1>
+            <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #B4C0B6;">Relay uses your Google or GitHub account. There is no password to set.</p>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <button type="button" style="height: 52px; padding: 0 20px; display: flex; align-items: center; gap: 14px; background: #F5F4ED; color: #141A16; border: 1px solid #F5F4ED; font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; text-align: left;" style-hover="background: #FFFFFF;">
+              <span style="width: 18px; height: 18px; border: 2px solid #141A16; display: inline-block;" aria-hidden="true"></span>
+              <span style="flex: 1;">Continue with Google</span>
+              <span style="font-weight: 400; color: #46514B;">&#8594;</span>
+            </button>
+            <button type="button" style="height: 52px; padding: 0 20px; display: flex; align-items: center; gap: 14px; background: transparent; color: #F5F4ED; border: 1px solid #414D45; font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; text-align: left;" style-hover="border-color: #63C8BC; color: #63C8BC;">
+              <span style="width: 18px; height: 18px; border: 2px solid currentColor; display: inline-block;" aria-hidden="true"></span>
+              <span style="flex: 1;">Continue with GitHub</span>
+              <span>&#8594;</span>
+            </button>
+          </div>
+          <div style="border-top: 1px solid #2E3830; padding-top: 20px; display: flex; flex-direction: column; gap: 14px;">
+            <p style="margin: 0; font-size: 13px; line-height: 1.7; color: #8E9A92;">Signing in creates a Relay workspace for your account and accepts the <a href="/legal/terms" style="color: #63C8BC;">Terms of Service</a> and <a href="/legal/privacy" style="color: #63C8BC;">Privacy Policy</a>. ZafTech processes file metadata; object bytes stay in your configured store.</p>
+            <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #8E9A92;">TROUBLE SIGNING IN? <a href="/docs/auth" style="color: #8E9A92;">DOCS/AUTH</a></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/sign-in · mobile 390 × 844</p>
+      <div data-screen-label="Sign-in mobile" style="width: 390px; height: 844px; border: 1px solid #2E3830; background: #141A16; display: flex; flex-direction: column; padding: 28px 20px; gap: 28px; overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#6B7C74"></rect><rect x="6" y="15.5" width="20" height="5" fill="#9BA9A1"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 19px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+          <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">by ZafTech</span>
+        </div>
+        <div class="technical-grid" style="border: 1px solid #2E3830; padding: 24px 20px;">
+          <h2 style="margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05;">Call the tool.<br>Track the work.<br>Share the result.</h2>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.03em;">Sign in to Relay</h1>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #B4C0B6;">Google or GitHub. No password to set.</p>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <button type="button" style="height: 52px; padding: 0 18px; display: flex; align-items: center; gap: 12px; background: #F5F4ED; color: #141A16; border: none; font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;">
+            <span style="width: 18px; height: 18px; border: 2px solid #141A16;" aria-hidden="true"></span>
+            <span style="flex: 1; text-align: left;">Continue with Google</span>
+          </button>
+          <button type="button" style="height: 52px; padding: 0 18px; display: flex; align-items: center; gap: 12px; background: transparent; color: #F5F4ED; border: 1px solid #414D45; font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;">
+            <span style="width: 18px; height: 18px; border: 2px solid currentColor;" aria-hidden="true"></span>
+            <span style="flex: 1; text-align: left;">Continue with GitHub</span>
+          </button>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 1.7; color: #8E9A92;">Signing in accepts the <a href="/legal/terms" style="color: #63C8BC;">Terms</a> and <a href="/legal/privacy" style="color: #63C8BC;">Privacy Policy</a>.</p>
+        <p style="margin: auto 0 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92;">RLY-01 · OAUTH ONLY</p>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; flex: 1 1 520px; min-width: 460px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/sign-in · states</p>
+
+      <div style="border: 1px solid #2E3830; padding: 24px; display: flex; flex-direction: column; gap: 14px; background: #141A16;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">LOADING · REDIRECT PENDING</p>
+        <button type="button" disabled style="height: 52px; padding: 0 20px; display: flex; align-items: center; gap: 14px; background: #C9C7BA; color: #8E9A92; border: none; font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: wait;">
+          <span style="width: 18px; height: 18px; border: 2px solid #8E9A92; border-right-color: transparent;" aria-hidden="true"></span>
+          <span style="flex: 1; text-align: left;">Opening Google…</span>
+        </button>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">Both buttons disable; the label states which provider. No spinner-only state — the text carries the meaning.</p>
+      </div>
+
+      <div style="border: 1px solid #2E3830; padding: 24px; display: flex; flex-direction: column; gap: 14px; background: #141A16;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #B4C0B6;">ERROR · SIGN-IN FAILED</p>
+        <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start;">
+          <span style="font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: #F5F4ED;">&#9650;</span>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <p style="margin: 0; font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;">Google sign-in did not complete</p>
+            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">The provider returned <code style="font-family: var(--font-mono); font-size: 13px;">access_denied</code>. Nothing was created. Try again or use GitHub.</p>
+          </div>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">Failure is marked by a triangle glyph and a border, not by color alone.</p>
+      </div>
+
+      <div style="border: 1px solid #2E3830; padding: 24px; display: flex; flex-direction: column; gap: 14px; background: #141A16;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #B4C0B6;">PROVIDER UNAVAILABLE</p>
+        <button type="button" disabled style="height: 52px; padding: 0 20px; display: flex; align-items: center; gap: 14px; background: transparent; color: #8E9A92; border: 1px dashed #414D45; font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; cursor: not-allowed;">
+          <span style="width: 18px; height: 18px; border: 2px solid currentColor;" aria-hidden="true"></span>
+          <span style="flex: 1; text-align: left;">GitHub unavailable</span>
+          <span style="font-size: 10px;">SEE STATUS</span>
+        </button>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">Dashed border plus explicit label. Links to <a href="/status" style="color: #63C8BC;">/status</a>; the working provider stays enabled.</p>
+      </div>
+
+      <div style="border: 1px solid #2E3830; padding: 24px; display: flex; flex-direction: column; gap: 14px; background: #141A16;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #B4C0B6;">EXPIRED SESSION · RETURNING USER</p>
+        <div style="border: 1px solid #414D45; padding: 14px 16px;">
+          <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;">Session expired</p>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Sign in again to return to <code style="font-family: var(--font-mono); font-size: 13px;">/dashboard</code>. Queued jobs kept running.</p>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">Return path is preserved through the OAuth round trip.</p>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/dashboard · desktop 1440 × 900 · first milestone, deliberately small</p>
+    <div data-screen-label="Dashboard desktop" style="width: 1440px; height: 900px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <aside style="width: 260px; border-right: 1px solid #2E3830; display: flex; flex-direction: column; background: #121815;">
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#6B7C74"></rect><rect x="6" y="15.5" width="20" height="5" fill="#9BA9A1"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 17px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+        </div>
+        <button type="button" style="margin: 0; padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; color: #F5F4ED; text-align: left; min-height: 44px;" style-hover="background: #1D251F;">
+          <span style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace</span>
+            <span style="font-size: 15px; font-weight: 500;">Euaell’s workspace</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC;">ws_a1f9</span>
+          </span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+        <nav aria-label="Sections" style="display: flex; flex-direction: column; padding: 12px 0; gap: 2px;">
+          <a href="/dashboard" aria-current="page" style="display: flex; align-items: center; gap: 12px; padding: 0 20px; min-height: 44px; color: #F5F4ED; font-size: 15px; background: #1D251F; border-left: 3px solid #63C8BC;">Overview</a>
+          <a href="/dashboard/tools" style="display: flex; align-items: center; gap: 12px; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;" style-hover="color: #F5F4ED; background: #1D251F;">Tools</a>
+          <a href="/dashboard/runs" style="display: flex; align-items: center; gap: 12px; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;" style-hover="color: #F5F4ED; background: #1D251F;">Runs</a>
+          <a href="/dashboard/artifacts" style="display: flex; align-items: center; gap: 12px; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;" style-hover="color: #F5F4ED; background: #1D251F;">Artifacts</a>
+          <a href="/dashboard/usage" style="display: flex; align-items: center; gap: 12px; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;" style-hover="color: #F5F4ED; background: #1D251F;">Usage</a>
+          <a href="/dashboard/settings" style="display: flex; align-items: center; gap: 12px; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;" style-hover="color: #F5F4ED; background: #1D251F;">Settings <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; border: 1px solid #2E3830; padding: 2px 6px; margin-left: auto;">SOON</span></a>
+        </nav>
+        <div style="margin-top: auto; border-top: 1px solid #2E3830;">
+          <div style="padding: 12px 20px; border-bottom: 1px solid #2E3830;">
+            <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Permission-dependent</p>
+            <a href="/admin/changelog" style="display: flex; align-items: center; gap: 10px; min-height: 44px; color: #8E9A92; font-size: 14px; font-family: var(--font-mono); letter-spacing: 0.06em;" style-hover="color: #F5F4ED;">SUPERADMIN <span style="margin-left: auto;">&#8594;</span></a>
+          </div>
+          <button type="button" style="width: 100%; padding: 14px 20px; background: transparent; border: none; display: flex; align-items: center; gap: 12px; cursor: pointer; min-height: 56px; text-align: left;" style-hover="background: #1D251F;">
+            <span style="width: 32px; height: 32px; background: #2E3830; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">EA</span>
+            <span style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 14px; color: #F5F4ED;">Euaell A.</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">SESSION · SIGN OUT</span>
+            </span>
+            <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+          </button>
+        </div>
+      </aside>
+
+      <main style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 24px 32px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; justify-content: space-between; gap: 20px;">
+          <div>
+            <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace ws_a1f9</p>
+            <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em;">Overview</h1>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <a href="/docs/quickstart" style="border: 1px solid #414D45; color: #F5F4ED; height: 44px; padding: 0 18px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;" style-hover="border-color: #63C8BC; color: #63C8BC;">Quickstart</a>
+            <a href="/dashboard/settings/tokens" style="background: #63C8BC; color: #141A16; height: 44px; padding: 0 18px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;" style-hover="background: #86D6CD;">Connect a client</a>
+          </div>
+        </div>
+
+        <div style="padding: 32px; display: flex; flex-direction: column; gap: 24px; overflow: hidden;">
+          <div style="border: 1px solid #2E3830; background: #1D251F; padding: 40px; display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+            <div style="flex: 1 1 380px;">
+              <p style="margin: 0 0 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Empty · no assets, no jobs</p>
+              <h2 style="margin: 0 0 12px; font-size: 24px; font-weight: 700; letter-spacing: -0.03em;">This workspace has no assets yet</h2>
+              <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.6; color: #B4C0B6; max-width: 52ch; text-wrap: pretty;">Connect an MCP client or call the API to request an upload URL. The first committed version appears here, followed by any jobs it starts.</p>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <a href="/docs/quickstart" style="background: #F5F4ED; color: #141A16; height: 44px; padding: 0 18px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">Read the quickstart</a>
+                <a href="/docs/mcp" style="border: 1px solid #414D45; color: #F5F4ED; height: 44px; padding: 0 18px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">MCP tool reference</a>
+              </div>
+            </div>
+            <div style="flex: 0 1 420px; min-width: 0; border: 1px solid #2E3830; background: #141A16;">
+              <div style="padding: 10px 14px; border-bottom: 1px solid #2E3830; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92;">FIRST CALL · ILLUSTRATIVE</div>
+              <pre style="margin: 0; padding: 18px 16px; font-family: var(--font-mono); font-size: 13px; line-height: 1.7; color: #B4C0B6; overflow-x: auto;"><code>&#8594; <span style="color: #63C8BC;">relay.run_tool</span> {
+  tool: <span style="color: #F5F4ED;">"image.generate"</span>, input: { prompt: <span style="color: #F5F4ED;">"…"</span> }
+}
+&#8592; { run_id: <span style="color: #F5F4ED;">"run_9f21c4"</span>,
+    state: <span style="color: #63C8BC;">"QUEUED"</span> }</code></pre>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #2E3830; border: 1px solid #2E3830;">
+            <div style="background: #141A16; padding: 22px;">
+              <p style="margin: 0 0 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #8E9A92;">PLANNED · FILES</p>
+              <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #8E9A92;">Assets and their versions, newest first, with checksum and size.</p>
+            </div>
+            <div style="background: #141A16; padding: 22px;">
+              <p style="margin: 0 0 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #8E9A92;">PLANNED · JOBS</p>
+              <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #8E9A92;">Live job state with labelled stages, attempt counts, and inspectable errors.</p>
+            </div>
+            <div style="background: #141A16; padding: 22px;">
+              <p style="margin: 0 0 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #8E9A92;">PLANNED · USAGE</p>
+              <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #8E9A92;">Metered storage, job minutes, and egress against workspace entitlements.</p>
+            </div>
+          </div>
+          <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #8E9A92;">These three tiles are labelled placeholders, not shipped features. They occupy the space later screens will fill.</p>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/dashboard · mobile 390 × 844</p>
+      <div data-screen-label="Dashboard mobile" style="width: 390px; height: 844px; border: 1px solid #2E3830; background: #141A16; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 14px 16px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 12px;">
+          <button type="button" aria-label="Open navigation" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #F5F4ED; cursor: pointer; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;">
+            <span style="width: 16px; height: 2px; background: currentColor;"></span>
+            <span style="width: 16px; height: 2px; background: currentColor;"></span>
+            <span style="width: 16px; height: 2px; background: currentColor;"></span>
+          </button>
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="21" width="21" height="7" fill="#9BA9A1"></rect><rect x="8" y="9" width="21" height="7" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 16px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+          <button type="button" style="margin-left: auto; width: 44px; height: 44px; background: #2E3830; border: none; color: #B4C0B6; font-family: var(--font-mono); font-size: 12px; cursor: pointer;">EA</button>
+        </div>
+        <button type="button" style="padding: 12px 16px; border: none; border-bottom: 1px solid #2E3830; background: #121815; color: #F5F4ED; display: flex; align-items: center; gap: 10px; min-height: 56px; cursor: pointer; text-align: left;">
+          <span style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace</span>
+            <span style="font-size: 15px;">Euaell’s workspace <span style="font-family: var(--font-mono); font-size: 10px; color: #63C8BC;">ws_a1f9</span></span>
+          </span>
+          <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+        <div style="display: flex; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #2E3830; overflow-x: auto;">
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #141A16; background: #63C8BC; padding: 0 12px; height: 36px; display: inline-flex; align-items: center; white-space: nowrap;">Overview</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8E9A92; border: 1px solid #2E3830; padding: 0 12px; height: 36px; display: inline-flex; align-items: center; white-space: nowrap;">Tools</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8E9A92; border: 1px solid #2E3830; padding: 0 12px; height: 36px; display: inline-flex; align-items: center; white-space: nowrap;">Runs</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8E9A92; border: 1px solid #2E3830; padding: 0 12px; height: 36px; display: inline-flex; align-items: center; white-space: nowrap;">Artifacts</span>
+        </div>
+        <div style="padding: 20px 16px; display: flex; flex-direction: column; gap: 20px;">
+          <div>
+            <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Empty</p>
+            <h1 style="margin: 0 0 10px; font-size: 22px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15;">No runs yet</h1>
+            <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #B4C0B6;">Connect an MCP client or browse the catalog to run a tool. The first output artifact appears here.</p>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <a href="/docs/quickstart" style="background: #F5F4ED; color: #141A16; height: 48px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;">Read the quickstart</a>
+            <a href="/docs/mcp" style="border: 1px solid #414D45; color: #F5F4ED; height: 48px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">MCP tool reference</a>
+          </div>
+          <div style="border: 1px solid #2E3830; display: flex; flex-direction: column;">
+            <div style="padding: 14px 16px; border-bottom: 1px solid #2E3830;">
+              <p style="margin: 0 0 4px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #8E9A92;">PLANNED · FILES</p>
+              <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #8E9A92;">Assets and versions, newest first.</p>
+            </div>
+            <div style="padding: 14px 16px; border-bottom: 1px solid #2E3830;">
+              <p style="margin: 0 0 4px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #8E9A92;">PLANNED · JOBS</p>
+              <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #8E9A92;">Labelled stages and inspectable errors.</p>
+            </div>
+            <div style="padding: 14px 16px;">
+              <p style="margin: 0 0 4px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #8E9A92;">PLANNED · USAGE</p>
+              <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #8E9A92;">Storage, job minutes, egress.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex: 1 1 460px; min-width: 420px; display: flex; flex-direction: column; gap: 20px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Future shell · where later screens fit</p>
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 18px;">
+        <div style="display: flex; gap: 12px; align-items: stretch; height: 260px;">
+          <div style="width: 120px; border: 1px dashed #414D45; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+            <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; color: #63C8BC;">RAIL 260px</span>
+            <span style="font-family: var(--font-mono); font-size: 9px; line-height: 1.8; color: #8E9A92;">MARK<br>WORKSPACE<br>SECTIONS<br>SUPERADMIN<br>SESSION</span>
+          </div>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 12px;">
+            <div style="border: 1px dashed #414D45; padding: 10px;">
+              <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; color: #63C8BC;">PAGE HEADER 84px</span>
+              <p style="margin: 4px 0 0; font-family: var(--font-mono); font-size: 9px; color: #8E9A92;">SCOPE LABEL · H1 · PRIMARY ACTIONS</p>
+            </div>
+            <div style="flex: 1; border: 1px dashed #414D45; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; color: #63C8BC;">CONTENT · 32px GUTTER</span>
+              <p style="margin: 0; font-family: var(--font-mono); font-size: 9px; line-height: 1.9; color: #8E9A92;">TOOLS → CATALOG + CONTRACT/COMPOSER<br>RUNS → RUN TABLE + DETAIL DRAWER<br>ARTIFACTS → GALLERY + DETAIL DRAWER<br>USAGE → METER STACK<br>SETTINGS → FORM COLUMN 640px</p>
+            </div>
+            <div style="border: 1px dashed #414D45; padding: 10px;">
+              <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; color: #63C8BC;">DETAIL DRAWER · RIGHT 480px, OVERLAYS CONTENT</span>
+            </div>
+          </div>
+        </div>
+        <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.6; color: #B4C0B6;">
+          <li>The rail never changes width or order across sections.</li>
+          <li>Every page keeps the same header contract: scope label, H1, actions right.</li>
+          <li>Row detail always opens in the right drawer — never a new page, never a modal.</li>
+          <li>Below 900px the rail collapses to the hamburger drawer and the chip row shown at left.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

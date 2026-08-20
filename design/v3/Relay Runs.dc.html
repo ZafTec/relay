@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/base.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/styles.css">
+<style>body { background: #0E1310; } table { border-collapse: collapse; width: 100%; }</style>
+</helmet>
+
+<div style="background: #0E1310; color: #F5F4ED; font-family: var(--font-sans); padding: 48px; display: flex; flex-direction: column; gap: 56px; min-height: 100vh;">
+
+  <div style="display: flex; flex-direction: column; gap: 12px; max-width: 900px;">
+    <p class="kicker"><span class="kicker-num">// 12</span> Dashboard · Runs</p>
+    <h1 style="margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05;">Run list, run detail, and live-state contracts</h1>
+    <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #B4C0B6; max-width: 72ch; text-wrap: pretty;">The dashboard holds one workspace-scoped SSE connection per session — not a poll timer. States below cover connected, reconnecting, stale, offline, and resynchronized. Job states always include <code style="font-family: var(--font-mono); font-size: 13px;">cancel_requested</code>, and retry is only ever offered where it is safe.</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/dashboard/runs · populated + detail drawer · 1440 × 940</p>
+    <div data-screen-label="Runs desktop" style="width: 1440px; height: 940px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <aside style="width: 260px; flex: none; border-right: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column;">
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#6B7C74"></rect><rect x="6" y="15.5" width="20" height="5" fill="#9BA9A1"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em;">Relay</span>
+        </div>
+        <button type="button" style="padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; color: #F5F4ED; text-align: left; min-height: 44px;">
+          <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace</span><span style="font-size: 15px; font-weight: 500;">Euaell’s workspace</span><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC;">ws_a1f9</span></span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+        <nav aria-label="Sections" style="display: flex; flex-direction: column; padding: 12px 0; gap: 2px;">
+          <a href="/dashboard" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Overview</a>
+          <a href="/dashboard/tools" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Tools</a>
+          <a href="/dashboard/runs" aria-current="page" style="display: flex; align-items: center; padding: 0 20px; min-height: 44px; color: #F5F4ED; font-size: 15px; background: #1D251F; border-left: 3px solid #63C8BC;">Runs</a>
+          <a href="/dashboard/artifacts" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Artifacts</a>
+          <a href="/dashboard/usage" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Usage</a>
+          <a href="/dashboard/settings" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Settings</a>
+        </nav>
+        <button type="button" style="margin-top: auto; width: 100%; padding: 14px 20px; background: transparent; border: none; border-top: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; cursor: pointer; min-height: 56px; text-align: left;">
+          <span style="width: 32px; height: 32px; background: #2E3830; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">EA</span>
+          <span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 14px; color: #F5F4ED;">Euaell A.</span><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">PROFILE · SIGN OUT</span></span>
+          <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+      </aside>
+
+      <main style="flex: 1; display: flex; overflow: hidden;">
+        <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+          <div style="padding: 24px 32px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex: none;">
+            <div><p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace ws_a1f9</p><h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em;">Runs</h1></div>
+            <span role="status" aria-live="polite" style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC; border: 1px solid #2E3830; height: 44px; padding: 0 12px;"><span style="width: 7px; height: 7px; background: #63C8BC; border-radius: 50%;"></span> Connected · live</span>
+          </div>
+
+          <div style="padding: 16px 32px; border-bottom: 1px solid #2E3830; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: none;">
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; background: #63C8BC; color: #141A16; height: 36px; padding: 0 12px; display: inline-flex; align-items: center;">All 31</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px;">&#9633; Queued 1</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px;">&#9642; Running 1</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px;">&#9632; Succeeded 26</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px;">&#9650; Failed 3</span>
+            <label style="margin-left: auto; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid #2E3830; color: #B4C0B6; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;">Tool <select style="background: transparent; border: none; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px;"><option>All</option><option>image.generate</option><option>image.upscale</option></select></label>
+          </div>
+
+          <div style="padding: 0 32px; overflow: auto; flex: 1;">
+            <table style="font-size: 13px;">
+              <caption style="text-align: left; padding: 12px 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Runs · this workspace</caption>
+              <thead><tr style="border-bottom: 1px solid #2E3830;">
+                <th scope="col" style="text-align: left; padding: 8px 12px 8px 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #8E9A92;">Run</th>
+                <th scope="col" style="text-align: left; padding: 8px 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #8E9A92;">State</th>
+                <th scope="col" style="text-align: left; padding: 8px 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #8E9A92;">Tool / model</th>
+                <th scope="col" style="text-align: left; padding: 8px 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #8E9A92;">Outputs</th>
+                <th scope="col" style="text-align: left; padding: 8px 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #8E9A92;">Est. / settled</th>
+                <th scope="col" style="text-align: left; padding: 8px 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #8E9A92;">Actor</th>
+                <th scope="col" style="text-align: left; padding: 8px 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #8E9A92;">Started</th>
+              </tr></thead>
+              <tbody style="color: #F5F4ED;">
+                <tr style="background: #1D251F;"><td style="padding: 14px 12px 14px 0; font-family: var(--font-mono); font-size: 12px;">run_9f31c0</td><td style="padding: 14px 12px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #141A16; background: #63C8BC; padding: 3px 7px; white-space: nowrap;">RUNNING &#9642;</span></td><td style="padding: 14px 12px; font-size: 13px;">image.generate &#183; Halide XL</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">2/2</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">$0.08 / —</td><td style="padding: 14px 12px; font-size: 12px; color: #B4C0B6;">Claude MCP</td><td style="padding: 14px 0; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">00:42 ago</td></tr>
+                <tr style="border-bottom: 1px solid #2E3830;"><td style="padding: 14px 12px 14px 0; font-family: var(--font-mono); font-size: 12px;">run_9f31bd</td><td style="padding: 14px 12px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #63C8BC; border: 1px solid #63C8BC; padding: 3px 7px; white-space: nowrap;">QUEUED &#9633;</span></td><td style="padding: 14px 12px; font-size: 13px;">image.upscale &#183; Halide XL</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">0/1</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">$0.04 / —</td><td style="padding: 14px 12px; font-size: 12px; color: #B4C0B6;">Euaell A.</td><td style="padding: 14px 0; font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">00:08 ago</td></tr>
+                <tr style="border-bottom: 1px solid #2E3830; border-left: 4px solid #F5F4ED;"><td style="padding: 14px 12px 14px 8px; font-family: var(--font-mono); font-size: 12px;">run_9f31a4</td><td style="padding: 14px 12px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #141A16; background: #F5F4ED; padding: 3px 7px; white-space: nowrap;">FAILED &#9650;</span></td><td style="padding: 14px 12px; font-size: 13px;">image.generate &#183; Aurora Fast</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color: #F5F4ED;">0/3</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">$0.03 / $0 (released)</td><td style="padding: 14px 12px; font-size: 12px; color: #B4C0B6;">Claude MCP</td><td style="padding: 14px 0; font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">18m ago</td></tr>
+                <tr style="border-bottom: 1px solid #2E3830;"><td style="padding: 14px 12px 14px 0; font-family: var(--font-mono); font-size: 12px;">run_9f3192</td><td style="padding: 14px 12px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #B4C0B6; border: 1px solid #414D45; padding: 3px 7px; white-space: nowrap;">SUCCEEDED &#9632;</span></td><td style="padding: 14px 12px; font-size: 13px;">image.generate &#183; Halide XL</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">2/2</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">$0.08 / $0.08</td><td style="padding: 14px 12px; font-size: 12px; color: #B4C0B6;">Euaell A.</td><td style="padding: 14px 0; font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">1h ago</td></tr>
+                <tr><td style="padding: 14px 12px 14px 0; font-family: var(--font-mono); font-size: 12px;">run_9f3180</td><td style="padding: 14px 12px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #B4C0B6; border: 1px solid #414D45; padding: 3px 7px; white-space: nowrap;">SUCCEEDED &#9632;</span></td><td style="padding: 14px 12px; font-size: 13px; display: flex; align-items: center; gap: 6px;">image.generate &#183; Aurora Fast <span style="font-family: var(--font-mono); font-size: 9px; color: #F5F4ED; background: #414D45; padding: 2px 5px;">PARTIAL</span></td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">3/4</td><td style="padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">$0.06 / $0.045</td><td style="padding: 14px 12px; font-size: 12px; color: #B4C0B6;">Claude MCP</td><td style="padding: 14px 0; font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">2h ago</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <aside aria-label="Run detail" style="width: 480px; flex: none; border-left: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="padding: 20px 24px; border-bottom: 1px solid #2E3830; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;">
+            <div style="min-width: 0;">
+              <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Run</p>
+              <h2 style="margin: 0 0 8px; font-family: var(--font-mono); font-size: 20px; font-weight: 700; letter-spacing: 0.02em;">run_9f31c0</h2>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #141A16; background: #63C8BC; padding: 4px 8px;">RUNNING &#9642;</span>
+            </div>
+            <button type="button" aria-label="Close run detail" style="width: 44px; height: 44px; flex: none; background: transparent; border: 1px solid #414D45; color: #F5F4ED; cursor: pointer; font-family: var(--font-mono);">&#215;</button>
+          </div>
+          <div style="padding: 18px 24px; border-bottom: 1px solid #2E3830; display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">TOOL / VERSION</span><span style="font-family: var(--font-mono); font-size: 12px;">image.generate v3</span></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">PROVIDER / MODEL</span><span style="font-family: var(--font-mono); font-size: 12px;">Halide XL</span></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">ACTOR / CLIENT</span><span style="font-family: var(--font-mono); font-size: 12px;">Claude MCP client</span></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">IDEMPOTENCY KEY</span><span style="font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere;">idem_7b1…c04</span></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">SUBMITTED</span><span style="font-family: var(--font-mono); font-size: 12px;">14:01:12 UTC</span></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">SETTLEMENT</span><span style="font-family: var(--font-mono); font-size: 12px; color: #63C8BC;">reserved, not settled</span></span>
+          </div>
+
+          <div style="padding: 18px 24px; border-bottom: 1px solid #2E3830;">
+            <p style="margin: 0 0 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Inputs</p>
+            <div style="border: 1px solid #2E3830; padding: 12px; font-family: var(--font-mono); font-size: 12px; line-height: 1.7; color: #B4C0B6;">prompt: "a lighthouse at dusk, watercolor"<br>output_count: 2 &#183; aspect_ratio: 1:1<br>api_key: <span style="color:#8E9A92;">•••• redacted, workspace-secret</span></div>
+          </div>
+
+          <div style="padding: 18px 24px; border-bottom: 1px solid #2E3830;">
+            <p style="margin: 0 0 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Usage</p>
+            <div style="display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">
+              <span style="display: flex; justify-content: space-between;"><span>Estimate</span><span style="color:#F5F4ED;">$0.08</span></span>
+              <span style="display: flex; justify-content: space-between;"><span>Reserved</span><span style="color:#F5F4ED;">$0.08</span></span>
+              <span style="display: flex; justify-content: space-between;"><span>Settled</span><span style="color:#8E9A92;">pending run completion</span></span>
+              <span style="display: flex; justify-content: space-between; padding-top: 6px; border-top: 1px solid #2E3830;"><span>Provider cost</span><span style="color:#8E9A92;">visible to superadmin only</span></span>
+            </div>
+          </div>
+
+          <div style="padding: 18px 24px; border-bottom: 1px solid #2E3830;">
+            <p style="margin: 0 0 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Run state timeline</p>
+            <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px;">
+              <li style="display: flex; gap: 12px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 12px; color: #63C8BC;">&#9632;</span><span style="flex:1; font-size: 13px;">Queued</span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">14:01:12</span></li>
+              <li style="display: flex; gap: 12px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 12px; color: #63C8BC;">&#9642;</span><span style="flex:1; font-size: 13px; font-weight: 700;">Running &#183; attempt 1</span><span style="font-family: var(--font-mono); font-size: 11px; color: #63C8BC;">14:01:14</span></li>
+              <li style="display: flex; gap: 12px; align-items: baseline; color: #8E9A92;"><span style="font-family: var(--font-mono); font-size: 12px;">&#9633;</span><span style="flex:1; font-size: 13px;">Output committed</span><span style="font-family: var(--font-mono); font-size: 11px;">pending</span></li>
+            </ol>
+          </div>
+
+          <div style="padding: 18px 24px; overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 12px;">
+            <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Attempt ledger</p>
+            <div style="border: 1px solid #2E3830; padding: 14px; display: flex; flex-direction: column; gap: 8px;">
+              <span style="display: flex; justify-content: space-between; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700;">Attempt 1</span><span style="font-family: var(--font-mono); font-size: 10px; color: #63C8BC;">SUBMITTED, CONFIRMED · RESULT PENDING</span></span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">Provider op id: <span style="color:#B4C0B6;">op_halide_7c31 (operator-only)</span></span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">Leased by worker-04 &#183; 14:01:14</span>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #F5F4ED; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Request cancel</button>
+              <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Copy run id</button>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 560px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Live connection · SSE states</p>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">CONNECTED</p>
+        <span role="status" style="display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC; border: 1px solid #2E3830; height: 36px; padding: 0 12px; align-self: flex-start;"><span style="width: 7px; height: 7px; background: #63C8BC; border-radius: 50%;"></span> Connected · live</span>
+      </div>
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">RECONNECTING</p>
+        <span role="status" style="display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #F5F4ED; border: 1px solid #414D45; height: 36px; padding: 0 12px; align-self: flex-start;"><span style="width: 10px; height: 10px; border: 2px solid #F5F4ED; border-right-color: transparent;"></span> Reconnecting &#183; attempt 2</span>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">Rows keep their last known state; nothing greys out.</p>
+      </div>
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">STALE</p>
+        <span role="status" style="display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #F5F4ED; border: 1px solid #414D45; height: 36px; padding: 0 12px; align-self: flex-start;"><span style="width: 7px; height: 7px; background: #F5F4ED;"></span> Stale · last update 41s ago</span>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">Shown once the connection has been silent past its heartbeat window.</p>
+      </div>
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">OFFLINE</p>
+        <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 14px 16px;">
+          <p style="margin: 0 0 6px; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9650;</span> Live updates unavailable</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">Showing durable state as of 13:58 UTC. Runs continue in the background even while this view is offline.</p>
+        </div>
+      </div>
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">RESYNCHRONIZED</p>
+        <div style="border: 1px solid #63C8BC; padding: 14px 16px; display: flex; gap: 12px; align-items: center;">
+          <span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span>
+          <p role="status" aria-live="polite" style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">Reconnected. Refetched durable state — 2 runs changed while offline.</p>
+        </div>
+      </div>
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">PERMISSION CHANGED WHILE CONNECTED</p>
+        <div style="border: 1px solid #414D45; padding: 14px 16px;">
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">Your role changed to <strong style="color:#F5F4ED;">member</strong>. The connection re-established under your new permissions; some actions above may no longer be available.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 560px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Run &amp; attempt state matrix (drawer body per state)</p>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">SUCCEEDED WITH PARTIAL OUTPUTS</p>
+        <div style="border: 1px solid #414D45; border-left-width: 4px; padding: 14px 16px;">
+          <p style="margin: 0 0 6px; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9642;</span> 3 of 4 outputs succeeded</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">Output 4 failed a provider-side safety check. Billed for 3 outputs actually produced, not 4 requested.</p>
+        </div>
+      </div>
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">AMBIGUOUS SUBMISSION · RECONCILING</p>
+        <div style="border: 1px solid #414D45; padding: 14px 16px;">
+          <p style="margin: 0 0 6px; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9633;</span> Reconciling with provider</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">The submission was confirmed but the result could not be retrieved. Relay is checking directly with the provider before deciding whether to bill or retry. No duplicate submission will be made.</p>
+        </div>
+      </div>
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">RATE-LIMITED · RETRY TIME SHOWN</p>
+        <div style="border: 1px solid #414D45; padding: 14px 16px;">
+          <p style="margin: 0 0 6px; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9650;</span> Rate-limited by Halide XL</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">Automatic retry at 14:04:02 UTC (in 48s). No action needed. Not billed for this attempt.</p>
+        </div>
+      </div>
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">DETERMINISTIC FAILURE · NO RETRY</p>
+        <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 14px 16px;">
+          <p style="margin: 0 0 6px; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9650;</span> Safety policy rejected the prompt</p>
+          <p style="margin: 0 0 12px; font-size: 13px; line-height: 1.6; color: #B4C0B6;">This will not succeed on retry. Reservation released in full. Edit the prompt and run again.</p>
+          <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #6B776F; border: 1px dashed #414D45; padding: 6px 10px; display: inline-block;">Retry — disabled, not offered</span>
+        </div>
+      </div>
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">CANCEL_REQUESTED · RACE</p>
+        <div style="border: 1px solid #414D45; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+          <p style="margin: 0; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9633;</span> Cancel requested at 14:02:41</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">Waiting for the current attempt to reach a stopping point. If the provider returns a result before that happens, the run succeeds and is billed — cancellation does not override a completed result.</p>
+        </div>
+      </div>
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">CANCELLED AFTER BILLABLE CONSUMPTION</p>
+        <div style="border: 1px solid #414D45; padding: 14px 16px;">
+          <p style="margin: 0; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#8213;</span> Cancelled &#183; partial charge</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">The provider had already started generating when cancellation reached it. $0.04 of the $0.08 reservation was settled; $0.04 was released.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

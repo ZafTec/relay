@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/base.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/styles.css">
+<script src="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/_ds_bundle.js"></script>
+<style>
+  body { background: #F5F4ED; color: #141A16; }
+  a { color: #1F776E; }
+  a:hover { color: #145B54; }
+</style>
+</helmet>
+
+<div data-screen-label="Landing" style="--ra: {{ accent }}; --rm: #5F6B64; container-type: inline-size; background: #F5F4ED; color: #141A16; font-family: var(--font-sans); min-height: 100vh; overflow-x: hidden;">
+
+  <header style="position: sticky; top: 0; z-index: 20; background: rgba(245,244,237,0.92); backdrop-filter: blur(6px); border-bottom: 1px solid #D8D5C8;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 12px clamp(16px, 4cqi, 40px); display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;">
+      <a href="#top" style="display: flex; align-items: center; gap: 10px; color: #141A16;">
+        <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#8E9A92"></rect><rect x="6" y="15.5" width="20" height="5" fill="#46514B"></rect><rect x="9" y="7.5" width="20" height="5" fill="var(--ra, #1F776E)"></rect></svg>
+        <span style="font-size: 20px; font-weight: 500; letter-spacing: -0.01em;">Relay</span>
+        <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm); padding-top: 3px;">by ZafTech</span>
+      </a>
+      <nav aria-label="Primary" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;">
+        <a href="#tools" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap;">Tools</a>
+        <a href="#golden-path" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap;">How it works</a>
+        <a href="/docs" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap;">Docs</a>
+        <a href="/changelog" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap;">Changelog</a>
+        <a href="/status" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap;">Status</a>
+        <a href="/sign-in" style="color: #141A16; border: 1px solid #C9C7BA; padding: 0 16px; height: 44px; display: inline-flex; align-items: center; margin-left: 8px; font-weight: 500; white-space: nowrap;">Sign in</a>
+        <a href="/dashboard" style="background: var(--ra, #1F776E); color: #F5F4ED; padding: 0 16px; height: 44px; display: inline-flex; align-items: center; font-weight: 700; white-space: nowrap;">Open dashboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <section id="top" style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 7cqi, 96px) clamp(16px, 4cqi, 40px) clamp(32px, 4cqi, 56px);">
+    <p style="margin: 0 0 20px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: #7A8C84;">// 01</span> Tool registry for agents</p>
+    <h1 style="margin: 0; font-size: clamp(36px, 6.4cqi, 72px); font-weight: 700; letter-spacing: -0.04em; line-height: 1.02; max-width: 18ch;">Curated tools. Durable artifacts. Managed delivery.</h1>
+    <div style="display: flex; flex-wrap: wrap; gap: clamp(24px, 4cqi, 64px); align-items: flex-end; margin-top: 32px;">
+      <p style="margin: 0; flex: 1 1 380px; font-size: clamp(16px, 1.6cqi, 19px); line-height: 1.6; color: #46514B; max-width: 58ch; text-wrap: pretty;">Relay is a curated registry of tools an agent can discover and call. Every call runs asynchronously, every output persists as a versioned artifact, every run is metered, and every result leaves as a Relay-managed URL — never a raw provider link.</p>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <a href="/sign-in" style="background: #141A16; color: #F5F4ED; height: 48px; padding: 0 24px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">Sign in with Google or GitHub</a>
+        <a href="#tools" style="border: 1px solid #C9C7BA; color: #141A16; height: 48px; padding: 0 24px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">Browse the catalog</a>
+      </div>
+    </div>
+    <figure id="golden-path" style="margin: clamp(32px, 5cqi, 64px) 0 0; border: 1px solid #D8D5C8; background: #F5F4ED; padding: 0; overflow-x: auto;">
+      <img src="design/relay/assets/hero-agent-to-artifact.svg" alt="An agent calls a tool from the registry; the run executes asynchronously; it produces an output set; the output commits as durable image artifacts; the result leaves as a Relay-managed URL, not a raw provider link." style="display: block; width: 100%; min-width: 900px; height: auto;">
+    </figure>
+  </section>
+
+  <section id="tools" style="border-top: 1px solid #D8D5C8; background: #EFEDE2;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6cqi, 88px) clamp(16px, 4cqi, 40px);">
+      <p style="margin: 0 0 16px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: #7A8C84;">// 02</span> The initial catalog</p>
+      <h2 style="margin: 0 0 28px; font-size: clamp(26px, 3cqi, 38px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.08; max-width: 26ch;">Image generation first. Not the only thing Relay will ever run.</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1px; background: #D8D5C8; border: 1px solid #D8D5C8;">
+        <div style="background: #F5F4ED; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+            <span style="display: flex; align-items: center; gap: 10px;"><img src="design/relay/brand/icon-tool-generate.svg" width="22" height="22" alt=""><span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">image.generate</span></span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #1F776E; border: 1px solid #1F776E; padding: 3px 7px; white-space: nowrap;">PUBLISHED</span>
+          </div>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #46514B;">Text-to-image. Two provider models available today.</p>
+          <div style="display: flex; flex-direction: column; gap: 8px; font-family: var(--font-mono); font-size: 12px; color: #46514B;">
+            <span style="display: flex; justify-content: space-between; gap: 12px;"><span>Halide XL</span><span style="color: #8E9A92;">per image &#183; ~18s p50</span></span>
+            <span style="display: flex; justify-content: space-between; gap: 12px;"><span>Aurora Fast</span><span style="color: #8E9A92;">per megapixel &#183; ~4s p50</span></span>
+          </div>
+        </div>
+        <div style="background: #F5F4ED; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+            <span style="display: flex; align-items: center; gap: 10px;"><img src="design/relay/brand/icon-tool-edit.svg" width="22" height="22" alt=""><span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">image.upscale</span></span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #1F776E; border: 1px solid #1F776E; padding: 3px 7px; white-space: nowrap;">PUBLISHED</span>
+          </div>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #46514B;">Takes a reference artifact, returns a higher-resolution version.</p>
+          <div style="display: flex; flex-direction: column; gap: 8px; font-family: var(--font-mono); font-size: 12px; color: #46514B;">
+            <span style="display: flex; justify-content: space-between; gap: 12px;"><span>Halide XL</span><span style="color: #8E9A92;">per image &#183; ~9s p50</span></span>
+          </div>
+        </div>
+        <div style="background: #F5F4ED; padding: 24px; display: flex; flex-direction: column; gap: 12px; opacity: 0.7;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+            <span style="display: flex; align-items: center; gap: 10px;"><img src="design/relay/brand/icon-tool-generate.svg" width="22" height="22" alt=""><span style="font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">speech.synthesize</span></span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #46514B; border: 1px dashed #C9C7BA; padding: 3px 7px; white-space: nowrap;">PLANNED</span>
+          </div>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #46514B;">Not yet in the registry. Shown to indicate direction, not availability.</p>
+        </div>
+      </div>
+      <p style="margin: 20px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--rm);">PROVIDER AND MODEL NAMES ABOVE ARE ILLUSTRATIVE FIXTURES FOR THIS DESIGN PASS, NOT CONFIRMED VENDOR COMMITMENTS.</p>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid #D8D5C8;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6cqi, 88px) clamp(16px, 4cqi, 40px);">
+      <p style="margin: 0 0 28px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: #7A8C84;">// 03</span> The golden path</p>
+      <div style="display: flex; flex-wrap: wrap; gap: clamp(24px, 4cqi, 56px);">
+        <div style="flex: 1 1 320px; min-width: 280px;">
+          <h2 style="margin: 0 0 16px; font-size: clamp(28px, 3.4cqi, 40px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.05;">Call the tool. Track the work. Share the result.</h2>
+          <p style="margin: 0 0 28px; font-size: 17px; line-height: 1.6; color: #46514B; max-width: 46ch; text-wrap: pretty;">An agent reads the tool's schema, submits a run, and polls or streams its state. A person does the same thing from the dashboard. Both end at the same durable artifact.</p>
+          <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; background: #D8D5C8; border: 1px solid #D8D5C8;">
+            <li style="background: #F5F4ED; padding: 16px 20px; display: flex; gap: 16px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 11px; color: var(--ra, #1F776E); letter-spacing: 0.1em;">01</span><span style="font-size: 15px; line-height: 1.55; color: #141A16;"><strong style="font-weight: 700;">Browse</strong> the catalog and inspect a tool's contract and meter unit.</span></li>
+            <li style="background: #F5F4ED; padding: 16px 20px; display: flex; gap: 16px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 11px; color: var(--ra, #1F776E); letter-spacing: 0.1em;">02</span><span style="font-size: 15px; line-height: 1.55; color: #141A16;"><strong style="font-weight: 700;">Estimate</strong> the cost, then run — a reservation is held before any provider is called.</span></li>
+            <li style="background: #F5F4ED; padding: 16px 20px; display: flex; gap: 16px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 11px; color: var(--ra, #1F776E); letter-spacing: 0.1em;">03</span><span style="font-size: 15px; line-height: 1.55; color: #141A16;"><strong style="font-weight: 700;">Observe</strong> the run's state and attempts until it reaches an output set.</span></li>
+            <li style="background: #F5F4ED; padding: 16px 20px; display: flex; gap: 16px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 11px; color: var(--ra, #1F776E); letter-spacing: 0.1em;">04</span><span style="font-size: 15px; line-height: 1.55; color: #141A16;"><strong style="font-weight: 700;">Share</strong> an artifact with a revocable managed link, not a raw store URL.</span></li>
+          </ol>
+        </div>
+        <div style="flex: 1 1 380px; min-width: 300px; border: 1px solid #414D45; background: #141A16;">
+          <div style="padding: 10px 14px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 10px;">
+            <span style="width: 8px; height: 8px; background: #414D45; border-radius: 50%;"></span><span style="width: 8px; height: 8px; background: #414D45; border-radius: 50%;"></span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #7A8C84;">MCP TOOL CONTRACT · image.generate v3</span>
+          </div>
+          <pre style="margin: 0; padding: 18px 16px; overflow-x: auto; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65; color: #B4C0B6;"><code>{
+  <span style="color:#63C8BC">"name"</span>: <span style="color:#F5F4ED">"image.generate"</span>,
+  <span style="color:#63C8BC">"version"</span>: <span style="color:#F5F4ED">3</span>,
+  <span style="color:#63C8BC">"input_schema"</span>: {
+    <span style="color:#F5F4ED">"prompt"</span>: <span style="color:#8E9A92">"string, required"</span>,
+    <span style="color:#F5F4ED">"negative_prompt"</span>: <span style="color:#8E9A92">"string?"</span>,
+    <span style="color:#F5F4ED">"aspect_ratio"</span>: <span style="color:#8E9A92">"1:1 | 16:9 | 9:16"</span>,
+    <span style="color:#F5F4ED">"output_count"</span>: <span style="color:#8E9A92">"int, 1-4"</span>,
+    <span style="color:#F5F4ED">"provider_model"</span>: <span style="color:#8E9A92">"halide-xl | aurora-fast"</span>
+  },
+  <span style="color:#63C8BC">"meter_unit"</span>: <span style="color:#F5F4ED">"per_output"</span>,
+  <span style="color:#63C8BC">"result"</span>: <span style="color:#F5F4ED">"run_id, output_set[]"</span>
+}</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid #D8D5C8; background: #EFEDE2;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6cqi, 88px) clamp(16px, 4cqi, 40px); display: flex; flex-wrap: wrap; gap: clamp(24px, 4cqi, 56px); align-items: flex-start;">
+      <div style="flex: 1 1 320px; min-width: 280px;">
+        <p style="margin: 0 0 24px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: #7A8C84;">// 04</span> Failure and metering are proof</p>
+        <h2 style="margin: 0 0 16px; font-size: clamp(26px, 3cqi, 36px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.08;">Retries only when it's safe. Metering that survives failure.</h2>
+        <p style="margin: 0 0 20px; font-size: 17px; line-height: 1.6; color: #46514B; max-width: 46ch; text-wrap: pretty;">A run that fails before reaching the provider retries free. A run that fails on a schema, safety, or policy check never retries automatically — the input has to change. A run confirmed with the provider but lost on retrieval is reconciled, never blindly resubmitted.</p>
+        <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.55; color: #141A16;">
+          <li style="display: flex; gap: 10px;"><span style="color: var(--ra, #1F776E); font-family: var(--font-mono);">&#9632;</span> Estimate before run, reservation held, usage settled after</li>
+          <li style="display: flex; gap: 10px;"><span style="color: var(--ra, #1F776E); font-family: var(--font-mono);">&#9632;</span> Reservation released in full on early failure</li>
+          <li style="display: flex; gap: 10px;"><span style="color: var(--ra, #1F776E); font-family: var(--font-mono);">&#9632;</span> Retry classification, not blanket retry-everything</li>
+        </ul>
+      </div>
+      <figure style="flex: 1 1 400px; min-width: 300px; margin: 0; border: 1px solid #D8D5C8; background: #F5F4ED; overflow-x: auto;">
+        <img src="design/relay/assets/retry-decision.svg" alt="Three failure classes route differently: a pre-submission failure retries at no charge, a confirmed submission with failed retrieval is reconciled rather than resubmitted, and a deterministic schema, safety or policy failure never retries automatically." style="display: block; width: 100%; min-width: 560px; height: auto;">
+      </figure>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid #D8D5C8;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6cqi, 88px) clamp(16px, 4cqi, 40px);">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 28px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: #7A8C84;">// 05</span> Changelog</p>
+        <a href="/changelog" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #141A16; min-height: 44px; display: inline-flex; align-items: center;">All releases &#8594;</a>
+      </div>
+      <sc-if value="{{ hasReleases }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 1px; background: #D8D5C8; border: 1px solid #D8D5C8;">
+          <a href="/changelog/0-1-0" style="background: #F5F4ED; padding: 22px 24px; display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: baseline; color: #141A16;">
+            <span style="font-family: var(--font-mono); font-size: 14px; font-weight: 700; letter-spacing: 0.06em; min-width: 68px;">0.1.0</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #7A8C84; min-width: 96px;">2026-08-14</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #1F776E; border: 1px solid #C9C7BA; padding: 3px 7px;">ADDED</span>
+            <span style="flex: 1 1 260px; font-size: 15px; line-height: 1.55;">Initial registry launch: <code style="font-family: var(--font-mono); font-size: 13px;">image.generate</code> and <code style="font-family: var(--font-mono); font-size: 13px;">image.upscale</code> with two provider models.</span>
+          </a>
+        </div>
+      </sc-if>
+      <sc-if value="{{ !hasReleases }}" hint-placeholder-val="{{ false }}">
+        <div style="border: 1px solid #D8D5C8; padding: 28px; text-align: left;">
+          <p style="margin: 0 0 8px; font-size: 16px; font-weight: 700;">No releases published yet</p>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #46514B;">Nothing has shipped since the registry launched. Check back, or subscribe from the changelog page.</p>
+        </div>
+      </sc-if>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid #D8D5C8; background: #141A16; color: #F5F4ED;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(48px, 7cqi, 104px) clamp(16px, 4cqi, 40px); display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-end; justify-content: space-between;">
+      <div style="flex: 1 1 420px;">
+        <p style="margin: 0 0 20px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #63C8BC;"><span style="color: #7A8C84;">// 06</span> Get started</p>
+        <h2 style="margin: 0 0 16px; font-size: clamp(30px, 4cqi, 52px); font-weight: 700; letter-spacing: -0.04em; line-height: 1.02;">Point an agent at the registry.</h2>
+        <p style="margin: 0; font-size: 17px; line-height: 1.6; color: #B4C0B6; max-width: 44ch;">Sign in with Google or GitHub, create a workspace, and run the first tool.</p>
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <a href="/sign-in" style="background: #63C8BC; color: #141A16; height: 48px; padding: 0 26px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">Sign in</a>
+        <a href="/docs" style="border: 1px solid #414D45; color: #F5F4ED; height: 48px; padding: 0 26px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">Docs</a>
+      </div>
+    </div>
+  </section>
+
+  <footer style="background: #141A16; color: #8E9A92; border-top: 1px solid #2E3830;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 40px clamp(16px, 4cqi, 40px); display: flex; flex-wrap: wrap; gap: 28px; justify-content: space-between; align-items: flex-start;">
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#414D45"></rect><rect x="6" y="15.5" width="20" height="5" fill="#7A8C84"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em; color: #F5F4ED;">Relay</span>
+          <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;">by ZafTech</span>
+        </div>
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.8; letter-spacing: 0.04em;">ZafTech Solutions &#183; Addis Ababa, Ethiopia<br>&#169; 2026 ZafTech Solutions. All rights reserved.</p>
+      </div>
+      <nav aria-label="Footer" style="display: flex; flex-wrap: wrap; gap: 28px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;">
+        <div style="display: flex; flex-direction: column; gap: 10px;"><span style="color: #46514B;">Product</span><a href="/docs" style="color: #8E9A92;">Docs</a><a href="/changelog" style="color: #8E9A92;">Changelog</a><a href="/status" style="color: #8E9A92;">Status</a></div>
+        <div style="display: flex; flex-direction: column; gap: 10px;"><span style="color: #46514B;">Legal</span><a href="/legal/terms" style="color: #8E9A92;">Terms</a><a href="/legal/privacy" style="color: #8E9A92;">Privacy</a><a href="/legal/dpa" style="color: #8E9A92;">Data processing</a></div>
+        <div style="display: flex; flex-direction: column; gap: 10px;"><span style="color: #46514B;">ZafTech</span><a href="https://zaftech.co" style="color: #8E9A92;">zaftech.co</a></div>
+      </nav>
+    </div>
+  </footer>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#1F776E&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#1F776E&quot;,&quot;#145B54&quot;,&quot;#3A6B5F&quot;,&quot;#1F5F77&quot;],&quot;section&quot;:&quot;Brand&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#1F776E', hasReleases: true };
+  }
+}
+</script>
+</body>
+</html>

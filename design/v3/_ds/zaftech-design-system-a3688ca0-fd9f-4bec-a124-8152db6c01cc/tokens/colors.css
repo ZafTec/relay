@@ -1,0 +1,68 @@
+/* ZafTech — Color tokens
+   Source: zaf_tech_landing global.css / .superdesign/init/theme.md
+   Dark-first. Light mode flips onyx <-> ivory via prefers-color-scheme. */
+
+:root {
+  /* Onyx — neutral / dark scale */
+  --color-onyx-50: oklch(96.40% 0.005 145.54);
+  --color-onyx-100: oklch(92.67% 0.012 145.48);
+  --color-onyx-200: oklch(85.22% 0.024 145.36);
+  --color-onyx-300: oklch(77.52% 0.034 145.24);
+  --color-onyx-400: oklch(69.78% 0.047 145.05);
+  --color-onyx-500: oklch(61.89% 0.061 144.79);
+  --color-onyx-600: oklch(52.72% 0.050 144.82);
+  --color-onyx-700: oklch(43.12% 0.039 144.86);
+  --color-onyx-800: oklch(33.12% 0.031 144.85);
+  --color-onyx-900: oklch(22.10% 0.017 144.97);
+  --color-onyx-950: oklch(18.53% 0.010 145.15);
+
+  /* Ivory — text scale */
+  --color-ivory-100: oklch(97.19% 0.053 102.73);
+  --color-ivory-200: oklch(94.68% 0.104 102.85);
+
+  /* Spruce — the single accent, teal-green. Stays constant across themes. */
+  --color-spruce-300: oklch(81.71% 0.067 179.14);
+  --color-spruce-400: oklch(75.87% 0.087 178.41);
+  --color-spruce-500: oklch(70.21% 0.103 176.35);
+  --color-spruce-700: oklch(48.58% 0.069 176.43);
+
+  /* Semantic aliases — use these in components, not raw scale values */
+  --color-ink: var(--color-ivory-100);
+  --color-ink-muted: var(--color-onyx-400);
+  --color-ink-secondary: var(--color-onyx-300);
+  --color-bg: var(--color-onyx-950);
+  --color-surface: var(--color-onyx-900);
+  --color-surface-2: var(--color-onyx-800);
+  --color-border: var(--color-onyx-700);
+  --color-border-subtle: var(--color-onyx-800);
+  --color-accent: var(--color-spruce-400);
+  --color-accent-hover: var(--color-spruce-300);
+  --color-accent-selection: var(--color-spruce-500);
+}
+
+/* Light mode: onyx scale flips to light neutrals; ivory becomes near-black text;
+   spruce accent darkens slightly to hold contrast on a white surface. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-onyx-100: oklch(30% 0 0);
+    --color-onyx-200: oklch(45% 0 0);
+    --color-onyx-300: oklch(58% 0 0);
+    --color-onyx-400: oklch(68% 0 0);
+    --color-onyx-500: oklch(78% 0 0);
+    --color-onyx-600: oklch(85% 0 0);
+    --color-onyx-700: oklch(90% 0 0);
+    --color-onyx-800: oklch(95% 0.003 90);
+    --color-onyx-900: oklch(97.5% 0.003 90);
+    --color-onyx-950: oklch(99.5% 0 0);
+
+    --color-ivory-100: oklch(20% 0 0);
+    --color-ivory-200: oklch(30% 0 0);
+
+    --color-spruce-300: oklch(58% 0.110 178.41);
+    --color-spruce-400: oklch(48% 0.120 178.41);
+    --color-spruce-500: oklch(42% 0.110 176.35);
+
+    --color-ink: oklch(20% 0 0);
+    --color-ink-muted: oklch(45% 0 0);
+  }
+}
