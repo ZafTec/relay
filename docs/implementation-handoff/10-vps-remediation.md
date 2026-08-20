@@ -417,7 +417,7 @@ identity, workspace, tool, provider, and queue policies.
 
 The global 50 MB body limit does not define artifact upload size because normal
 uploads go directly to S3. Apply smaller route-specific JSON limits for
-auth/API/ MCP.
+auth/API/MCP.
 
 ## Infrastructure image policy
 

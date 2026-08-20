@@ -246,7 +246,8 @@ ProgressBar
 Skeleton
 CodeBlock
 PublicHeader / Footer
-DashboardRail / PageHeader / WorkspaceSwitcher / SessionMenu
+DashboardRail / PageHeader / CurrentWorkspaceLabel / SessionMenu
+Future multi-workspace phase: WorkspaceSwitcher
 ToolCard / ToolRow / ToolLifecycleBadge
 SchemaDrivenForm / ProviderModelSelector
 MeterEstimate / UsageReservationSummary / RunReceipt
