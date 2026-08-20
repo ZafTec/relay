@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/base.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/styles.css">
+<script src="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/_ds_bundle.js"></script>
+<style>body { background: #0E1310; }</style>
+</helmet>
+
+<div style="--rm: #8E9A92; background: #0E1310; color: #F5F4ED; font-family: var(--font-sans); padding: 48px; display: flex; flex-direction: column; gap: 56px; min-height: 100vh;">
+
+  <div style="display: flex; flex-direction: column; gap: 12px; max-width: 860px;">
+    <p class="kicker"><span class="kicker-num">// 07</span> Changelog · public and superadmin</p>
+    <h1 style="margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05;">Published notes, and the tool that publishes them</h1>
+    <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #B4C0B6; max-width: 70ch; text-wrap: pretty;">Public pages stay on paper with the marketing header. The superadmin publisher is dark, sits outside any workspace, and treats publication as an irreversible act with a confirmation and an audit trail. Sample releases are illustrative.</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/changelog · public list · 1440 wide</p>
+    <div data-screen-label="Changelog public desktop" style="width: 1440px; background: #F5F4ED; color: #141A16; border: 1px solid #2E3830; --rm: #5F6B64;">
+      <header style="border-bottom: 1px solid #D8D5C8; padding: 12px 40px; display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#8E9A92"></rect><rect x="6" y="15.5" width="20" height="5" fill="#46514B"></rect><rect x="9" y="7.5" width="20" height="5" fill="#1F776E"></rect></svg>
+          <span style="font-size: 20px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+          <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm); padding-top: 3px;">by ZafTech</span>
+        </div>
+        <nav aria-label="Primary" style="display: flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;">
+          <a href="/#product" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center;">Product</a>
+          <a href="/#workflow" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center;">Workflow</a>
+          <a href="/#security" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center;">Security</a>
+          <a href="/changelog" aria-current="page" style="color: #141A16; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; border-bottom: 2px solid #1F776E;">Changelog</a>
+          <a href="/docs" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center;">Docs</a>
+          <a href="/sign-in" style="color: #141A16; border: 1px solid #C9C7BA; padding: 0 16px; height: 44px; display: inline-flex; align-items: center; margin-left: 8px; white-space: nowrap;">Sign in</a>
+          <a href="/dashboard" style="background: #1F776E; color: #F5F4ED; padding: 0 16px; height: 44px; display: inline-flex; align-items: center; font-weight: 700; white-space: nowrap;">Open dashboard</a>
+        </nav>
+      </header>
+
+      <div style="padding: 64px 40px 40px; border-bottom: 1px solid #D8D5C8;">
+        <p style="margin: 0 0 16px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #1F776E;"><span style="color: var(--rm);">// 01</span> Releases</p>
+        <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; flex-wrap: wrap;">
+          <div>
+            <h1 style="margin: 0 0 12px; font-size: 64px; font-weight: 700; letter-spacing: -0.04em; line-height: 1;">Changelog</h1>
+            <p style="margin: 0; font-size: 18px; line-height: 1.6; color: #46514B; max-width: 52ch;">What shipped, when it shipped, and the tag it shipped from.</p>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <a href="/changelog.xml" style="border: 1px solid #C9C7BA; color: #141A16; height: 44px; padding: 0 16px; display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">RSS feed</a>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 32px;">
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; background: #141A16; color: #F5F4ED; height: 36px; padding: 0 14px; display: inline-flex; align-items: center;">All</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #C9C7BA; color: #46514B; height: 36px; padding: 0 14px; display: inline-flex; align-items: center;">Added</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #C9C7BA; color: #46514B; height: 36px; padding: 0 14px; display: inline-flex; align-items: center;">Improved</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #C9C7BA; color: #46514B; height: 36px; padding: 0 14px; display: inline-flex; align-items: center;">Fixed</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #C9C7BA; color: #46514B; height: 36px; padding: 0 14px; display: inline-flex; align-items: center;">Security</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #C9C7BA; color: #46514B; height: 36px; padding: 0 14px; display: inline-flex; align-items: center;">Breaking</span>
+        </div>
+      </div>
+
+      <div style="padding: 0 40px 56px;">
+        <article style="display: flex; gap: 48px; padding: 40px 0; border-bottom: 1px solid #D8D5C8;">
+          <div style="width: 200px; flex: none;">
+            <a href="/changelog/0-4-0" style="font-family: var(--font-mono); font-size: 26px; font-weight: 700; letter-spacing: 0.02em; color: #141A16;">0.4.0</a>
+            <p style="margin: 8px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--rm);">2026-07-14</p>
+            <p style="margin: 4px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--rm);">v0.4.0 · 9f21c4a</p>
+          </div>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 18px;">
+            <div style="display: flex; gap: 14px; align-items: baseline;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #1F776E; border: 1px solid #1F776E; padding: 3px 8px; white-space: nowrap;">ADDED</span>
+              <p style="margin: 0; font-size: 17px; line-height: 1.6; color: #141A16;">Job progress is reported per step. <code style="font-family: var(--font-mono); font-size: 14px;">relay.get_job</code> returns the current stage and the count of completed steps.</p>
+            </div>
+            <div style="display: flex; gap: 14px; align-items: baseline;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #46514B; border: 1px solid #C9C7BA; padding: 3px 8px; white-space: nowrap;">IMPROVED</span>
+              <p style="margin: 0; font-size: 17px; line-height: 1.6; color: #141A16;">Version listings return checksum and byte size in the same call, removing a second round trip.</p>
+            </div>
+            <div style="display: flex; gap: 14px; align-items: baseline;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #141A16; border: 1px solid #141A16; padding: 3px 8px; white-space: nowrap;">BREAKING</span>
+              <p style="margin: 0; font-size: 17px; line-height: 1.6; color: #141A16;"><code style="font-family: var(--font-mono); font-size: 14px;">job.status</code> is renamed <code style="font-family: var(--font-mono); font-size: 14px;">job.state</code>. The old field is accepted until 0.6.0.</p>
+            </div>
+          </div>
+        </article>
+
+        <article style="display: flex; gap: 48px; padding: 40px 0; border-bottom: 1px solid #D8D5C8;">
+          <div style="width: 200px; flex: none;">
+            <a href="/changelog/0-3-2" style="font-family: var(--font-mono); font-size: 26px; font-weight: 700; letter-spacing: 0.02em; color: #141A16;">0.3.2</a>
+            <p style="margin: 8px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--rm);">2026-06-30</p>
+            <p style="margin: 4px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--rm);">v0.3.2 · 41ba07d</p>
+          </div>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 18px;">
+            <div style="display: flex; gap: 14px; align-items: baseline;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #46514B; border: 1px solid #C9C7BA; padding: 3px 8px; white-space: nowrap;">FIXED</span>
+              <p style="margin: 0; font-size: 17px; line-height: 1.6; color: #141A16;">Expired upload URLs return a typed <code style="font-family: var(--font-mono); font-size: 14px;">url_expired</code> error instead of a generic 403 from the store.</p>
+            </div>
+            <div style="display: flex; gap: 14px; align-items: baseline;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #46514B; border: 1px solid #C9C7BA; padding: 3px 8px; white-space: nowrap;">FIXED</span>
+              <p style="margin: 0; font-size: 17px; line-height: 1.6; color: #141A16;">Retried jobs no longer duplicate a version when the first attempt committed before failing.</p>
+            </div>
+          </div>
+        </article>
+
+        <article style="display: flex; gap: 48px; padding: 40px 0;">
+          <div style="width: 200px; flex: none;">
+            <a href="/changelog/0-3-0" style="font-family: var(--font-mono); font-size: 26px; font-weight: 700; letter-spacing: 0.02em; color: #141A16;">0.3.0</a>
+            <p style="margin: 8px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--rm);">2026-06-02</p>
+            <p style="margin: 4px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--rm);">v0.3.0 · c70e83f</p>
+          </div>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 18px;">
+            <div style="display: flex; gap: 14px; align-items: baseline;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #F5F4ED; background: #141A16; padding: 3px 8px; white-space: nowrap;">SECURITY &#9650;</span>
+              <p style="margin: 0; font-size: 17px; line-height: 1.6; color: #141A16;">Signing keys are rotated per workspace. Signatures issued before a rotation are invalidated immediately.</p>
+            </div>
+            <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.7; letter-spacing: 0.04em; color: var(--rm);">Security items are marked with a filled tag and a triangle, so the category survives grayscale and screen readers.</p>
+          </div>
+        </article>
+      </div>
+
+      <div style="border-top: 1px solid #D8D5C8; background: #EFEDE2; padding: 36px 40px; display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start;">
+        <div style="flex: 1 1 420px;">
+          <p style="margin: 0 0 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Empty state · before the first release</p>
+          <div style="border: 1px solid #D8D5C8; background: #F5F4ED; padding: 28px;">
+            <h2 style="margin: 0 0 10px; font-size: 22px; font-weight: 700; letter-spacing: -0.03em;">No releases published yet</h2>
+            <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.6; color: #46514B; max-width: 48ch;">Relay is pre-1.0 and notes are published from tagged releases. Subscribe to the feed and the first entry will arrive there.</p>
+            <a href="/changelog.xml" style="border: 1px solid #C9C7BA; color: #141A16; height: 44px; padding: 0 16px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">Subscribe to RSS</a>
+          </div>
+        </div>
+        <p style="flex: 1 1 300px; margin: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.9; letter-spacing: 0.04em; color: var(--rm);">SAMPLE RELEASES ARE ILLUSTRATIVE.<br>NO UNSHIPPED WORK IS DESCRIBED AS RELEASED.</p>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/changelog/0-4-0 · single entry · 1440 wide</p>
+    <div data-screen-label="Changelog entry desktop" style="width: 1440px; background: #F5F4ED; color: #141A16; border: 1px solid #2E3830; --rm: #5F6B64;">
+      <header style="border-bottom: 1px solid #D8D5C8; padding: 12px 40px; display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#8E9A92"></rect><rect x="6" y="15.5" width="20" height="5" fill="#46514B"></rect><rect x="9" y="7.5" width="20" height="5" fill="#1F776E"></rect></svg>
+          <span style="font-size: 20px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+          <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm); padding-top: 3px;">by ZafTech</span>
+        </div>
+        <a href="/changelog" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #141A16; min-height: 44px; display: inline-flex; align-items: center;">&#8592; All releases</a>
+      </header>
+      <article style="max-width: 860px; margin: 0 auto; padding: 72px 40px 64px;">
+        <p style="margin: 0 0 20px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #1F776E;"><span style="color: var(--rm);">// 01</span> Release</p>
+        <h1 style="margin: 0 0 20px; font-family: var(--font-mono); font-size: 56px; font-weight: 700; letter-spacing: 0.01em; line-height: 1;">0.4.0</h1>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; padding-bottom: 28px; border-bottom: 1px solid #D8D5C8;">
+          <span style="font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; color: #46514B;">PUBLISHED 2026-07-14</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; color: #46514B;">TAG v0.4.0</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; color: #46514B;">COMMIT 9f21c4a</span>
+          <span style="display: flex; gap: 8px; margin-left: auto;">
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #1F776E; border: 1px solid #1F776E; padding: 3px 8px;">ADDED</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #46514B; border: 1px solid #C9C7BA; padding: 3px 8px;">IMPROVED</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #141A16; border: 1px solid #141A16; padding: 3px 8px;">BREAKING</span>
+          </span>
+        </div>
+
+        <section style="padding: 32px 0; border-bottom: 1px solid #D8D5C8;">
+          <h2 style="margin: 0 0 16px; font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #1F776E;">Added</h2>
+          <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px;">
+            <li style="display: flex; gap: 12px; font-size: 18px; line-height: 1.65;"><span style="font-family: var(--font-mono); color: #1F776E;">&#9632;</span><span>Job progress is reported per step. <code style="font-family: var(--font-mono); font-size: 15px;">relay.get_job</code> returns the current stage and completed step count.</span></li>
+            <li style="display: flex; gap: 12px; font-size: 18px; line-height: 1.65;"><span style="font-family: var(--font-mono); color: #1F776E;">&#9632;</span><span>Workers write a short status line per step, readable in the job detail drawer.</span></li>
+          </ul>
+        </section>
+
+        <section style="padding: 32px 0; border-bottom: 1px solid #D8D5C8;">
+          <h2 style="margin: 0 0 16px; font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #46514B;">Improved</h2>
+          <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px;">
+            <li style="display: flex; gap: 12px; font-size: 18px; line-height: 1.65;"><span style="font-family: var(--font-mono); color: var(--rm);">&#9632;</span><span>Version listings return checksum and byte size in one call.</span></li>
+          </ul>
+        </section>
+
+        <section style="padding: 32px 0;">
+          <h2 style="margin: 0 0 16px; font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #141A16;">Breaking</h2>
+          <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px;">
+            <li style="display: flex; gap: 12px; font-size: 18px; line-height: 1.65;"><span style="font-family: var(--font-mono); color: #141A16;">&#9650;</span><span><code style="font-family: var(--font-mono); font-size: 15px;">job.status</code> is renamed <code style="font-family: var(--font-mono); font-size: 15px;">job.state</code>. The old field is accepted until 0.6.0, then removed.</span></li>
+          </ul>
+        </section>
+
+        <nav aria-label="Adjacent releases" style="display: flex; justify-content: space-between; gap: 16px; border-top: 1px solid #D8D5C8; padding-top: 28px;">
+          <a href="/changelog/0-3-2" style="font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #141A16; min-height: 44px; display: inline-flex; align-items: center;">&#8592; 0.3.2</a>
+          <a href="/changelog.xml" style="font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #46514B; min-height: 44px; display: inline-flex; align-items: center;">RSS</a>
+        </nav>
+      </article>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/admin/changelog · superadmin list · 1440 × 820 · platform scope, not a workspace</p>
+    <div data-screen-label="Changelog admin list" style="width: 1440px; height: 820px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <aside style="width: 260px; border-right: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column;">
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#6B7C74"></rect><rect x="6" y="15.5" width="20" height="5" fill="#9BA9A1"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 17px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+        </div>
+        <div style="padding: 16px 20px; border-bottom: 1px solid #2E3830;">
+          <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Scope</p>
+          <p style="margin: 0; font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.06em; color: #F5F4ED;">PLATFORM</p>
+          <p style="margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--rm);">Superadmin. No workspace is selected and none can be.</p>
+        </div>
+        <nav aria-label="Superadmin sections" style="display: flex; flex-direction: column; padding: 12px 0; gap: 2px;">
+          <a href="/admin/changelog" aria-current="page" style="display: flex; align-items: center; padding: 0 20px; min-height: 44px; color: #F5F4ED; font-size: 15px; background: #1D251F; border-left: 3px solid #63C8BC;">Changelog</a>
+          <a href="/admin/audit" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: var(--rm); font-size: 15px;">Audit log</a>
+        </nav>
+        <a href="/dashboard" style="margin-top: auto; border-top: 1px solid #2E3830; padding: 0 20px; min-height: 56px; display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--rm);">&#8592; Back to workspace</a>
+      </aside>
+      <main style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 24px 32px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; justify-content: space-between; gap: 20px;">
+          <div>
+            <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Platform · changelog</p>
+            <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em;">Releases</h1>
+          </div>
+          <a href="/admin/changelog/new" style="background: #63C8BC; color: #141A16; height: 44px; padding: 0 18px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">New draft</a>
+        </div>
+        <div style="padding: 24px 32px; display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid #2E3830;">
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; background: #63C8BC; color: #141A16; height: 36px; padding: 0 14px; display: inline-flex; align-items: center;">All 4</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 14px; display: inline-flex; align-items: center;">Draft 1</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 14px; display: inline-flex; align-items: center;">Published 2</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 14px; display: inline-flex; align-items: center;">Archived 1</span>
+        </div>
+        <div style="padding: 0 32px;">
+          <div style="display: grid; grid-template-columns: 120px 150px 200px 1fr 220px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">
+            <span>Version</span><span>State</span><span>Tag · commit</span><span>Items</span><span>Last change</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 120px 150px 200px 1fr 220px; gap: 16px; padding: 20px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+            <span style="font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: #F5F4ED;">0.5.0</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: #141A16; background: #63C8BC; padding: 4px 8px; justify-self: start;">DRAFT &#9633;</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: var(--rm);">unset · unset</span>
+            <span style="font-size: 14px; color: #B4C0B6;">4 items · 1 security</span>
+            <span style="display: flex; gap: 10px; align-items: center; justify-content: flex-end;">
+              <a href="/admin/changelog/0-5-0" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC; min-height: 44px; display: inline-flex; align-items: center;">Edit</a>
+              <a href="/admin/changelog/0-5-0/preview" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #B4C0B6; min-height: 44px; display: inline-flex; align-items: center;">Preview</a>
+            </span>
+          </div>
+          <div style="display: grid; grid-template-columns: 120px 150px 200px 1fr 220px; gap: 16px; padding: 20px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+            <span style="font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: #F5F4ED;">0.4.0</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: #F5F4ED; border: 1px solid #414D45; padding: 4px 8px; justify-self: start;">PUBLISHED &#9632;</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">v0.4.0 · 9f21c4a</span>
+            <span style="font-size: 14px; color: #B4C0B6;">3 items</span>
+            <span style="display: flex; gap: 10px; align-items: center; justify-content: flex-end;">
+              <a href="/admin/changelog/0-4-0" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC; min-height: 44px; display: inline-flex; align-items: center;">Edit</a>
+              <a href="/admin/changelog/0-4-0/unpublish" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #B4C0B6; min-height: 44px; display: inline-flex; align-items: center;">Unpublish</a>
+            </span>
+          </div>
+          <div style="display: grid; grid-template-columns: 120px 150px 200px 1fr 220px; gap: 16px; padding: 20px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+            <span style="font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: #F5F4ED;">0.3.2</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: #F5F4ED; border: 1px solid #414D45; padding: 4px 8px; justify-self: start;">PUBLISHED &#9632;</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">v0.3.2 · 41ba07d</span>
+            <span style="font-size: 14px; color: #B4C0B6;">2 items</span>
+            <span style="display: flex; gap: 10px; align-items: center; justify-content: flex-end;">
+              <a href="/admin/changelog/0-3-2" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC; min-height: 44px; display: inline-flex; align-items: center;">Edit</a>
+            </span>
+          </div>
+          <div style="display: grid; grid-template-columns: 120px 150px 200px 1fr 220px; gap: 16px; padding: 20px 0; align-items: center; opacity: 0.6;">
+            <span style="font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: #F5F4ED;">0.2.9</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--rm); border: 1px dashed #414D45; padding: 4px 8px; justify-self: start;">ARCHIVED &#8213;</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: var(--rm);">v0.2.9 · 1c04ba2</span>
+            <span style="font-size: 14px; color: var(--rm);">5 items · superseded</span>
+            <span style="display: flex; gap: 10px; align-items: center; justify-content: flex-end;">
+              <a href="/admin/changelog/0-2-9" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #B4C0B6; min-height: 44px; display: inline-flex; align-items: center;">View</a>
+            </span>
+          </div>
+        </div>
+        <p style="margin: auto 32px 24px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #46514B;">State is carried by a label and a glyph — filled square published, hollow square draft, dash archived — never by color alone.</p>
+      </main>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/admin/changelog/0-5-0 · editor · 1440 × 720</p>
+    <div data-screen-label="Changelog admin editor" style="width: 1440px; height: 720px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <main style="flex: 1; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid #2E3830;">
+        <div style="padding: 20px 28px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <a href="/admin/changelog" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--rm);">&#8592; Releases</a>
+            <h1 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em;">Edit 0.5.0</h1>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: #141A16; background: #63C8BC; padding: 4px 8px;">DRAFT &#9633;</span>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button type="button" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Save draft</button>
+            <button type="button" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Preview</button>
+            <button type="button" style="height: 44px; padding: 0 18px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Publish…</button>
+          </div>
+        </div>
+
+        <div style="padding: 28px; display: flex; flex-direction: column; gap: 24px; overflow: hidden;">
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+            <label style="display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Version</span>
+              <input type="text" value="0.5.0" style="height: 44px; background: #1D251F; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 14px; padding: 0 12px;">
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Git tag</span>
+              <input type="text" value="v0.5.0" style="height: 44px; background: #1D251F; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 14px; padding: 0 12px;">
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Commit SHA</span>
+              <input type="text" value="" placeholder="required to publish" style="height: 44px; background: #1D251F; border: 1px solid #F5F4ED; color: #F5F4ED; font-family: var(--font-mono); font-size: 14px; padding: 0 12px;">
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Publication date</span>
+              <input type="text" value="2026-07-29" style="height: 44px; background: #1D251F; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 14px; padding: 0 12px;">
+            </label>
+          </div>
+          <p style="margin: -12px 0 0; display: flex; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #F5F4ED;"><span>&#9650;</span> COMMIT SHA IS REQUIRED BEFORE PUBLISH · FIELD MARKED, NOT COLOURED</p>
+
+          <div style="display: flex; flex-direction: column; gap: 1px; background: #2E3830; border: 1px solid #2E3830;">
+            <div style="background: #1D251F; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Items · 4</span>
+              <button type="button" style="height: 36px; padding: 0 14px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">+ Add item</button>
+            </div>
+            <div style="background: #141A16; padding: 14px 16px; display: flex; gap: 14px; align-items: center;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #63C8BC; border: 1px solid #63C8BC; padding: 4px 8px; white-space: nowrap;">ADDED &#9662;</span>
+              <input type="text" value="Streaming download URLs for objects over 5 GB." style="flex: 1; height: 40px; background: #1D251F; border: 1px solid #2E3830; color: #F5F4ED; font-size: 14px; padding: 0 12px; font-family: var(--font-sans);">
+              <button type="button" aria-label="Remove item" style="width: 44px; height: 40px; background: transparent; border: 1px solid #2E3830; color: var(--rm); cursor: pointer;">&#215;</button>
+            </div>
+            <div style="background: #141A16; padding: 14px 16px; display: flex; gap: 14px; align-items: center;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #B4C0B6; border: 1px solid #414D45; padding: 4px 8px; white-space: nowrap;">IMPROVED &#9662;</span>
+              <input type="text" value="Job detail drawer shows attempt history inline." style="flex: 1; height: 40px; background: #1D251F; border: 1px solid #2E3830; color: #F5F4ED; font-size: 14px; padding: 0 12px; font-family: var(--font-sans);">
+              <button type="button" aria-label="Remove item" style="width: 44px; height: 40px; background: transparent; border: 1px solid #2E3830; color: var(--rm); cursor: pointer;">&#215;</button>
+            </div>
+            <div style="background: #141A16; padding: 14px 16px; display: flex; gap: 14px; align-items: center;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #B4C0B6; border: 1px solid #414D45; padding: 4px 8px; white-space: nowrap;">FIXED &#9662;</span>
+              <input type="text" value="Workers no longer re-lease a job after a clean shutdown." style="flex: 1; height: 40px; background: #1D251F; border: 1px solid #2E3830; color: #F5F4ED; font-size: 14px; padding: 0 12px; font-family: var(--font-sans);">
+              <button type="button" aria-label="Remove item" style="width: 44px; height: 40px; background: transparent; border: 1px solid #2E3830; color: var(--rm); cursor: pointer;">&#215;</button>
+            </div>
+            <div style="background: #141A16; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; border-left: 4px solid #F5F4ED;">
+              <div style="display: flex; gap: 14px; align-items: center;">
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #141A16; background: #F5F4ED; padding: 4px 8px; white-space: nowrap;">SECURITY &#9650;</span>
+                <input type="text" value="Signed URLs are bound to the requesting workspace." style="flex: 1; height: 40px; background: #1D251F; border: 1px solid #414D45; color: #F5F4ED; font-size: 14px; padding: 0 12px; font-family: var(--font-sans);">
+                <button type="button" aria-label="Remove item" style="width: 44px; height: 40px; background: transparent; border: 1px solid #2E3830; color: var(--rm); cursor: pointer;">&#215;</button>
+              </div>
+              <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;"><strong style="font-weight: 700; color: #F5F4ED;">Security disclosure.</strong> Publishing this item makes the weakness public. Confirm the fix is deployed to all environments and that any embargo has ended.</p>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <aside style="width: 340px; display: flex; flex-direction: column; background: #121815;">
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830;">
+          <p style="margin: 0 0 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Publish checks</p>
+          <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.5;">
+            <li style="display: flex; gap: 10px; color: #B4C0B6;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> Version is unique</li>
+            <li style="display: flex; gap: 10px; color: #B4C0B6;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> All items have a category</li>
+            <li style="display: flex; gap: 10px; color: #F5F4ED;"><span style="font-family: var(--font-mono);">&#9650;</span> Commit SHA missing</li>
+            <li style="display: flex; gap: 10px; color: #F5F4ED;"><span style="font-family: var(--font-mono);">&#9650;</span> Security item needs sign-off</li>
+          </ul>
+        </div>
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830;">
+          <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Audit history</p>
+          <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px;">
+            <li style="display: flex; flex-direction: column; gap: 3px;">
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #B4C0B6;">2026-07-29 09:14</span>
+              <span style="font-size: 13px; color: #F5F4ED;">Item added · security</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; color: var(--rm);">EUAELL A. · SUPERADMIN</span>
+            </li>
+            <li style="display: flex; flex-direction: column; gap: 3px;">
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #B4C0B6;">2026-07-28 17:02</span>
+              <span style="font-size: 13px; color: #F5F4ED;">Draft created from v0.5.0</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; color: var(--rm);">EUAELL A. · SUPERADMIN</span>
+            </li>
+            <li style="display: flex; flex-direction: column; gap: 3px;">
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #B4C0B6;">2026-07-14 11:40</span>
+              <span style="font-size: 13px; color: #F5F4ED;">0.4.0 published</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; color: var(--rm);">EUAELL A. · SUPERADMIN</span>
+            </li>
+          </ol>
+        </div>
+        <div style="padding: 20px; margin-top: auto;">
+          <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.8; letter-spacing: 0.04em; color: #46514B;">EVERY EDIT, PUBLISH, AND UNPUBLISH IS RECORDED WITH ACTOR AND TIMESTAMP. THE LOG IS APPEND-ONLY.</p>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/admin/changelog/0-5-0/preview · draft preview + publish confirmation · 1440 × 900</p>
+    <div data-screen-label="Changelog admin preview" style="width: 1440px; height: 900px; border: 1px solid #2E3830; background: #141A16; position: relative; overflow: hidden;">
+      <div style="background: #F5F4ED; color: #141A16; height: 100%; display: flex; flex-direction: column; --rm: #5F6B64;">
+        <div style="background: #141A16; color: #F5F4ED; padding: 14px 32px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid #2E3830;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: #141A16; background: #63C8BC; padding: 4px 8px;">PREVIEW &#9633;</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em;">DRAFT 0.5.0 · NOT PUBLISHED · VISIBLE TO SUPERADMIN ONLY</span>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <a href="/admin/changelog/0-5-0" style="height: 40px; padding: 0 16px; border: 1px solid #414D45; color: #F5F4ED; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">Back to editor</a>
+            <button type="button" style="height: 40px; padding: 0 16px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Publish…</button>
+          </div>
+        </div>
+        <div style="padding: 48px 32px; opacity: 0.45;">
+          <div style="max-width: 860px; margin: 0 auto;">
+            <p style="margin: 0 0 16px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #1F776E;"><span style="color: var(--rm);">// 01</span> Release</p>
+            <h1 style="margin: 0 0 16px; font-family: var(--font-mono); font-size: 48px; font-weight: 700; letter-spacing: 0.01em; line-height: 1;">0.5.0</h1>
+            <div style="display: flex; gap: 24px; flex-wrap: wrap; padding-bottom: 24px; border-bottom: 1px solid #D8D5C8; font-family: var(--font-mono); font-size: 12px; color: #46514B;">
+              <span>WOULD PUBLISH 2026-07-29</span><span>TAG v0.5.0</span><span>COMMIT —</span>
+            </div>
+            <div style="padding: 28px 0; display: flex; flex-direction: column; gap: 16px;">
+              <div style="display: flex; gap: 14px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #1F776E; border: 1px solid #1F776E; padding: 3px 8px;">ADDED</span><p style="margin: 0; font-size: 17px; line-height: 1.6;">Streaming download URLs for objects over 5 GB.</p></div>
+              <div style="display: flex; gap: 14px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #46514B; border: 1px solid #C9C7BA; padding: 3px 8px;">IMPROVED</span><p style="margin: 0; font-size: 17px; line-height: 1.6;">Job detail drawer shows attempt history inline.</p></div>
+              <div style="display: flex; gap: 14px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #46514B; border: 1px solid #C9C7BA; padding: 3px 8px;">FIXED</span><p style="margin: 0; font-size: 17px; line-height: 1.6;">Workers no longer re-lease a job after a clean shutdown.</p></div>
+              <div style="display: flex; gap: 14px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #F5F4ED; background: #141A16; padding: 3px 8px;">SECURITY &#9650;</span><p style="margin: 0; font-size: 17px; line-height: 1.6;">Signed URLs are bound to the requesting workspace.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="position: absolute; inset: 0; background: rgba(14,19,16,0.72); display: flex; align-items: center; justify-content: center; padding: 40px;">
+        <div role="dialog" aria-modal="true" aria-labelledby="pubtitle" style="width: 560px; background: #141A16; border: 1px solid #414D45; box-shadow: 0 24px 48px rgba(0,0,0,0.4); display: flex; flex-direction: column;">
+          <div style="padding: 22px 24px; border-bottom: 1px solid #2E3830;">
+            <p style="margin: 0 0 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Confirm publication</p>
+            <h2 id="pubtitle" style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: #F5F4ED;">Publish 0.5.0 to /changelog?</h2>
+          </div>
+          <div style="padding: 22px 24px; display: flex; flex-direction: column; gap: 16px;">
+            <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.6; color: #B4C0B6;">
+              <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> 4 items become publicly visible and enter the RSS feed.</li>
+              <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> The entry is recorded in the audit log under your account.</li>
+              <li style="display: flex; gap: 10px; color: #F5F4ED;"><span style="font-family: var(--font-mono);">&#9650;</span> One security item will disclose a fixed weakness. This cannot be un-disclosed.</li>
+            </ul>
+            <div style="border: 1px solid #F5F4ED; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+              <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;">&#9650; Blocked · commit SHA missing</p>
+              <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Add the commit the release was built from before publishing.</p>
+            </div>
+            <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.6; color: #B4C0B6;">
+              <input type="checkbox" style="width: 18px; height: 18px; margin-top: 2px; accent-color: #63C8BC;">
+              <span>I confirm the security fix is deployed everywhere and any embargo has ended.</span>
+            </label>
+          </div>
+          <div style="padding: 18px 24px; border-top: 1px solid #2E3830; display: flex; gap: 10px; justify-content: flex-end;">
+            <button type="button" style="height: 44px; padding: 0 18px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Cancel</button>
+            <button type="button" disabled style="height: 44px; padding: 0 18px; background: #2E3830; border: none; color: var(--rm); font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: not-allowed;">Publish 0.5.0</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

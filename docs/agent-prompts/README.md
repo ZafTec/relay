@@ -3,35 +3,42 @@
 The design and implementation agents are intentionally separate. Run them in
 this order.
 
-## 1. Claude Design
+## Design history
 
-Prompt:
+- `design/v1/` is the initial Ledger handoff.
+- `design/v2/` is the expanded storage-first handoff and includes its source
+  canvases.
+- Neither version is approved for implementing the current registry-first
+  product.
 
-[`claude-design.md`](claude-design.md)
+See [`../../design/README.md`](../../design/README.md) for version status.
 
-Claude Design owns only:
+## 1. Design revision
+
+The next design agent must read:
 
 ```text
-design/relay/
+docs/product-and-roadmap.md
+docs/brand.md
+docs/legal.md
+docs/versioning.md
+design/README.md
+design/v2/DESIGN-AGENT-SUGGESTIONS.md
 ```
 
-Expected outcome:
+It should preserve useful Ledger foundations, resolve the backlog, and write the
+next reviewable handoff under:
 
-- Original Relay identity directions
-- Owner-selected logo system
-- Custom SVG assets
-- Design tokens
-- Responsive landing page
-- Sign-in page
-- Initial protected dashboard
-- Public and superadmin changelog screens
-- Complete `design/relay/HANDOFF.md`
-- A committed `design/relay-identity` branch
+```text
+design/v3/
+```
 
-The owner reviews the design, requests revisions if necessary, approves it, and
-merges the design branch into `main`.
+[`claude-design.md`](claude-design.md) is the historical prompt that produced
+the earlier design direction. Do not run it unchanged; the canonical product
+document and v2 design-agent backlog supersede its storage-first product brief.
 
-Do not run Codex before this is complete.
+The owner reviews the new handoff, requests revisions, approves an exact commit,
+and merges it into `main`.
 
 ## 2. Codex implementation
 
@@ -39,21 +46,10 @@ Prompt:
 
 [`codex-implementation.md`](codex-implementation.md)
 
-Codex must first verify the approved design handoff exists on `main`. Codex
-implements the supplied design; it does not create, reinterpret, or replace it.
+Codex must verify an owner-approved `design/v3/` handoff exists on `main` before
+frontend implementation. It must stop when the handoff is missing, ambiguous, or
+unapproved; it does not reinterpret v1 or v2.
 
-Codex then proceeds in this order:
-
-1. Minimal platform bootstrap
-2. Landing, Better Auth, and protected `/dashboard`
-3. End-to-end landing and auth tests
-4. Changelog, OpenTelemetry, audit logs, and CI/CD
-5. Operational integration tests
-6. Storage and immutable asset versions
-7. Durable jobs and Deno workers
-8. MCP OAuth resource server and tools
-9. Image generation
-10. Entitlements, usage, and production hardening
-
-Every implementation component uses an isolated Git worktree, targeted tests,
-logical commits, review, merge, and a full post-merge validation gate.
+After the design gate, implementation follows the tested milestone order in
+[`../product-and-roadmap.md`](../product-and-roadmap.md), using isolated Git
+worktrees, logical commits, review, and post-merge validation.

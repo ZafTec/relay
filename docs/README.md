@@ -20,14 +20,15 @@
   changes required before launch
 - [`versioning.md`](versioning.md): independent version dimensions and proposed
   SemVer policy; currently awaiting approval
+- [`../design/README.md`](../design/README.md): design handoff versions, status,
+  and the gate for the next registry-first revision
 
 ## Agent handoffs
 
 - [`agent-prompts/README.md`](agent-prompts/README.md): mandatory agent
   execution order and handoff gates
-- [`agent-prompts/claude-design.md`](agent-prompts/claude-design.md):
-  design-agent prompt for Relay identity, assets, and product-design handoff; it
-  must be reconciled with the canonical product document before reuse
+- [`agent-prompts/claude-design.md`](agent-prompts/claude-design.md): historical
+  prompt for the earlier design direction; do not run it unchanged
 - [`agent-prompts/codex-implementation.md`](agent-prompts/codex-implementation.md):
   implementation-only worktree orchestration prompt; frontend work remains
   blocked until an approved current design handoff exists

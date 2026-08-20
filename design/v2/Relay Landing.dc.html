@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/base.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/styles.css">
+<script src="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/_ds_bundle.js"></script>
+<style>
+  body { background: #F5F4ED; color: #141A16; }
+  a { color: #1F776E; }
+  a:hover { color: #145B54; }
+</style>
+</helmet>
+
+<div data-screen-label="Landing" style="--ra: {{ accent }}; --rm: #5F6B64; container-type: inline-size; background: #F5F4ED; color: #141A16; font-family: var(--font-sans); min-height: 100vh; overflow-x: hidden;">
+
+  <header style="position: sticky; top: 0; z-index: 20; background: rgba(245,244,237,0.92); backdrop-filter: blur(6px); border-bottom: 1px solid #D8D5C8;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 12px clamp(16px, 4cqi, 40px); display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;">
+      <a href="#top" style="display: flex; align-items: center; gap: 10px; color: #141A16;">
+        <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#8E9A92"></rect><rect x="6" y="15.5" width="20" height="5" fill="#46514B"></rect><rect x="9" y="7.5" width="20" height="5" fill="var(--ra, #1F776E)"></rect></svg>
+        <span style="font-size: 20px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+        <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm); padding-top: 3px;">by ZafTech</span>
+      </a>
+      <nav aria-label="Primary" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;">
+        <a href="#product" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap; white-space: nowrap;" style-hover="color: #141A16;">Product</a>
+        <a href="#workflow" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap; white-space: nowrap;" style-hover="color: #141A16;">Workflow</a>
+        <a href="#security" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap; white-space: nowrap;" style-hover="color: #141A16;">Security</a>
+        <a href="#changelog" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap; white-space: nowrap;" style-hover="color: #141A16;">Changelog</a>
+        <a href="/docs" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap; white-space: nowrap;" style-hover="color: #141A16;">Docs</a>
+        <a href="/sign-in" style="color: #141A16; border: 1px solid #C9C7BA; padding: 0 16px; height: 44px; display: inline-flex; align-items: center; white-space: nowrap; margin-left: 8px; font-weight: 500;" style-hover="border-color: var(--ra, #1F776E); color: var(--ra, #1F776E);">Sign in</a>
+        <a href="/dashboard" style="background: var(--ra, #1F776E); color: #F5F4ED; padding: 0 16px; height: 44px; display: inline-flex; align-items: center; white-space: nowrap; font-weight: 700;" style-hover="background: #145B54; color: #F5F4ED;">Open dashboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <section id="top" style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 7cqi, 96px) clamp(16px, 4cqi, 40px) clamp(32px, 4cqi, 56px);">
+    <p style="margin: 0 0 20px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: var(--rm);">// 01</span> Object storage &amp; background work</p>
+    <h1 style="margin: 0; font-size: clamp(38px, 7cqi, 82px); font-weight: 700; letter-spacing: -0.04em; line-height: 0.98; max-width: 16ch;">Files in.<br>Work underway.<br>URLs out.</h1>
+    <div style="display: flex; flex-wrap: wrap; gap: clamp(24px, 4cqi, 64px); align-items: flex-end; margin-top: 32px;">
+      <p style="margin: 0; flex: 1 1 380px; font-size: clamp(16px, 1.6cqi, 19px); line-height: 1.6; color: #46514B; max-width: 56ch; text-wrap: pretty;">Relay gives MCP clients and engineering teams durable object storage, observable background jobs, and signed delivery URLs — without routing file bytes through the application.</p>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <a href="/sign-in" style="background: #141A16; color: #F5F4ED; height: 48px; padding: 0 24px; display: inline-flex; align-items: center; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;" style-hover="background: var(--ra, #1F776E); color: #F5F4ED;">Sign in with Google or GitHub</a>
+        <a href="/docs" style="border: 1px solid #C9C7BA; color: #141A16; height: 48px; padding: 0 24px; display: inline-flex; align-items: center; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;" style-hover="border-color: var(--ra, #1F776E); color: var(--ra, #1F776E);">Read the docs</a>
+      </div>
+    </div>
+    <figure style="margin: clamp(32px, 5cqi, 64px) 0 0; border: 1px solid #D8D5C8; background: #F5F4ED; padding: 0; overflow-x: auto;">
+      <img data-scrollable-diagram src="design/relay/assets/hero-request-to-result.svg" alt="A request moves through six durable stages: presigned upload, stored object, immutable versions v1 to v3, queued work picked up by a worker, a generated result committed as a new version, and an expiring signed URL. Every stage persists on a durable state rail." style="display: block; width: 100%; min-width: 560px; height: auto;">
+    </figure>
+  </section>
+
+  <section id="product" style="border-top: 1px solid #D8D5C8; background: #EFEDE2;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6cqi, 88px) clamp(16px, 4cqi, 40px);">
+      <p style="margin: 0 0 28px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: var(--rm);">// 02</span> What Relay actually runs</p>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1px; background: #D8D5C8; border: 1px solid #D8D5C8;">
+        <div style="background: #EFEDE2; padding: 24px;" style-hover="background: #F5F4ED;">
+          <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: var(--rm);">STORAGE</p>
+          <h3 style="margin: 0 0 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">S3-compatible object store</h3>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #46514B;">Any endpoint that speaks the S3 API. Bucket, prefix, and region are configuration, not a rewrite.</p>
+        </div>
+        <div style="background: #EFEDE2; padding: 24px;" style-hover="background: #F5F4ED;">
+          <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: var(--rm);">TRANSFER</p>
+          <h3 style="margin: 0 0 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">Presigned PUT and GET</h3>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #46514B;">Clients transfer bytes directly against the store. The application signs, records, and stays out of the path.</p>
+        </div>
+        <div style="background: #EFEDE2; padding: 24px;" style-hover="background: #F5F4ED;">
+          <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: var(--rm);">HISTORY</p>
+          <h3 style="margin: 0 0 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">Assets with immutable versions</h3>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #46514B;">A logical asset points at an ordered set of versions. Writes append; nothing is overwritten in place.</p>
+        </div>
+        <div style="background: #EFEDE2; padding: 24px;" style-hover="background: #F5F4ED;">
+          <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: var(--rm);">WORK</p>
+          <h3 style="margin: 0 0 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em;">Durable background jobs</h3>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #46514B;">Workers lease queued jobs, report progress, and leave state and errors readable after the request ends.</p>
+        </div>
+      </div>
+      <p style="margin: 20px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--rm);">No customer logos, uptime figures, or benchmark claims on this page — only what the system does.</p>
+    </div>
+  </section>
+
+  <section id="workflow" style="border-top: 1px solid #D8D5C8;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6cqi, 88px) clamp(16px, 4cqi, 40px);">
+      <p style="margin: 0 0 28px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: var(--rm);">// 03</span> Request to result</p>
+      <div style="display: flex; flex-wrap: wrap; gap: clamp(24px, 4cqi, 56px);">
+        <div style="flex: 1 1 320px; min-width: 280px;">
+          <h2 style="margin: 0 0 16px; font-size: clamp(28px, 3.4cqi, 40px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.05;">The request ends. The work continues.</h2>
+          <p style="margin: 0 0 28px; font-size: 17px; line-height: 1.6; color: #46514B; max-width: 46ch; text-wrap: pretty;">A client asks for an upload URL, commits a version, and enqueues work. Relay hands the job to a worker and keeps the state where anyone with access can read it.</p>
+          <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; background: #D8D5C8; border: 1px solid #D8D5C8;">
+            <li style="background: #F5F4ED; padding: 16px 20px; display: flex; gap: 16px; align-items: baseline;">
+              <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ra, #1F776E); letter-spacing: 0.1em;">01</span>
+              <span style="font-size: 15px; line-height: 1.55; color: #141A16;"><strong style="font-weight: 700;">create_upload_url</strong> — signed PUT, scoped to one workspace prefix, expires in minutes.</span>
+            </li>
+            <li style="background: #F5F4ED; padding: 16px 20px; display: flex; gap: 16px; align-items: baseline;">
+              <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ra, #1F776E); letter-spacing: 0.1em;">02</span>
+              <span style="font-size: 15px; line-height: 1.55; color: #141A16;"><strong style="font-weight: 700;">commit_version</strong> — the uploaded object becomes <code style="font-family: var(--font-mono); font-size: 13px;">v3</code> of a named asset.</span>
+            </li>
+            <li style="background: #F5F4ED; padding: 16px 20px; display: flex; gap: 16px; align-items: baseline;">
+              <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ra, #1F776E); letter-spacing: 0.1em;">03</span>
+              <span style="font-size: 15px; line-height: 1.55; color: #141A16;"><strong style="font-weight: 700;">enqueue_job</strong> — returns a job id immediately; the worker picks it up.</span>
+            </li>
+            <li style="background: #F5F4ED; padding: 16px 20px; display: flex; gap: 16px; align-items: baseline;">
+              <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ra, #1F776E); letter-spacing: 0.1em;">04</span>
+              <span style="font-size: 15px; line-height: 1.55; color: #141A16;"><strong style="font-weight: 700;">create_download_url</strong> — the generated version leaves as an expiring signed URL.</span>
+            </li>
+          </ol>
+        </div>
+        <figure style="flex: 1 1 380px; min-width: 300px; margin: 0; border: 1px solid #D8D5C8; align-self: flex-start; overflow-x: auto;">
+          <img data-scrollable-diagram src="design/relay/assets/job-lifecycle.svg" alt="Job states: queued when accepted, running when a worker leases it, succeeded when the result is committed. A failed state records the error and attempt count and can be retried back into the queue. Terminal states are marked with a square for succeeded and a triangle for failed." style="display: block; width: 100%; min-width: 560px; height: auto;">
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid #D8D5C8; background: #EFEDE2;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6cqi, 88px) clamp(16px, 4cqi, 40px); display: flex; flex-wrap: wrap; gap: clamp(24px, 4cqi, 56px); align-items: flex-start;">
+      <div style="flex: 1 1 300px; min-width: 280px;">
+        <p style="margin: 0 0 24px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: var(--rm);">// 04</span> Versions</p>
+        <h2 style="margin: 0 0 16px; font-size: clamp(26px, 3cqi, 36px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.08;">Every write keeps its predecessor</h2>
+        <p style="margin: 0 0 20px; font-size: 17px; line-height: 1.6; color: #46514B; max-width: 44ch; text-wrap: pretty;">Assets are logical names. Versions are immutable rows underneath them, each with its own checksum, size, and creation time. Rolling back is selecting an earlier version, not restoring a backup.</p>
+        <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.55; color: #141A16;">
+          <li style="display: flex; gap: 10px;"><span style="color: var(--ra, #1F776E); font-family: var(--font-mono);">&#9632;</span> Checksums recorded at commit time</li>
+          <li style="display: flex; gap: 10px;"><span style="color: var(--ra, #1F776E); font-family: var(--font-mono);">&#9632;</span> Generated outputs land as versions, not new files</li>
+          <li style="display: flex; gap: 10px;"><span style="color: var(--ra, #1F776E); font-family: var(--font-mono);">&#9632;</span> Version identifiers are stable in URLs and job payloads</li>
+        </ul>
+      </div>
+      <figure style="flex: 1 1 400px; min-width: 300px; margin: 0; border: 1px solid #D8D5C8; background: #F5F4ED; overflow-x: auto;">
+        <img data-scrollable-diagram src="design/relay/assets/immutable-version-stack.svg" alt="Three versions of the asset renders/quarterly-map.png. Version 3, marked current, is 2.1 megabytes created 2026-07-14. Versions 2 and 1 remain readable beneath it. Writes add a version; nothing is overwritten or deleted in place." style="display: block; width: 100%; min-width: 560px; height: auto;">
+      </figure>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid #D8D5C8; background: #141A16; color: #F5F4ED; --rm: #8E9A92;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6cqi, 88px) clamp(16px, 4cqi, 40px);">
+      <p style="margin: 0 0 28px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #63C8BC;"><span style="color: var(--rm);">// 05</span> MCP tools</p>
+      <div style="display: flex; flex-wrap: wrap; gap: clamp(24px, 4cqi, 56px); align-items: flex-start;">
+        <div style="flex: 1 1 320px; min-width: 280px;">
+          <h2 style="margin: 0 0 16px; font-size: clamp(26px, 3cqi, 36px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.08;">Tools an MCP client can hold</h2>
+          <p style="margin: 0 0 24px; font-size: 17px; line-height: 1.6; color: #B4C0B6; max-width: 46ch; text-wrap: pretty;">The client never holds store credentials. It calls tools, receives ids and signed URLs, and polls job state. Tool names below are illustrative.</p>
+          <div style="border: 1px solid #2E3830; background: #1D251F;">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #2E3830;">
+              <span style="width: 8px; height: 8px; background: #414D45; border-radius: 50%;"></span>
+              <span style="width: 8px; height: 8px; background: #414D45; border-radius: 50%;"></span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--rm); margin-left: 6px;">relay.enqueue_job — illustrative</span>
+            </div>
+            <pre style="margin: 0; padding: 18px 16px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.7; color: #B4C0B6;"><code>&#8594; <span style="color: #63C8BC;">relay.enqueue_job</span> {
+  asset: <span style="color: #F5F4ED;">"renders/quarterly-map.png"</span>,
+  version: <span style="color: #F5F4ED;">"v2"</span>,
+  kind: <span style="color: #F5F4ED;">"image.generate"</span>
+}
+
+&#8592; { job_id: <span style="color: #F5F4ED;">"job_8f31c0"</span>,
+    state: <span style="color: #63C8BC;">"QUEUED"</span>,
+    poll:  <span style="color: #F5F4ED;">"relay.get_job"</span> }</code></pre>
+          </div>
+        </div>
+        <figure style="flex: 1 1 400px; min-width: 300px; margin: 0; border: 1px solid #2E3830; background: #F5F4ED; overflow-x: auto;">
+          <img data-scrollable-diagram src="design/relay/assets/mcp-tool-flow.svg" alt="An MCP client calls five Relay tools over a session: create upload URL returning a url and expiry, commit version returning an asset id and v3, enqueue job returning a job id in queued state, get job returning running with progress, and create download URL returning a signed URL. Every call is scoped to one workspace." style="display: block; width: 100%; min-width: 560px; height: auto;">
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid #D8D5C8;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6cqi, 88px) clamp(16px, 4cqi, 40px);">
+      <p style="margin: 0 0 28px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: var(--rm);">// 06</span> Deployment</p>
+      <div style="display: flex; flex-wrap: wrap; gap: clamp(24px, 4cqi, 56px); align-items: flex-start;">
+        <figure style="flex: 1 1 420px; min-width: 300px; margin: 0; border: 1px solid #D8D5C8; overflow-x: auto;">
+          <img data-scrollable-diagram src="design/relay/assets/signed-url-delivery.svg" alt="The MCP client, holding no keys, requests a URL from the Relay API, which signs and records it. The client then transfers bytes directly to the S3-compatible object store over a thick data-plane path, while Relay exchanges metadata only. File bytes never transit the application." style="display: block; width: 100%; min-width: 560px; height: auto;">
+        </figure>
+        <div style="flex: 1 1 300px; min-width: 280px;">
+          <h2 style="margin: 0 0 16px; font-size: clamp(26px, 3cqi, 36px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.08;">Bring your own S3-compatible store</h2>
+          <p style="margin: 0 0 24px; font-size: 17px; line-height: 1.6; color: #46514B; max-width: 44ch; text-wrap: pretty;">Relay talks the S3 API. Endpoint, bucket, prefix, and credentials are environment configuration — including a self-hosted store on your own hardware.</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #46514B; border: 1px solid #D8D5C8; padding: 6px 10px;">S3 API</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #46514B; border: 1px solid #D8D5C8; padding: 6px 10px;">SELF-HOSTED</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #46514B; border: 1px solid #D8D5C8; padding: 6px 10px;">PRESIGNED PUT / GET</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #46514B; border: 1px solid #D8D5C8; padding: 6px 10px;">PREFIX PER WORKSPACE</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #46514B; border: 1px solid #D8D5C8; padding: 6px 10px;">REGION AGNOSTIC</span>
+          </div>
+          <p style="margin: 20px 0 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.7; color: var(--rm);">Provider names are omitted deliberately. Compatibility is a protocol claim, not an endorsement.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid #D8D5C8; background: #EFEDE2;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6cqi, 88px) clamp(16px, 4cqi, 40px);">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: var(--rm);">// 07</span> Usage &amp; entitlements</p>
+        <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #141A16; border: 1px solid #141A16; padding: 4px 8px;">Planned · not shipped</span>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: clamp(24px, 4cqi, 56px); align-items: flex-start;">
+        <div style="flex: 1 1 300px; min-width: 280px;">
+          <h2 style="margin: 0 0 16px; font-size: clamp(26px, 3cqi, 36px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.08;">Limits that fail predictably</h2>
+          <p style="margin: 0 0 16px; font-size: 17px; line-height: 1.6; color: #46514B; max-width: 44ch; text-wrap: pretty;">Entitlements are metered per workspace. When a limit is reached, new uploads and jobs are rejected with a typed error — reads and downloads keep working. No pricing is published yet.</p>
+          <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.7; color: var(--rm);">Figures in the diagram are illustrative.</p>
+        </div>
+        <figure style="flex: 1 1 420px; min-width: 300px; margin: 0; border: 1px solid #D8D5C8; background: #F5F4ED; overflow-x: auto;">
+          <img data-scrollable-diagram src="design/relay/assets/usage-entitlements.svg" alt="Three usage meters: stored bytes at 41.2 of 100 gigabytes, within limit; job minutes at 1820 of 2000, approaching; egress at 512 of 512 gigabytes, at limit and blocked. At limit, new jobs and uploads are rejected with a typed error while reads and downloads continue. Figures are illustrative." style="display: block; width: 100%; min-width: 560px; height: auto;">
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="security" style="border-top: 1px solid #D8D5C8;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6cqi, 88px) clamp(16px, 4cqi, 40px);">
+      <p style="margin: 0 0 28px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: var(--rm);">// 08</span> Security &amp; isolation</p>
+      <h2 style="margin: 0 0 28px; font-size: clamp(26px, 3cqi, 36px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.08; max-width: 28ch;">A workspace is the boundary, not a filter</h2>
+      <figure style="margin: 0 0 24px; border: 1px solid #D8D5C8; overflow-x: auto;">
+        <img data-scrollable-diagram src="design/relay/assets/workspace-isolation.svg" alt="Two workspaces, A and B, each with its own object prefix, assets and versions, job queue, and signing key, separated by a solid divider. There are no cross-workspace reads, writes, or job visibility." style="display: block; width: 100%; min-width: 560px; height: auto;">
+      </figure>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1px; background: #D8D5C8; border: 1px solid #D8D5C8;">
+        <div style="background: #F5F4ED; padding: 22px;">
+          <h3 style="margin: 0 0 8px; font-size: 16px; font-weight: 700; letter-spacing: -0.02em;">OAuth only</h3>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #46514B;">Google and GitHub. No password storage in the initial product.</p>
+        </div>
+        <div style="background: #F5F4ED; padding: 22px;">
+          <h3 style="margin: 0 0 8px; font-size: 16px; font-weight: 700; letter-spacing: -0.02em;">Scoped prefixes</h3>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #46514B;">Every object key sits under its workspace prefix. Signatures are issued for that prefix only.</p>
+        </div>
+        <div style="background: #F5F4ED; padding: 22px;">
+          <h3 style="margin: 0 0 8px; font-size: 16px; font-weight: 700; letter-spacing: -0.02em;">Short-lived URLs</h3>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #46514B;">Upload and download URLs expire in minutes and are recorded when issued.</p>
+        </div>
+        <div style="background: #F5F4ED; padding: 22px;">
+          <h3 style="margin: 0 0 8px; font-size: 16px; font-weight: 700; letter-spacing: -0.02em;">Superadmin is separate</h3>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #46514B;">Platform administration is a distinct permission, not workspace ownership.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="changelog" style="border-top: 1px solid #D8D5C8; background: #EFEDE2;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6cqi, 88px) clamp(16px, 4cqi, 40px);">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 28px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra, #1F776E);"><span style="color: var(--rm);">// 09</span> Changelog</p>
+        <a href="/changelog" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #141A16; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap; white-space: nowrap;" style-hover="color: var(--ra, #1F776E);">All releases &#8594;</a>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 1px; background: #D8D5C8; border: 1px solid #D8D5C8;">
+        <a href="/changelog/0-4-0" style="background: #EFEDE2; padding: 22px 24px; display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: baseline; color: #141A16;" style-hover="background: #F5F4ED;">
+          <span style="font-family: var(--font-mono); font-size: 14px; font-weight: 700; letter-spacing: 0.06em; min-width: 68px;">0.4.0</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--rm); min-width: 96px;">2026-07-14</span>
+          <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: var(--ra, #1F776E); border: 1px solid #C9C7BA; padding: 3px 7px;">ADDED</span>
+          <span style="flex: 1 1 260px; font-size: 15px; line-height: 1.55;">Job progress is reported per step and readable from <code style="font-family: var(--font-mono); font-size: 13px;">relay.get_job</code>.</span>
+        </a>
+        <a href="/changelog/0-3-2" style="background: #EFEDE2; padding: 22px 24px; display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: baseline; color: #141A16;" style-hover="background: #F5F4ED;">
+          <span style="font-family: var(--font-mono); font-size: 14px; font-weight: 700; letter-spacing: 0.06em; min-width: 68px;">0.3.2</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--rm); min-width: 96px;">2026-06-30</span>
+          <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #46514B; border: 1px solid #C9C7BA; padding: 3px 7px;">FIXED</span>
+          <span style="flex: 1 1 260px; font-size: 15px; line-height: 1.55;">Expired upload URLs now return a typed error instead of a generic 403.</span>
+        </a>
+        <a href="/changelog/0-3-0" style="background: #EFEDE2; padding: 22px 24px; display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: baseline; color: #141A16;" style-hover="background: #F5F4ED;">
+          <span style="font-family: var(--font-mono); font-size: 14px; font-weight: 700; letter-spacing: 0.06em; min-width: 68px;">0.3.0</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--rm); min-width: 96px;">2026-06-02</span>
+          <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #46514B; border: 1px solid #C9C7BA; padding: 3px 7px;">SECURITY</span>
+          <span style="flex: 1 1 260px; font-size: 15px; line-height: 1.55;">Signing keys are rotated per workspace; prior signatures are invalidated on rotation.</span>
+        </a>
+      </div>
+      <p style="margin: 16px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--rm);">Sample entries for layout review. Published notes come from the changelog service.</p>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid #D8D5C8; background: #141A16; color: #F5F4ED; --rm: #8E9A92;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: clamp(48px, 7cqi, 104px) clamp(16px, 4cqi, 40px); display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-end; justify-content: space-between;">
+      <div style="flex: 1 1 420px;">
+        <p style="margin: 0 0 20px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #63C8BC;"><span style="color: var(--rm);">// 10</span> Get started</p>
+        <h2 style="margin: 0 0 16px; font-size: clamp(30px, 4cqi, 52px); font-weight: 700; letter-spacing: -0.04em; line-height: 1.02;">Point a client at Relay.</h2>
+        <p style="margin: 0; font-size: 17px; line-height: 1.6; color: #B4C0B6; max-width: 44ch;">Sign in with Google or GitHub, create a workspace, and take the first signed URL.</p>
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <a href="/sign-in" style="background: #63C8BC; color: #141A16; height: 48px; padding: 0 26px; display: inline-flex; align-items: center; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;" style-hover="background: #86D6CD;">Sign in</a>
+        <a href="/docs" style="border: 1px solid #414D45; color: #F5F4ED; height: 48px; padding: 0 26px; display: inline-flex; align-items: center; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;" style-hover="border-color: #63C8BC; color: #63C8BC;">Docs</a>
+      </div>
+    </div>
+  </section>
+
+  <footer style="background: #141A16; color: #8E9A92; border-top: 1px solid #2E3830; --rm: #8E9A92;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 40px clamp(16px, 4cqi, 40px); display: flex; flex-wrap: wrap; gap: 28px; justify-content: space-between; align-items: flex-start;">
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#414D45"></rect><rect x="6" y="15.5" width="20" height="5" fill="var(--rm)"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 17px; font-weight: 500; letter-spacing: 0.01em; color: #F5F4ED;">Relay</span>
+          <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;">by ZafTech</span>
+        </div>
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.8; letter-spacing: 0.04em;">ZafTech Solutions · Addis Ababa, Ethiopia<br>© 2026 ZafTech Solutions. All rights reserved.</p>
+      </div>
+      <nav aria-label="Footer" style="display: flex; flex-wrap: wrap; gap: 28px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;">
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="color: #46514B;">Product</span>
+          <a href="/docs" style="color: var(--rm);" style-hover="color: #F5F4ED;">Docs</a>
+          <a href="/changelog" style="color: var(--rm);" style-hover="color: #F5F4ED;">Changelog</a>
+          <a href="/status" style="color: var(--rm);" style-hover="color: #F5F4ED;">Status</a>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="color: #46514B;">Legal</span>
+          <a href="/legal/terms" style="color: var(--rm);" style-hover="color: #F5F4ED;">Terms</a>
+          <a href="/legal/privacy" style="color: var(--rm);" style-hover="color: #F5F4ED;">Privacy</a>
+          <a href="/legal/dpa" style="color: var(--rm);" style-hover="color: #F5F4ED;">Data processing</a>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="color: #46514B;">ZafTech</span>
+          <a href="https://zaftech.co" style="color: var(--rm);" style-hover="color: #F5F4ED;">zaftech.co</a>
+          <a href="https://zaftech.co/products" style="color: var(--rm);" style-hover="color: #F5F4ED;">Products</a>
+        </div>
+      </nav>
+    </div>
+  </footer>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#1F776E&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#1F776E&quot;,&quot;#145B54&quot;,&quot;#3A6B5F&quot;,&quot;#1F5F77&quot;],&quot;section&quot;:&quot;Brand&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#1F776E' };
+  }
+}
+</script>
+</body>
+</html>

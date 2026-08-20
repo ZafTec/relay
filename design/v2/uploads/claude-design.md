@@ -1,12 +1,7 @@
-# Claude Design prompt (archived)
+# Claude Design prompt
 
-Status: historical prompt for the v1/v2 storage-first direction. Do not run this
-prompt unchanged. The next design agent must follow
-[`../product-and-roadmap.md`](../product-and-roadmap.md) and
-[`../../design/v2/DESIGN-AGENT-SUGGESTIONS.md`](../../design/v2/DESIGN-AGENT-SUGGESTIONS.md),
-then write a reviewable `design/v3/` handoff.
-
-The original prompt is preserved below as provenance.
+Run this prompt **before Codex**. Copy everything below this line into the
+separate Claude Design session.
 
 ---
 

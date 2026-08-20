@@ -53,7 +53,8 @@ packages/config/      Minimal runtime configuration
 packages/contracts/   Minimal shared contracts
 src/main.ts           API/worker process dispatcher
 docs/                 Product and engineering decisions
-design/relay/         Tracked but product-stale visual handoff
+design/v1/            Initial historical Ledger handoff
+design/v2/            Expanded historical handoff and source bundle
 ```
 
 Expected additions are described by milestone in the canonical document. The web

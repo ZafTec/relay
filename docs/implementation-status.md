@@ -170,11 +170,12 @@ container tests, or dependency integration tests.
 
 ## Design readiness
 
-Two visual handoffs exist:
+Two historical visual handoffs are tracked as versioned snapshots:
 
-- `design/relay/` is tracked and therefore the current Git authority.
-- `design/Relay design handoff checklist/design/relay/` is a larger untracked
-  package with more screens and source canvases.
+- `design/v1/` is the initial Ledger handoff.
+- `design/v2/` is the larger package with more screens and its source canvases.
+
+See [`../design/README.md`](../design/README.md) for their version status.
 
 Neither represents the clarified tool-and-artifact-registry product. The newer
 handoff is more complete for the previous storage-first direction and is useful
@@ -194,7 +195,8 @@ browse tool
 
 Frontend implementation remains blocked until the design agent reconciles that
 flow and the owner approves one canonical tracked handoff. See the design-agent
-backlog in the newer design folder.
+backlog at
+[`../design/v2/DESIGN-AGENT-SUGGESTIONS.md`](../design/v2/DESIGN-AGENT-SUGGESTIONS.md).
 
 ## Decisions required before implementation workstreams fan out
 

@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/base.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/styles.css">
+<script src="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/_ds_bundle.js"></script>
+<style>body { background: #0E1310; }</style>
+</helmet>
+
+<div style="background: #0E1310; color: #F5F4ED; font-family: var(--font-sans); padding: 48px; display: flex; flex-direction: column; gap: 56px; min-height: 100vh;">
+
+  <div style="display: flex; flex-direction: column; gap: 12px; max-width: 880px;">
+    <p class="kicker"><span class="kicker-num">// 10</span> Dashboard · Usage, Settings, Profile</p>
+    <h1 style="margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05;">Metering, configuration, and the account</h1>
+    <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #B4C0B6; max-width: 72ch; text-wrap: pretty;">Usage reports what the workspace consumed and what happens at the limit. Settings is a 640px form column with a section rail. Profile is account-scoped, not workspace-scoped — the one product page that stays the same when you switch workspace. Sample figures are illustrative; no pricing is shown because none is published.</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/dashboard/usage · 1440 × 1080</p>
+    <div data-screen-label="Usage desktop" style="width: 1440px; height: 1080px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <aside style="width: 260px; flex: none; border-right: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column;">
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#6B7C74"></rect><rect x="6" y="15.5" width="20" height="5" fill="#9BA9A1"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 17px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+        </div>
+        <button type="button" style="padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; color: #F5F4ED; text-align: left; min-height: 44px;">
+          <span style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace</span>
+            <span style="font-size: 15px; font-weight: 500;">Euaell’s workspace</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC;">ws_a1f9</span>
+          </span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+        <nav aria-label="Sections" style="display: flex; flex-direction: column; padding: 12px 0; gap: 2px;">
+          <a href="/dashboard" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Overview</a>
+          <a href="/dashboard/files" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Files</a>
+          <a href="/dashboard/jobs" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Jobs</a>
+          <a href="/dashboard/usage" aria-current="page" style="display: flex; align-items: center; padding: 0 20px; min-height: 44px; color: #F5F4ED; font-size: 15px; background: #1D251F; border-left: 3px solid #63C8BC;">Usage</a>
+          <a href="/dashboard/settings" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Settings</a>
+        </nav>
+        <button type="button" style="margin-top: auto; width: 100%; padding: 14px 20px; background: transparent; border: none; border-top: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; cursor: pointer; min-height: 56px; text-align: left;">
+          <span style="width: 32px; height: 32px; background: #2E3830; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">EA</span>
+          <span style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 14px; color: #F5F4ED;">Euaell A.</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">PROFILE · SIGN OUT</span>
+          </span>
+          <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+      </aside>
+
+      <main style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+        <div style="padding: 24px 32px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex: none;">
+          <div>
+            <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace ws_a1f9</p>
+            <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em;">Usage</h1>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <span style="height: 44px; padding: 0 14px; border: 1px solid #414D45; display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #B4C0B6;">2026-08-01 → 08-31 <span style="color: #8E9A92;">&#9662;</span></span>
+            <button type="button" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Export CSV</button>
+          </div>
+        </div>
+
+        <div style="padding: 28px 32px; display: flex; flex-direction: column; gap: 24px; overflow: hidden;">
+          <div style="border: 1px solid #414D45; border-left-width: 4px; padding: 16px 18px; display: flex; gap: 12px; align-items: center;">
+            <span style="font-family: var(--font-mono); color: #8E9A92;">&#9633;</span>
+            <p style="margin: 0; flex: 1; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Entitlements are not enforced yet. These figures are metered and accurate; limits shown are the intended defaults and do not block anything today.</p>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #F5F4ED; border: 1px solid #414D45; padding: 4px 8px; white-space: nowrap;">Preview</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #2E3830; border: 1px solid #2E3830;">
+            <div style="background: #141A16; padding: 22px; display: flex; flex-direction: column; gap: 12px;">
+              <span style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Stored bytes</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #B4C0B6;">WITHIN LIMIT</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 30px; font-weight: 700; letter-spacing: 0.01em;">41.2 <span style="font-size: 16px; font-weight: 400; color: #8E9A92;">GB</span></span>
+              <span style="height: 8px; background: #2E3830;"><span style="display: block; width: 41%; height: 8px; background: #63C8BC;"></span></span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #8E9A92;">41% OF 100 GB · 14 VERSIONS</span>
+            </div>
+            <div style="background: #141A16; padding: 22px; display: flex; flex-direction: column; gap: 12px;">
+              <span style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Job minutes</span>
+                <span style="display: flex; gap: 6px; align-items: center; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #F5F4ED;"><span>&#9650;</span> APPROACHING</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 30px; font-weight: 700; letter-spacing: 0.01em;">1 820 <span style="font-size: 16px; font-weight: 400; color: #8E9A92;">MIN</span></span>
+              <span style="height: 8px; background: #2E3830;"><span style="display: block; width: 91%; height: 8px; background: #63C8BC;"></span></span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #F5F4ED;">91% OF 2 000 MIN · 180 LEFT</span>
+            </div>
+            <div style="background: #141A16; padding: 22px; display: flex; flex-direction: column; gap: 12px;">
+              <span style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Egress</span>
+                <span style="display: flex; gap: 6px; align-items: center; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: #F5F4ED;"><span>&#9632;</span> AT LIMIT</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 30px; font-weight: 700; letter-spacing: 0.01em;">512 <span style="font-size: 16px; font-weight: 400; color: #8E9A92;">GB</span></span>
+              <span style="height: 8px; background: #2E3830;"><span style="display: block; width: 100%; height: 8px; background: #F5F4ED;"></span></span>
+              <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #F5F4ED;">100% OF 512 GB · BLOCKED</span>
+            </div>
+          </div>
+
+          <div style="border: 1px solid #2E3830; background: #141A16;">
+            <div style="padding: 18px 22px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+              <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Job minutes per day · this period</p>
+              <div style="display: flex; gap: 16px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #8E9A92;">
+                <span style="display: flex; gap: 6px; align-items: center;"><span style="width: 9px; height: 9px; background: #63C8BC;"></span> SUCCEEDED</span>
+                <span style="display: flex; gap: 6px; align-items: center;"><span style="width: 9px; height: 9px; background: #F5F4ED;"></span> FAILED / RETRIED</span>
+              </div>
+            </div>
+            <div style="padding: 22px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="display: flex; align-items: flex-end; gap: 3px; height: 180px; border-bottom: 1px solid #414D45; padding-bottom: 0;">
+                <sc-for list="{{ days }}" as="d" hint-placeholder-count="17">
+                  <span style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 1px; height: 100%;">
+                    <span style="{{ d.failStyle }}"></span>
+                    <span style="{{ d.okStyle }}"></span>
+                  </span>
+                </sc-for>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">
+                <span>AUG 01</span><span>AUG 09</span><span>AUG 17 · TODAY</span>
+              </div>
+              <p style="margin: 6px 0 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #6B776F;">PEAK 214 MIN ON AUG 12 · RETRIES COUNT TOWARD THE TOTAL</p>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+            <div style="flex: 1 1 460px; min-width: 400px; border: 1px solid #2E3830;">
+              <div style="padding: 16px 20px; border-bottom: 1px solid #2E3830;">
+                <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Storage by prefix</p>
+              </div>
+              <div style="padding: 8px 20px 16px;">
+                <div style="display: grid; grid-template-columns: minmax(0,1fr) 120px 90px; gap: 16px; padding: 14px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+                  <span style="font-family: var(--font-mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">archive/</span>
+                  <span style="height: 8px; background: #2E3830;"><span style="display: block; width: 71%; height: 8px; background: #63C8BC;"></span></span>
+                  <span style="font-family: var(--font-mono); font-size: 12px; text-align: right; color: #B4C0B6;">29.4 GB</span>
+                </div>
+                <div style="display: grid; grid-template-columns: minmax(0,1fr) 120px 90px; gap: 16px; padding: 14px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+                  <span style="font-family: var(--font-mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">renders/</span>
+                  <span style="height: 8px; background: #2E3830;"><span style="display: block; width: 21%; height: 8px; background: #63C8BC;"></span></span>
+                  <span style="font-family: var(--font-mono); font-size: 12px; text-align: right; color: #B4C0B6;">8.7 GB</span>
+                </div>
+                <div style="display: grid; grid-template-columns: minmax(0,1fr) 120px 90px; gap: 16px; padding: 14px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+                  <span style="font-family: var(--font-mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">uploads/</span>
+                  <span style="height: 8px; background: #2E3830;"><span style="display: block; width: 7%; height: 8px; background: #63C8BC;"></span></span>
+                  <span style="font-family: var(--font-mono); font-size: 12px; text-align: right; color: #B4C0B6;">2.3 GB</span>
+                </div>
+                <div style="display: grid; grid-template-columns: minmax(0,1fr) 120px 90px; gap: 16px; padding: 14px 0; align-items: center;">
+                  <span style="font-family: var(--font-mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">exports/ · imports/</span>
+                  <span style="height: 8px; background: #2E3830;"><span style="display: block; width: 2%; height: 8px; background: #63C8BC;"></span></span>
+                  <span style="font-family: var(--font-mono); font-size: 12px; text-align: right; color: #B4C0B6;">0.8 GB</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="flex: 1 1 340px; min-width: 300px; border: 1px solid #F5F4ED; border-left-width: 4px; padding: 22px; display: flex; flex-direction: column; gap: 14px;">
+              <p style="margin: 0; display: flex; gap: 10px; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9632;</span> Egress is at its limit</p>
+              <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #B4C0B6;">Signed download URLs still work and reads continue. New uploads and new jobs would be rejected with <code style="font-family: var(--font-mono); font-size: 13px;">quota_exceeded</code> once enforcement ships.</p>
+              <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.5; color: #B4C0B6;">
+                <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> Reads · downloads · job reads</li>
+                <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono);">&#9650;</span> Uploads · commits · new jobs</li>
+              </ul>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto;">
+                <a href="mailto:relay@zaftech.co" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: #F5F4ED; color: #141A16; padding: 12px 14px;">Request a higher limit</a>
+                <a href="/docs/limits" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #414D45; color: #F5F4ED; padding: 12px 14px;">How limits work</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 520px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Usage · states</p>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">EMPTY · NOTHING METERED YET</p>
+        <div style="border: 1px solid #2E3830; background: #1D251F; padding: 28px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start;">
+          <h3 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.02em;">No usage this period</h3>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #B4C0B6; max-width: 48ch;">Nothing has been stored, run, or downloaded since 2026-08-01. Meters show zero rather than an empty illustration.</p>
+          <div style="width: 100%; display: flex; flex-direction: column; gap: 12px; margin-top: 6px;">
+            <span style="display: flex; align-items: center; gap: 12px;"><span style="width: 120px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: #8E9A92;">STORED</span><span style="flex: 1; height: 8px; background: #2E3830;"></span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">0 B</span></span>
+            <span style="display: flex; align-items: center; gap: 12px;"><span style="width: 120px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: #8E9A92;">JOB MINUTES</span><span style="flex: 1; height: 8px; background: #2E3830;"></span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">0</span></span>
+            <span style="display: flex; align-items: center; gap: 12px;"><span style="width: 120px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: #8E9A92;">EGRESS</span><span style="flex: 1; height: 8px; background: #2E3830;"></span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">0 B</span></span>
+          </div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">METERING DELAYED</p>
+        <div style="border: 1px solid #414D45; border-left-width: 4px; padding: 16px 18px;">
+          <p style="margin: 0 0 6px; display: flex; gap: 10px; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9633;</span> Figures are up to 20 minutes behind</p>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">The metering pipeline is catching up. Last complete rollup: <code style="font-family: var(--font-mono); font-size: 13px;">2026-08-17 13:40 UTC</code>. Nothing is missing; it will settle.</p>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">EXPORT · PREPARING &#8594; READY</p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <button type="button" disabled style="height: 44px; padding: 0 16px; background: #2E3830; border: none; color: #8E9A92; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: wait; display: flex; align-items: center; gap: 10px;">
+            <span style="width: 14px; height: 14px; border: 2px solid #8E9A92; border-right-color: transparent;"></span> Preparing CSV…
+          </button>
+          <div style="border: 1px solid #63C8BC; padding: 12px 14px; display: flex; gap: 12px; align-items: center;">
+            <span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span>
+            <p style="margin: 0; flex: 1; font-size: 14px; line-height: 1.6; color: #B4C0B6;">usage-ws_a1f9-2026-08.csv is ready.</p>
+            <a href="/download" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC; white-space: nowrap;">Download &#8594;</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/dashboard/usage · mobile 390 × 844</p>
+      <div data-screen-label="Usage mobile" style="width: 390px; height: 844px; border: 1px solid #2E3830; background: #141A16; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 14px 16px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; flex: none;">
+          <button type="button" aria-label="Open navigation" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #F5F4ED; cursor: pointer; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;">
+            <span style="width: 16px; height: 2px; background: currentColor;"></span><span style="width: 16px; height: 2px; background: currentColor;"></span><span style="width: 16px; height: 2px; background: currentColor;"></span>
+          </button>
+          <h1 style="margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.02em;">Usage</h1>
+          <span style="margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #8E9A92;">AUG 2026</span>
+        </div>
+        <div style="padding: 16px; display: flex; flex-direction: column; gap: 16px; overflow: hidden;">
+          <div style="border: 1px solid #414D45; border-left-width: 4px; padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start;">
+            <span style="font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">&#9633;</span>
+            <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #B4C0B6;">Metered but not enforced yet. Limits are intended defaults.</p>
+          </div>
+          <div style="border: 1px solid #2E3830; padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+            <span style="display: flex; align-items: baseline; justify-content: space-between;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Stored bytes</span><span style="font-family: var(--font-mono); font-size: 10px; color: #B4C0B6;">WITHIN LIMIT</span></span>
+            <span style="font-family: var(--font-mono); font-size: 26px; font-weight: 700;">41.2 <span style="font-size: 14px; font-weight: 400; color: #8E9A92;">GB</span></span>
+            <span style="height: 8px; background: #2E3830;"><span style="display: block; width: 41%; height: 8px; background: #63C8BC;"></span></span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">41% OF 100 GB</span>
+          </div>
+          <div style="border: 1px solid #2E3830; padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+            <span style="display: flex; align-items: baseline; justify-content: space-between;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Job minutes</span><span style="display: flex; gap: 5px; font-family: var(--font-mono); font-size: 10px; color: #F5F4ED;"><span>&#9650;</span> APPROACHING</span></span>
+            <span style="font-family: var(--font-mono); font-size: 26px; font-weight: 700;">1 820 <span style="font-size: 14px; font-weight: 400; color: #8E9A92;">MIN</span></span>
+            <span style="height: 8px; background: #2E3830;"><span style="display: block; width: 91%; height: 8px; background: #63C8BC;"></span></span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #F5F4ED;">91% OF 2 000 · 180 LEFT</span>
+          </div>
+          <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+            <span style="display: flex; align-items: baseline; justify-content: space-between;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Egress</span><span style="display: flex; gap: 5px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: #F5F4ED;"><span>&#9632;</span> AT LIMIT</span></span>
+            <span style="font-family: var(--font-mono); font-size: 26px; font-weight: 700;">512 <span style="font-size: 14px; font-weight: 400; color: #8E9A92;">GB</span></span>
+            <span style="height: 8px; background: #2E3830;"><span style="display: block; width: 100%; height: 8px; background: #F5F4ED;"></span></span>
+            <span style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: #F5F4ED;">100% OF 512 GB · BLOCKED</span>
+          </div>
+          <div style="border: 1px solid #2E3830; padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Job minutes per day</span>
+            <span style="display: flex; align-items: flex-end; gap: 2px; height: 90px; border-bottom: 1px solid #414D45;">
+              <sc-for list="{{ days }}" as="d" hint-placeholder-count="17">
+                <span style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 1px; height: 100%;">
+                  <span style="{{ d.failStyleS }}"></span>
+                  <span style="{{ d.okStyleS }}"></span>
+                </span>
+              </sc-for>
+            </span>
+            <span style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; color: #8E9A92;"><span>AUG 01</span><span>TODAY</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/dashboard/settings/storage · 1440 × 1080</p>
+    <div data-screen-label="Settings desktop" style="width: 1440px; height: 1080px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <aside style="width: 260px; flex: none; border-right: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column;">
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#6B7C74"></rect><rect x="6" y="15.5" width="20" height="5" fill="#9BA9A1"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 17px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+        </div>
+        <button type="button" style="padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; color: #F5F4ED; text-align: left; min-height: 44px;">
+          <span style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace</span>
+            <span style="font-size: 15px; font-weight: 500;">Euaell’s workspace</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC;">ws_a1f9</span>
+          </span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+        <nav aria-label="Sections" style="display: flex; flex-direction: column; padding: 12px 0; gap: 2px;">
+          <a href="/dashboard" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Overview</a>
+          <a href="/dashboard/files" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Files</a>
+          <a href="/dashboard/jobs" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Jobs</a>
+          <a href="/dashboard/usage" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Usage</a>
+          <a href="/dashboard/settings" aria-current="page" style="display: flex; align-items: center; padding: 0 20px; min-height: 44px; color: #F5F4ED; font-size: 15px; background: #1D251F; border-left: 3px solid #63C8BC;">Settings</a>
+        </nav>
+        <button type="button" style="margin-top: auto; width: 100%; padding: 14px 20px; background: transparent; border: none; border-top: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; cursor: pointer; min-height: 56px; text-align: left;">
+          <span style="width: 32px; height: 32px; background: #2E3830; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">EA</span>
+          <span style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 14px; color: #F5F4ED;">Euaell A.</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">PROFILE · SIGN OUT</span>
+          </span>
+          <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+      </aside>
+
+      <main style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+        <div style="padding: 24px 32px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex: none;">
+          <div>
+            <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace ws_a1f9</p>
+            <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em;">Settings</h1>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC; border: 1px solid #63C8BC; height: 44px; padding: 0 12px; display: inline-flex; align-items: center;">Unsaved changes</span>
+            <button type="button" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Discard</button>
+            <button type="button" style="height: 44px; padding: 0 18px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Save changes</button>
+          </div>
+        </div>
+
+        <div style="flex: 1; display: flex; overflow: hidden;">
+          <nav aria-label="Settings sections" style="width: 220px; flex: none; border-right: 1px solid #2E3830; padding: 20px 0; display: flex; flex-direction: column; gap: 2px;">
+            <a href="/dashboard/settings" style="padding: 0 20px 0 23px; min-height: 44px; display: flex; align-items: center; font-size: 15px; color: #8E9A92;" style-hover="color: #F5F4ED; background: #1D251F;">General</a>
+            <a href="/dashboard/settings/storage" aria-current="page" style="padding: 0 20px; min-height: 44px; display: flex; align-items: center; font-size: 15px; color: #F5F4ED; background: #1D251F; border-left: 3px solid #63C8BC;">Object store</a>
+            <a href="/dashboard/settings/tokens" style="padding: 0 20px 0 23px; min-height: 44px; display: flex; align-items: center; font-size: 15px; color: #8E9A92;" style-hover="color: #F5F4ED; background: #1D251F;">API tokens</a>
+            <a href="/dashboard/settings/mcp" style="padding: 0 20px 0 23px; min-height: 44px; display: flex; align-items: center; font-size: 15px; color: #8E9A92;" style-hover="color: #F5F4ED; background: #1D251F;">MCP clients</a>
+            <a href="/dashboard/settings/members" style="padding: 0 20px 0 23px; min-height: 44px; display: flex; align-items: center; font-size: 15px; color: #8E9A92;" style-hover="color: #F5F4ED; background: #1D251F;">Members</a>
+            <a href="/dashboard/settings/danger" style="padding: 0 20px 0 23px; min-height: 44px; display: flex; align-items: center; font-size: 15px; color: #8E9A92;" style-hover="color: #F5F4ED; background: #1D251F;">Danger zone</a>
+          </nav>
+
+          <div style="flex: 1; overflow: hidden; padding: 32px; min-width: 0;">
+            <div style="max-width: 640px; display: flex; flex-direction: column; gap: 28px;">
+              <div>
+                <h2 style="margin: 0 0 8px; font-size: 22px; font-weight: 700; letter-spacing: -0.025em;">Object store</h2>
+                <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #B4C0B6;">Relay speaks the S3 API. It never stores your bytes — it signs requests against the endpoint you configure here.</p>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 18px;">
+                <label style="display: flex; flex-direction: column; gap: 8px;">
+                  <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Endpoint</span>
+                  <input type="text" value="https://store.example.com" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">
+                  <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">ANY S3-COMPATIBLE ENDPOINT, INCLUDING SELF-HOSTED</span>
+                </label>
+                <div style="display: grid; grid-template-columns: 1fr 200px; gap: 18px;">
+                  <label style="display: flex; flex-direction: column; gap: 8px;">
+                    <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Bucket</span>
+                    <input type="text" value="zaftech-relay-prod" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">
+                  </label>
+                  <label style="display: flex; flex-direction: column; gap: 8px;">
+                    <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Region</span>
+                    <input type="text" value="eu-central-1" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">
+                  </label>
+                </div>
+                <label style="display: flex; flex-direction: column; gap: 8px;">
+                  <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Prefix · read only</span>
+                  <span style="height: 44px; background: #121815; border: 1px dashed #414D45; padding: 0 12px; display: flex; align-items: center; font-family: var(--font-mono); font-size: 13px; color: #8E9A92;">relay/ws_a1f9/</span>
+                  <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">DERIVED FROM THE WORKSPACE ID · CANNOT BE CHANGED</span>
+                </label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px;">
+                  <label style="display: flex; flex-direction: column; gap: 8px;">
+                    <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Access key id</span>
+                    <input type="text" value="AKIA…7Q2F" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">
+                  </label>
+                  <label style="display: flex; flex-direction: column; gap: 8px;">
+                    <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Secret access key</span>
+                    <span style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; display: flex; align-items: center; gap: 10px;">
+                      <span style="flex: 1; font-family: var(--font-mono); font-size: 13px; color: #8E9A92;">•••••••••••••••• stored</span>
+                      <button type="button" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; background: transparent; border: 1px solid #414D45; color: #F5F4ED; padding: 5px 8px; cursor: pointer;">Replace</button>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div style="border-top: 1px solid #2E3830; padding-top: 24px; display: flex; flex-direction: column; gap: 16px;">
+                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;" style-hover="border-color: #63C8BC; color: #63C8BC;">Test connection</button>
+                  <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #8E9A92;">LAST TESTED 2026-08-17 13:58 UTC</span>
+                </div>
+                <div style="border: 1px solid #63C8BC; border-left-width: 4px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start;">
+                  <span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span>
+                  <div>
+                    <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #63C8BC;">Connection verified</p>
+                    <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: #B4C0B6;">
+                      <li>&#9632; LIST · ok (14 objects under prefix)</li>
+                      <li>&#9632; PUT · ok (test object written and removed)</li>
+                      <li>&#9632; GET · ok (presigned read, 0.4s)</li>
+                      <li>&#9632; DELETE · ok</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div style="border: 1px solid #414D45; border-left-width: 4px; padding: 16px 18px; display: flex; gap: 12px; align-items: flex-start;">
+                <span style="font-family: var(--font-mono); color: #F5F4ED;">&#9650;</span>
+                <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Changing the endpoint or bucket does not move existing objects. Assets already committed keep pointing at the old location and their bytes will not resolve. Migrate before saving.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 660px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Settings · General, Tokens, Members</p>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 28px; display: flex; flex-direction: column; gap: 20px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">GENERAL</p>
+        <div style="display: flex; flex-direction: column; gap: 18px; max-width: 560px;">
+          <label style="display: flex; flex-direction: column; gap: 8px;">
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Workspace name</span>
+            <input type="text" value="Euaell’s workspace" style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; font-size: 15px; color: #F5F4ED; font-family: var(--font-sans);">
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 8px;">
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Workspace id · read only</span>
+            <span style="height: 44px; background: #121815; border: 1px dashed #414D45; padding: 0 12px; display: flex; align-items: center; font-family: var(--font-mono); font-size: 13px; color: #8E9A92;">ws_a1f9</span>
+          </label>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Defaults</span>
+            <label style="display: flex; gap: 12px; align-items: flex-start; cursor: pointer;">
+              <span style="width: 44px; height: 24px; flex: none; background: #63C8BC; border: 1px solid #63C8BC; display: flex; align-items: center; justify-content: flex-end; padding: 2px;"><span style="width: 18px; height: 18px; background: #141A16;"></span></span>
+              <span>
+                <span style="display: block; font-size: 15px; color: #F5F4ED;">Retain all versions</span>
+                <span style="display: block; font-size: 13px; line-height: 1.5; color: #8E9A92;">Off would prune versions older than 90 days. Currently on, so nothing is ever pruned.</span>
+              </span>
+            </label>
+            <label style="display: flex; gap: 12px; align-items: flex-start; cursor: pointer;">
+              <span style="width: 44px; height: 24px; flex: none; background: transparent; border: 1px solid #414D45; display: flex; align-items: center; justify-content: flex-start; padding: 2px;"><span style="width: 18px; height: 18px; background: #414D45;"></span></span>
+              <span>
+                <span style="display: block; font-size: 15px; color: #F5F4ED;">Auto-retry failed jobs</span>
+                <span style="display: block; font-size: 13px; line-height: 1.5; color: #8E9A92;">Up to 3 attempts. Retries consume job minutes.</span>
+              </span>
+            </label>
+          </div>
+          <label style="display: flex; flex-direction: column; gap: 8px;">
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Signed URL lifetime</span>
+            <span style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; font-family: var(--font-mono); font-size: 13px;">15 minutes <span style="color: #8E9A92;">&#9662;</span></span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">5 / 15 / 60 MINUTES · APPLIES TO NEWLY ISSUED URLS ONLY</span>
+          </label>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 28px; display: flex; flex-direction: column; gap: 20px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px;">
+          <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">API TOKENS</p>
+          <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">+ New token</button>
+        </div>
+
+        <div style="border: 1px solid #63C8BC; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;">
+          <p style="margin: 0; display: flex; gap: 10px; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #63C8BC;"><span>&#9632;</span> Token created · shown once</p>
+          <code style="font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: #F5F4ED; background: #1D251F; border: 1px solid #414D45; padding: 12px; overflow-wrap: anywhere;">rly_live_8f31c04a2d80af41ba079f21c4c70e83bb1907</code>
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <button type="button" style="height: 40px; padding: 0 14px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Copy token</button>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #B4C0B6;">RELAY DOES NOT STORE IT. IF LOST, REVOKE AND CREATE ANOTHER.</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column;">
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) 140px 130px 120px 100px; gap: 16px; padding: 12px 0; border-bottom: 1px solid #2E3830; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">
+            <span>Label</span><span>Prefix</span><span>Created</span><span>Last used</span><span></span>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) 140px 130px 120px 100px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+            <span style="font-size: 15px;">CI pipeline</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">rly_live_8f31…</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">2026-08-17</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">never</span>
+            <button type="button" style="height: 40px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Revoke</button>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) 140px 130px 120px 100px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+            <span style="font-size: 15px;">Claude MCP client</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">rly_live_2d80…</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">2026-07-02</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">4 min ago</span>
+            <button type="button" style="height: 40px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Revoke</button>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) 140px 130px 120px 100px; gap: 16px; padding: 16px 0; align-items: center; opacity: 0.6;">
+            <span style="font-size: 15px; display: flex; gap: 8px; align-items: center;">Old laptop <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; border: 1px dashed #414D45; padding: 2px 6px;">REVOKED &#8213;</span></span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">rly_live_c70e…</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">2026-05-14</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">2026-07-30</span>
+            <span></span>
+          </div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 28px; display: flex; flex-direction: column; gap: 20px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px;">
+          <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">MEMBERS</p>
+          <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Invite by email</button>
+        </div>
+        <div style="display: flex; flex-direction: column;">
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) 160px 150px 100px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+            <span style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+              <span style="width: 32px; height: 32px; flex: none; background: #2E3830; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">EA</span>
+              <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                <span style="font-size: 15px;">Euaell A. <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">· YOU</span></span>
+                <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92; overflow: hidden; text-overflow: ellipsis;">euaell@example.com</span>
+              </span>
+            </span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC; border: 1px solid #63C8BC; padding: 4px 8px; justify-self: start;">Owner</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; color: #B4C0B6;">GOOGLE · 2025-11-02</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92; text-align: right;">—</span>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) 160px 150px 100px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+            <span style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+              <span style="width: 32px; height: 32px; flex: none; background: #2E3830; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">SD</span>
+              <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                <span style="font-size: 15px;">Samuel D.</span>
+                <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92; overflow: hidden; text-overflow: ellipsis;">samuel@example.com</span>
+              </span>
+            </span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #B4C0B6; border: 1px solid #414D45; padding: 4px 8px; justify-self: start;">Engineer</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; color: #B4C0B6;">GITHUB · 2026-03-18</span>
+            <button type="button" style="height: 40px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Remove</button>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) 160px 150px 100px; gap: 16px; padding: 16px 0; align-items: center;">
+            <span style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+              <span style="width: 32px; height: 32px; flex: none; border: 1px dashed #414D45; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: #8E9A92;">&#9633;</span>
+              <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                <span style="font-size: 15px; color: #B4C0B6;">hanna@example.com</span>
+                <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">INVITE SENT · EXPIRES IN 6 DAYS</span>
+              </span>
+            </span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8E9A92; border: 1px dashed #414D45; padding: 4px 8px; justify-self: start;">Pending &#9633;</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">—</span>
+            <button type="button" style="height: 40px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Resend</button>
+          </div>
+        </div>
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; line-height: 1.8; letter-spacing: 0.06em; color: #6B776F;">ROLES ARE OWNER AND ENGINEER ONLY IN V1. SUPERADMIN IS A PLATFORM PERMISSION AND NEVER APPEARS IN THIS LIST.</p>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 520px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Settings · states &amp; destructive events</p>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">TEST CONNECTION · TESTING</p>
+        <button type="button" disabled style="height: 44px; padding: 0 16px; background: #2E3830; border: none; color: #8E9A92; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: wait; display: flex; align-items: center; gap: 10px; align-self: flex-start;">
+          <span style="width: 14px; height: 14px; border: 2px solid #8E9A92; border-right-color: transparent;"></span> Testing LIST…
+        </button>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">The label names the operation being tested, so a hang is diagnosable: LIST, PUT, GET, DELETE.</p>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">TEST CONNECTION · FAILED</p>
+        <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 16px 18px;">
+          <p style="margin: 0 0 8px; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9650;</span> PUT was refused</p>
+          <ul style="margin: 0 0 12px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: #B4C0B6;">
+            <li style="color: #63C8BC;">&#9632; LIST · ok</li>
+            <li>&#9650; PUT · <code style="color: #F5F4ED;">AccessDenied</code></li>
+            <li style="color: #8E9A92;">&#9633; GET · not attempted</li>
+            <li style="color: #8E9A92;">&#9633; DELETE · not attempted</li>
+          </ul>
+          <p style="margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: #B4C0B6;">The key can read but not write under <code style="font-family: var(--font-mono); font-size: 13px;">relay/ws_a1f9/</code>. Settings were not saved.</p>
+          <a href="/docs/store" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: #F5F4ED; color: #141A16; padding: 10px 12px; display: inline-block;">Required permissions</a>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">SAVED</p>
+        <div style="border: 1px solid #63C8BC; padding: 14px 16px; display: flex; gap: 12px; align-items: center;">
+          <span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span>
+          <p style="margin: 0; flex: 1; font-size: 14px; color: #B4C0B6;">Object store settings saved. Existing signed URLs are unaffected.</p>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">PERMISSION DENIED · ENGINEER ROLE</p>
+        <div style="border: 1px solid #414D45; padding: 18px; display: flex; flex-direction: column; gap: 12px;">
+          <p style="margin: 0; display: flex; gap: 10px; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9633;</span> Owner only</p>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Object store, members and danger-zone settings are editable by the workspace owner. Fields render read-only rather than hidden, so you can see the configuration you are working against.</p>
+          <span style="height: 44px; background: #121815; border: 1px dashed #414D45; padding: 0 12px; display: flex; align-items: center; font-family: var(--font-mono); font-size: 13px; color: #8E9A92;">https://store.example.com</span>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">DANGER ZONE · DELETE WORKSPACE</p>
+        <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+          <div>
+            <h3 style="margin: 0 0 8px; font-size: 18px; font-weight: 700; letter-spacing: -0.02em;">Delete this workspace</h3>
+            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Removes 6 assets, 14 versions, 24 job records, 2 API tokens and 1 pending invite. Objects under <code style="font-family: var(--font-mono); font-size: 13px;">relay/ws_a1f9/</code> are deleted from your store. This cannot be undone and there is no export afterwards.</p>
+          </div>
+          <label style="display: flex; flex-direction: column; gap: 8px;">
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Type ws_a1f9 to confirm</span>
+            <input type="text" placeholder="ws_a1f9" style="height: 44px; background: #1D251F; border: 1px solid #F5F4ED; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">
+          </label>
+          <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.6; color: #B4C0B6;">
+            <input type="checkbox" style="width: 18px; height: 18px; margin-top: 2px; accent-color: #63C8BC;">
+            <span>I have exported anything I need. I understand objects will be deleted from my store.</span>
+          </label>
+          <button type="button" disabled style="height: 44px; padding: 0 16px; background: #2E3830; border: none; color: #8E9A92; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: not-allowed; align-self: flex-start;">Delete workspace</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/profile · account scope · 1000 × 1140</p>
+      <div data-screen-label="Profile desktop" style="width: 1000px; height: 1140px; display: flex; flex-direction: column; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+        <div style="padding: 20px 32px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 16px; flex: none;">
+          <a href="/dashboard" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8E9A92; min-height: 44px; display: inline-flex; align-items: center;">&#8592; Dashboard</a>
+          <div style="width: 1px; height: 28px; background: #2E3830;"></div>
+          <div>
+            <p style="margin: 0 0 4px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Account · all workspaces</p>
+            <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.03em;">Profile</h1>
+          </div>
+          <span style="margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #8E9A92; border: 1px solid #2E3830; padding: 8px 10px;">Not workspace-scoped</span>
+        </div>
+
+        <div style="padding: 32px; display: flex; flex-direction: column; gap: 28px; overflow: hidden;">
+          <div style="display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap;">
+            <span style="width: 88px; height: 88px; flex: none; border-radius: 50%; background: #2E3830; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 28px; color: #B4C0B6;">EA</span>
+            <div style="flex: 1 1 320px; display: flex flex-direction: column;">
+              <div style="display: flex; flex-direction: column; gap: 14px;">
+                <div>
+                  <h2 style="margin: 0 0 6px; font-size: 26px; font-weight: 700; letter-spacing: -0.03em;">Euaell A.</h2>
+                  <p style="margin: 0; font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.04em; color: #B4C0B6;">euaell@example.com</p>
+                </div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                  <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #414D45; color: #B4C0B6; padding: 6px 10px;">Google · connected</span>
+                  <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #414D45; color: #B4C0B6; padding: 6px 10px;">GitHub · connected</span>
+                  <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #63C8BC; color: #63C8BC; padding: 6px 10px;">Superadmin</span>
+                </div>
+                <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #8E9A92; max-width: 56ch;">Name and avatar come from the provider you signed in with. Relay does not store a password and has no separate profile picture upload.</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="border: 1px solid #2E3830;">
+            <div style="padding: 16px 20px; border-bottom: 1px solid #2E3830;">
+              <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspaces · 2</p>
+            </div>
+            <a href="/dashboard" style="padding: 16px 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 16px; color: #F5F4ED;" style-hover="background: #1D251F;">
+              <span style="display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0;">
+                <span style="font-size: 15px;">Euaell’s workspace</span>
+                <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">ws_a1f9 · 6 ASSETS · 41.2 GB</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC; border: 1px solid #63C8BC; padding: 4px 8px;">Owner</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92;">CURRENT</span>
+            </a>
+            <a href="/dashboard" style="padding: 16px 20px; display: flex; align-items: center; gap: 16px; color: #F5F4ED;" style-hover="background: #1D251F;">
+              <span style="display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0;">
+                <span style="font-size: 15px;">Bathra client work</span>
+                <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">ws_b7c2 · 31 ASSETS · 118 GB</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #B4C0B6; border: 1px solid #414D45; padding: 4px 8px;">Engineer</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92;">SWITCH &#8594;</span>
+            </a>
+          </div>
+
+          <div style="border: 1px solid #2E3830;">
+            <div style="padding: 16px 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+              <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Active sessions · 3</p>
+              <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #F5F4ED; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Sign out everywhere</button>
+            </div>
+            <div style="padding: 14px 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 16px;">
+              <span style="flex: 1; display: flex; flex-direction: column; gap: 3px;">
+                <span style="font-size: 15px;">Chrome · macOS <span style="font-family: var(--font-mono); font-size: 10px; color: #63C8BC;">· THIS DEVICE</span></span>
+                <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">ADDIS ABABA · 41.x.x.x · ACTIVE NOW</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">—</span>
+            </div>
+            <div style="padding: 14px 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 16px;">
+              <span style="flex: 1; display: flex; flex-direction: column; gap: 3px;">
+                <span style="font-size: 15px;">Firefox · Linux</span>
+                <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">ADDIS ABABA · 41.x.x.x · 2 HOURS AGO</span>
+              </span>
+              <button type="button" style="height: 40px; padding: 0 12px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Revoke</button>
+            </div>
+            <div style="padding: 14px 20px; display: flex; align-items: center; gap: 16px;">
+              <span style="flex: 1; display: flex; flex-direction: column; gap: 3px;">
+                <span style="font-size: 15px;">Safari · iOS</span>
+                <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">UNKNOWN LOCATION · 6 DAYS AGO</span>
+              </span>
+              <button type="button" style="height: 40px; padding: 0 12px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Revoke</button>
+            </div>
+          </div>
+
+          <div style="border: 1px solid #2E3830; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+            <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Email notifications</p>
+            <label style="display: flex; gap: 12px; align-items: flex-start; cursor: pointer;">
+              <span style="width: 44px; height: 24px; flex: none; background: #63C8BC; border: 1px solid #63C8BC; display: flex; align-items: center; justify-content: flex-end; padding: 2px;"><span style="width: 18px; height: 18px; background: #141A16;"></span></span>
+              <span><span style="display: block; font-size: 15px;">Job failures</span><span style="display: block; font-size: 13px; line-height: 1.5; color: #8E9A92;">One email per failed job after its final attempt.</span></span>
+            </label>
+            <label style="display: flex; gap: 12px; align-items: flex-start; cursor: pointer;">
+              <span style="width: 44px; height: 24px; flex: none; background: #63C8BC; border: 1px solid #63C8BC; display: flex; align-items: center; justify-content: flex-end; padding: 2px;"><span style="width: 18px; height: 18px; background: #141A16;"></span></span>
+              <span><span style="display: block; font-size: 15px;">Approaching a limit</span><span style="display: block; font-size: 13px; line-height: 1.5; color: #8E9A92;">Once at 90% of any workspace entitlement.</span></span>
+            </label>
+            <label style="display: flex; gap: 12px; align-items: flex-start; cursor: pointer;">
+              <span style="width: 44px; height: 24px; flex: none; background: transparent; border: 1px solid #414D45; display: flex; align-items: center; justify-content: flex-start; padding: 2px;"><span style="width: 18px; height: 18px; background: #414D45;"></span></span>
+              <span><span style="display: block; font-size: 15px;">Release notes</span><span style="display: block; font-size: 13px; line-height: 1.5; color: #8E9A92;">A digest when a release is published. Same content as the changelog RSS.</span></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 420px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Profile · states &amp; events</p>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">DISCONNECT PROVIDER · BLOCKED</p>
+        <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 16px 18px;">
+          <p style="margin: 0 0 6px; display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9650;</span> Cannot disconnect Google</p>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">It is your only remaining sign-in method. Connect GitHub first, then disconnect Google.</p>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">SESSION REVOKED · CONFIRMED</p>
+        <div style="border: 1px solid #63C8BC; padding: 14px 16px; display: flex; gap: 12px; align-items: center;">
+          <span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span>
+          <p style="margin: 0; flex: 1; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Safari · iOS signed out. It will need to sign in again with Google or GitHub.</p>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">DELETE ACCOUNT · OWNER BLOCKED</p>
+        <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 18px; display: flex; flex-direction: column; gap: 14px;">
+          <h3 style="margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.02em;">Delete account</h3>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">You own <strong style="color: #F5F4ED; font-weight: 700;">Euaell’s workspace</strong>. Transfer ownership or delete the workspace first — Relay will not orphan stored data.</p>
+          <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.5; color: #B4C0B6;">
+            <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono);">&#9650;</span> ws_a1f9 · owner · blocks deletion</li>
+            <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> ws_b7c2 · engineer · you are removed automatically</li>
+          </ul>
+          <button type="button" disabled style="height: 44px; padding: 0 16px; background: #2E3830; border: none; color: #8E9A92; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: not-allowed; align-self: flex-start;">Delete account</button>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">SESSION MENU · OPEN</p>
+        <div style="border: 1px solid #414D45; background: #121815; width: 260px;">
+          <div style="padding: 14px 16px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 12px;">
+            <span style="width: 32px; height: 32px; border-radius: 50%; background: #2E3830; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">EA</span>
+            <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+              <span style="font-size: 14px;">Euaell A.</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92; overflow: hidden; text-overflow: ellipsis;">euaell@example.com</span>
+            </span>
+          </div>
+          <a href="/profile" style="padding: 0 16px; min-height: 44px; display: flex; align-items: center; font-size: 14px; color: #F5F4ED;" style-hover="background: #1D251F;">Profile</a>
+          <a href="/dashboard/settings" style="padding: 0 16px; min-height: 44px; display: flex; align-items: center; font-size: 14px; color: #F5F4ED;" style-hover="background: #1D251F;">Workspace settings</a>
+          <a href="/admin/changelog" style="padding: 0 16px; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; color: #F5F4ED; border-top: 1px solid #2E3830;" style-hover="background: #1D251F;">Superadmin <span style="font-family: var(--font-mono); font-size: 10px; color: #63C8BC;">&#8594;</span></a>
+          <a href="/docs" style="padding: 0 16px; min-height: 44px; display: flex; align-items: center; font-size: 14px; color: #F5F4ED; border-top: 1px solid #2E3830;" style-hover="background: #1D251F;">Docs</a>
+          <button type="button" style="width: 100%; padding: 0 16px; min-height: 44px; display: flex; align-items: center; font-size: 14px; color: #F5F4ED; background: transparent; border: none; border-top: 1px solid #2E3830; cursor: pointer; text-align: left; font-family: var(--font-sans);">Sign out</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    // job minutes per day for the period: [succeeded, failed/retried]
+    const data = [
+      [42, 0], [96, 8], [70, 0], [118, 12], [150, 0], [88, 6], [24, 0],
+      [132, 0], [176, 22], [104, 0], [64, 4], [214, 18], [158, 0],
+      [96, 0], [72, 9], [48, 0], [30, 0]
+    ];
+    const max = 240;
+    const bar = (v, h) => ({
+      display: 'block',
+      height: Math.round((v / max) * h) + 'px',
+      background: '#63C8BC'
+    });
+    const fail = (v, h) => ({
+      display: 'block',
+      height: v ? Math.max(2, Math.round((v / max) * h)) + 'px' : '0px',
+      background: '#F5F4ED'
+    });
+    return {
+      days: data.map(([ok, bad]) => ({
+        okStyle: bar(ok, 180),
+        failStyle: fail(bad, 180),
+        okStyleS: bar(ok, 90),
+        failStyleS: fail(bad, 90)
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

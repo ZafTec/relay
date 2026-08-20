@@ -3,9 +3,9 @@
 Status: required revision backlog\
 Audience: the next Relay design agent\
 Product authority:
-[`../../../docs/product-and-roadmap.md`](../../../docs/product-and-roadmap.md)\
+[`../../docs/product-and-roadmap.md`](../../docs/product-and-roadmap.md)\
 Implementation status:
-[`../../../docs/implementation-status.md`](../../../docs/implementation-status.md)
+[`../../docs/implementation-status.md`](../../docs/implementation-status.md)
 
 ## Read this before changing the handoff
 
@@ -28,20 +28,19 @@ not silently replace the owner-approved Ledger identity.
 
 Neither existing handoff is implementation-ready for the current product.
 
-- `design/relay/` is the tracked Git authority, but it covers only the older
+- `design/v1/` is the initial historical handoff. It covers only the older
   landing, auth, dashboard shell, and changelog direction. Its referenced
   `.dc.html` source is not included with it.
-- `design/Relay design handoff checklist/design/relay/` is broader and includes
-  docs, status, files, jobs, usage, settings, and profile. The package is
-  untracked, duplicates the tracked handoff, and still models Relay as storage
-  plus generic jobs.
+- `design/v2/` is broader and includes docs, status, files, jobs, usage,
+  settings, profile, and source canvases. It still models Relay as storage plus
+  generic jobs.
 - The newer handoff is useful as a component and state library. It is detailed
   enough to implement the wrong product if its information architecture and copy
   are copied unchanged.
 
-Do not declare the revision complete by adding more screens to the duplicate
-folder. The final deliverable must establish one canonical, tracked handoff
-after owner approval.
+Do not declare the current product complete by modifying this historical
+snapshot in place. Create the revised deliverable under `design/v3/` and obtain
+owner approval for its exact commit.
 
 ## Preserve these foundations
 
@@ -549,9 +548,9 @@ representative widths.
 
 The final package must be usable without reverse-engineering screenshots:
 
-1. Consolidate the approved result into one tracked `design/relay/` directory.
-2. Do not delete either current package until the owner approves the replacement
-   and the Git history is clear.
+1. Create the revised result as a complete, tracked `design/v3/` directory.
+2. Preserve `design/v1/` and `design/v2/` as historical snapshots; do not
+   overwrite either version.
 3. Include every source dependency. The current `.dc.html` files require
    `support.js`, the `_ds` bundle, remote React, and missing component sources;
    they are not self-contained offline artifacts.
@@ -622,7 +621,7 @@ The design is implementation-ready only when all boxes can be checked.
 
 ### Package quality
 
-- [ ] One canonical tracked handoff exists after owner approval.
+- [ ] A complete `design/v3/` handoff exists after owner approval.
 - [ ] Every source opens offline with zero missing resources or console errors.
 - [ ] Screens regenerate deterministically from included source.
 - [ ] Tokens and required font files are complete and actually consumed.
@@ -644,4 +643,5 @@ The design is implementation-ready only when all boxes can be checked.
 7. Add admin, docs, status, and secondary surfaces.
 8. Run accessibility and package validation.
 9. Present one coherent review set and record owner decisions.
-10. Consolidate into the canonical tracked handoff only after approval.
+10. Record the approved v3 commit hash and update implementation instructions to
+    that exact handoff.

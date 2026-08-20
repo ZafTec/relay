@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/base.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/styles.css">
+<script src="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/_ds_bundle.js"></script>
+<style>body { background: #0E1310; }</style>
+</helmet>
+
+<div style="background: #0E1310; color: #F5F4ED; font-family: var(--font-sans); padding: 48px; display: flex; flex-direction: column; gap: 56px; min-height: 100vh;">
+
+  <div style="display: flex; flex-direction: column; gap: 12px; max-width: 880px;">
+    <p class="kicker"><span class="kicker-num">// 09</span> Dashboard · Files &amp; Jobs</p>
+    <h1 style="margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05;">The two tables the product is built around</h1>
+    <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #B4C0B6; max-width: 72ch; text-wrap: pretty;">Files lists assets and opens version history in the right drawer. Jobs lists work and opens run detail in the same drawer — never a new route, never a modal. Both keep the 260px rail, the 84px page header, and the 480px drawer from the shell spec. Sample rows are illustrative.</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/dashboard/files · populated · 1440 × 900</p>
+    <div data-screen-label="Files desktop" style="width: 1440px; height: 900px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <aside style="width: 260px; flex: none; border-right: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column;">
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#6B7C74"></rect><rect x="6" y="15.5" width="20" height="5" fill="#9BA9A1"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 17px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+        </div>
+        <button type="button" style="padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; color: #F5F4ED; text-align: left; min-height: 44px;" style-hover="background: #1D251F;">
+          <span style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace</span>
+            <span style="font-size: 15px; font-weight: 500;">Euaell’s workspace</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC;">ws_a1f9</span>
+          </span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+        <nav aria-label="Sections" style="display: flex; flex-direction: column; padding: 12px 0; gap: 2px;">
+          <a href="/dashboard" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;" style-hover="color: #F5F4ED; background: #1D251F;">Overview</a>
+          <a href="/dashboard/files" aria-current="page" style="display: flex; align-items: center; padding: 0 20px; min-height: 44px; color: #F5F4ED; font-size: 15px; background: #1D251F; border-left: 3px solid #63C8BC;">Files</a>
+          <a href="/dashboard/jobs" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;" style-hover="color: #F5F4ED; background: #1D251F;">Jobs</a>
+          <a href="/dashboard/usage" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;" style-hover="color: #F5F4ED; background: #1D251F;">Usage</a>
+          <a href="/dashboard/settings" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;" style-hover="color: #F5F4ED; background: #1D251F;">Settings</a>
+        </nav>
+        <button type="button" style="margin-top: auto; width: 100%; padding: 14px 20px; background: transparent; border: none; border-top: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; cursor: pointer; min-height: 56px; text-align: left;" style-hover="background: #1D251F;">
+          <span style="width: 32px; height: 32px; background: #2E3830; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">EA</span>
+          <span style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 14px; color: #F5F4ED;">Euaell A.</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">PROFILE · SIGN OUT</span>
+          </span>
+          <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+      </aside>
+
+      <main style="flex: 1; display: flex; overflow: hidden;">
+        <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+          <div style="padding: 24px 32px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex: none;">
+            <div>
+              <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace ws_a1f9</p>
+              <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em;">Files</h1>
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <button type="button" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;" style-hover="border-color: #63C8BC; color: #63C8BC;">New upload URL</button>
+              <button type="button" style="height: 44px; padding: 0 18px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;" style-hover="background: #86D6CD;">Upload file</button>
+            </div>
+          </div>
+
+          <div style="padding: 16px 32px; border-bottom: 1px solid #2E3830; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; flex: none;">
+            <div style="flex: 1 1 240px; min-width: 200px; height: 40px; border: 1px solid #414D45; display: flex; align-items: center; gap: 10px; padding: 0 12px;">
+              <span style="font-family: var(--font-mono); color: #8E9A92;" aria-hidden="true">&#9906;</span>
+              <input type="text" placeholder="Filter by key or prefix" style="flex: 1; background: transparent; border: none; outline: none; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">
+            </div>
+            <button type="button" style="height: 40px; padding: 0 12px; background: transparent; border: 1px solid #414D45; color: #B4C0B6; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; display: flex; align-items: center; gap: 8px;">Type: all <span>&#9662;</span></button>
+            <button type="button" style="height: 40px; padding: 0 12px; background: transparent; border: 1px solid #414D45; color: #B4C0B6; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; display: flex; align-items: center; gap: 8px;">Sort: newest <span>&#9662;</span></button>
+            <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: #8E9A92;">6 ASSETS · 14 VERSIONS · 4.9 GB</span>
+          </div>
+
+          <div style="padding: 0 32px; overflow: hidden; flex: 1;">
+            <div style="display: grid; grid-template-columns: 32px minmax(150px,1fr) 80px 100px 120px 44px; gap: 16px; padding: 14px 0; border-bottom: 1px solid #2E3830; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92; align-items: center;">
+              <input type="checkbox" aria-label="Select all" style="width: 16px; height: 16px; accent-color: #63C8BC;">
+              <span>Key</span><span>Versions</span><span>Size</span><span>Updated</span><span></span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 32px minmax(150px,1fr) 80px 100px 120px 44px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center; background: #1D251F; margin: 0 -8px; padding-left: 8px; padding-right: 8px;">
+              <input type="checkbox" aria-label="Select renders/quarterly-map.png" style="width: 16px; height: 16px; accent-color: #63C8BC;">
+              <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                <span style="font-size: 15px; color: #F5F4ED; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">renders/quarterly-map.png</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC; white-space: nowrap;">PNG · CURRENT v3</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">3</span>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #B4C0B6;">2.1 MB</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">2026-07-14</span>
+              <button type="button" aria-label="Row actions" style="width: 44px; height: 44px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; cursor: pointer; font-family: var(--font-mono);">&#8943;</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 32px minmax(150px,1fr) 80px 100px 120px 44px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center;" style-hover="background: #1D251F;">
+              <input type="checkbox" aria-label="Select exports/ledger-2026-q2.csv" style="width: 16px; height: 16px; accent-color: #63C8BC;">
+              <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                <span style="font-size: 15px; color: #F5F4ED; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">exports/ledger-2026-q2.csv</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92; white-space: nowrap;">CSV · CURRENT v5</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">5</span>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #B4C0B6;">840 KB</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">2026-07-11</span>
+              <button type="button" aria-label="Row actions" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #8E9A92; cursor: pointer; font-family: var(--font-mono);">&#8943;</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 32px minmax(150px,1fr) 80px 100px 120px 44px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center;" style-hover="background: #1D251F;">
+              <input type="checkbox" aria-label="Select uploads/site-audit.pdf" style="width: 16px; height: 16px; accent-color: #63C8BC;">
+              <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                <span style="font-size: 15px; color: #F5F4ED; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">uploads/site-audit.pdf</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92; white-space: nowrap;">PDF · CURRENT v1</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">1</span>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #B4C0B6;">6.4 MB</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">2026-07-08</span>
+              <button type="button" aria-label="Row actions" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #8E9A92; cursor: pointer; font-family: var(--font-mono);">&#8943;</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 32px minmax(150px,1fr) 80px 100px 120px 44px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+              <input type="checkbox" aria-label="Select renders/hero-frame.png" style="width: 16px; height: 16px; accent-color: #63C8BC;">
+              <span style="display: flex; flex-direction: column; gap: 6px; min-width: 0;">
+                <span style="font-size: 15px; color: #F5F4ED; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">renders/hero-frame.png</span>
+                <span style="display: flex; align-items: center; gap: 10px;">
+                  <span style="flex: 1; max-width: 200px; height: 6px; background: #2E3830;"><span style="display: block; width: 62%; height: 6px; background: #63C8BC;"></span></span>
+                  <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #63C8BC;">UPLOADING 62%</span>
+                </span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #8E9A92;">—</span>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #8E9A92;">—</span>
+              <button type="button" aria-label="Cancel upload" style="width: 44px; height: 44px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; cursor: pointer; font-family: var(--font-mono);">&#215;</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 32px minmax(150px,1fr) 80px 100px 120px 44px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center; border-left: 4px solid #F5F4ED; padding-left: 8px; margin-left: -12px;">
+              <input type="checkbox" aria-label="Select imports/inventory.xlsx" style="width: 16px; height: 16px; accent-color: #63C8BC;">
+              <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                <span style="font-size: 15px; color: #F5F4ED; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">imports/inventory.xlsx</span>
+                <span style="display: flex; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #F5F4ED; white-space: nowrap;"><span>&#9650;</span> UPLOAD FAILED · url_expired</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #8E9A92;">—</span>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #8E9A92;">—</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">2026-07-07</span>
+              <button type="button" aria-label="Retry upload" style="width: 44px; height: 44px; background: transparent; border: 1px solid #F5F4ED; color: #F5F4ED; cursor: pointer; font-family: var(--font-mono); font-size: 12px;">&#8635;</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 32px minmax(150px,1fr) 80px 100px 120px 44px; gap: 16px; padding: 16px 0; align-items: center;" style-hover="background: #1D251F;">
+              <input type="checkbox" aria-label="Select archive/2025-backup.tar.gz" style="width: 16px; height: 16px; accent-color: #63C8BC;">
+              <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                <span style="font-size: 15px; color: #F5F4ED; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">archive/2025-backup.tar.gz</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92; white-space: nowrap;">GZIP · CURRENT v2</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">2</span>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #B4C0B6;">1.4 GB</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">2026-06-28</span>
+              <button type="button" aria-label="Row actions" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #8E9A92; cursor: pointer; font-family: var(--font-mono);">&#8943;</button>
+            </div>
+          </div>
+        </div>
+
+        <aside aria-label="Version history" style="width: 480px; flex: none; border-left: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="padding: 20px 24px; border-bottom: 1px solid #2E3830; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;">
+            <div style="min-width: 0;">
+              <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Asset</p>
+              <h2 style="margin: 0 0 6px; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; overflow-wrap: anywhere;">renders/quarterly-map.png</h2>
+              <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #8E9A92;">relay/ws_a1f9/renders/…</p>
+            </div>
+            <button type="button" aria-label="Close drawer" style="width: 44px; height: 44px; flex: none; background: transparent; border: 1px solid #414D45; color: #F5F4ED; cursor: pointer; font-family: var(--font-mono);">&#215;</button>
+          </div>
+
+          <div style="padding: 16px 24px; border-bottom: 1px solid #2E3830; display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" style="height: 40px; padding: 0 14px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Signed download</button>
+            <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Run a job</button>
+            <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Copy key</button>
+          </div>
+
+          <div style="padding: 20px 24px; border-bottom: 1px solid #2E3830;">
+            <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Signed URL · issued</p>
+            <div style="border: 1px solid #414D45; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+              <code style="font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: #63C8BC; overflow-wrap: anywhere;">https://store.example.com/relay/ws_a1f9/renders/quarterly-map.png?sig=…&amp;exp=900</code>
+              <div style="display: flex; gap: 8px; align-items: center; justify-content: space-between;">
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #8E9A92;">EXPIRES IN 14:52</span>
+                <button type="button" style="height: 36px; padding: 0 12px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Copy</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding: 20px 24px; overflow: hidden; flex: 1;">
+            <p style="margin: 0 0 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Versions · newest first</p>
+            <div style="display: flex; flex-direction: column;">
+              <div style="border: 1px solid #2E3830; border-left: 3px solid #63C8BC; background: #1D251F; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+                <span style="display: flex; align-items: baseline; gap: 10px;">
+                  <span style="font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: #F5F4ED;">v3</span>
+                  <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #63C8BC;">CURRENT &#9632;</span>
+                  <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #B4C0B6;">2.1 MB</span>
+                </span>
+                <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: #8E9A92;">sha 9f21c4 · 2026-07-14 11:42 · WRITTEN BY job_8f31c0</span>
+              </div>
+              <div style="width: 1px; height: 12px; background: #414D45; margin-left: 20px;"></div>
+              <div style="border: 1px solid #2E3830; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+                <span style="display: flex; align-items: baseline; gap: 10px;">
+                  <span style="font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: #F5F4ED;">v2</span>
+                  <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #B4C0B6;">1.9 MB</span>
+                </span>
+                <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: #8E9A92;">sha 41ba07 · 2026-06-30 09:08 · UPLOADED</span>
+                <span style="display: flex; gap: 8px; margin-top: 4px;">
+                  <button type="button" style="height: 36px; padding: 0 12px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Make current</button>
+                  <button type="button" style="height: 36px; padding: 0 12px; background: transparent; border: 1px solid #2E3830; color: #B4C0B6; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Download</button>
+                </span>
+              </div>
+              <div style="width: 1px; height: 12px; background: #414D45; margin-left: 20px;"></div>
+              <div style="border: 1px solid #2E3830; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+                <span style="display: flex; align-items: baseline; gap: 10px;">
+                  <span style="font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: #F5F4ED;">v1</span>
+                  <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #B4C0B6;">1.4 MB</span>
+                </span>
+                <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: #8E9A92;">sha c70e83 · 2026-06-02 16:20 · UPLOADED</span>
+              </div>
+            </div>
+            <p style="margin: 16px 0 0; font-family: var(--font-mono); font-size: 10px; line-height: 1.8; letter-spacing: 0.06em; color: #6B776F;">“MAKE CURRENT” ADDS A NEW VERSION POINTING AT OLDER BYTES. IT DOES NOT DELETE v3.</p>
+          </div>
+        </aside>
+      </main>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px; flex: 1 1 620px; min-width: 520px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Files · states &amp; events</p>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">EMPTY · NO ASSETS</p>
+        <div style="border: 1px solid #2E3830; background: #1D251F; padding: 32px; display: flex; flex-direction: column; gap: 16px; align-items: flex-start;">
+          <h3 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.02em;">No files in this workspace</h3>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #B4C0B6; max-width: 52ch;">Drop a file here, or request an upload URL and PUT to it directly. The first commit creates an asset at <code style="font-family: var(--font-mono); font-size: 13px;">v1</code>.</p>
+          <div style="width: 100%; border: 1px dashed #414D45; padding: 28px; display: flex; flex-direction: column; gap: 8px; align-items: center;">
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8E9A92;">Drop files to upload</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #6B776F;">OR CLICK TO BROWSE · MAX 5 GB PER OBJECT</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">DRAG OVER · DROP TARGET ACTIVE</p>
+        <div style="border: 2px solid #63C8BC; background: #1D251F; padding: 36px; display: flex; flex-direction: column; gap: 8px; align-items: center;">
+          <span style="font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC;">Release to upload 3 files</span>
+          <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #B4C0B6;">EACH BECOMES v1 OF A NEW ASSET · EXISTING KEYS GET A NEW VERSION</span>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">LOADING · SKELETON ROWS</p>
+        <div style="display: flex; flex-direction: column;">
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) 90px 110px 130px; gap: 16px; padding: 14px 0; border-bottom: 1px solid #2E3830; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">
+            <span>Key</span><span>Versions</span><span>Size</span><span>Updated</span>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) 90px 110px 130px; gap: 16px; padding: 18px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+            <span style="height: 12px; background: #2E3830; width: 70%;"></span><span style="height: 12px; background: #2E3830;"></span><span style="height: 12px; background: #2E3830;"></span><span style="height: 12px; background: #2E3830;"></span>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) 90px 110px 130px; gap: 16px; padding: 18px 0; border-bottom: 1px solid #2E3830; align-items: center;">
+            <span style="height: 12px; background: #2E3830; width: 52%;"></span><span style="height: 12px; background: #2E3830;"></span><span style="height: 12px; background: #2E3830;"></span><span style="height: 12px; background: #2E3830;"></span>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) 90px 110px 130px; gap: 16px; padding: 18px 0; align-items: center;">
+            <span style="height: 12px; background: #2E3830; width: 61%;"></span><span style="height: 12px; background: #2E3830;"></span><span style="height: 12px; background: #2E3830;"></span><span style="height: 12px; background: #2E3830;"></span>
+          </div>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">Bars are static — no shimmer animation. Row height matches the loaded row so nothing jumps.</p>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">SELECTION · BULK ACTION BAR</p>
+        <div style="border: 1px solid #63C8BC; background: #1D251F; padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+          <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC;">3 selected</span>
+          <button type="button" style="height: 40px; padding: 0 12px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Signed downloads</button>
+          <button type="button" style="height: 40px; padding: 0 12px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Run jobs</button>
+          <button type="button" style="height: 40px; padding: 0 12px; background: transparent; border: 1px solid #F5F4ED; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Delete…</button>
+          <button type="button" style="margin-left: auto; height: 40px; padding: 0 12px; background: transparent; border: none; color: #8E9A92; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 520px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Files · destructive &amp; blocked events</p>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">DELETE ASSET · CONFIRMATION</p>
+        <div role="dialog" aria-modal="true" aria-label="Delete asset" style="border: 1px solid #414D45; background: #141A16; box-shadow: 0 24px 48px rgba(0,0,0,0.4);">
+          <div style="padding: 20px 22px; border-bottom: 1px solid #2E3830;">
+            <p style="margin: 0 0 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Confirm deletion</p>
+            <h3 style="margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.02em;">Delete renders/quarterly-map.png?</h3>
+          </div>
+          <div style="padding: 20px 22px; display: flex; flex-direction: column; gap: 14px;">
+            <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.6; color: #B4C0B6;">
+              <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono);">&#9650;</span> All 3 versions and their objects are removed from your store.</li>
+              <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono);">&#9650;</span> Signed URLs already issued stop working immediately.</li>
+              <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> 1 succeeded job referenced this asset. Its record is kept; its output is not.</li>
+            </ul>
+            <label style="display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Type the key to confirm</span>
+              <input type="text" placeholder="renders/quarterly-map.png" style="height: 44px; background: #1D251F; border: 1px solid #F5F4ED; padding: 0 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">
+            </label>
+          </div>
+          <div style="padding: 16px 22px; border-top: 1px solid #2E3830; display: flex; gap: 10px; justify-content: flex-end;">
+            <button type="button" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Cancel</button>
+            <button type="button" disabled style="height: 44px; padding: 0 16px; background: #2E3830; border: none; color: #8E9A92; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: not-allowed;">Delete asset</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">UPLOAD BLOCKED · STORAGE AT LIMIT</p>
+        <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 16px 18px; display: flex; gap: 12px; align-items: flex-start;">
+          <span style="font-family: var(--font-mono); color: #F5F4ED;">&#9650;</span>
+          <div>
+            <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;">Storage limit reached</p>
+            <p style="margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: #B4C0B6;">This workspace is at 100 GB of 100 GB. New uploads are rejected with <code style="font-family: var(--font-mono); font-size: 13px;">quota_exceeded</code>. Reads and signed downloads continue.</p>
+            <a href="/dashboard/usage" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: #F5F4ED; color: #141A16; padding: 10px 12px; display: inline-block;">Review usage</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">STORE UNREACHABLE</p>
+        <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 16px 18px; display: flex; gap: 12px; align-items: flex-start;">
+          <span style="font-family: var(--font-mono); color: #F5F4ED;">&#9650;</span>
+          <div>
+            <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;">Cannot reach your object store</p>
+            <p style="margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Relay could not list objects at <code style="font-family: var(--font-mono); font-size: 13px;">store.example.com</code>. Asset and version records below are from Relay's own database and are accurate; byte operations will fail until the store responds.</p>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <a href="/dashboard/settings/storage" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: #F5F4ED; color: #141A16; padding: 10px 12px;">Check store settings</a>
+              <a href="/status" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #414D45; color: #F5F4ED; padding: 10px 12px;">Relay status</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">FILTER · NO MATCHES</p>
+        <div style="border: 1px solid #2E3830; padding: 24px;">
+          <p style="margin: 0 0 8px; font-size: 16px; font-weight: 700;">No assets match “thumbs/”</p>
+          <p style="margin: 0 0 14px; font-size: 14px; line-height: 1.6; color: #B4C0B6;">6 assets exist in this workspace. The filter matches key prefixes, not file contents.</p>
+          <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Clear filter</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">/dashboard/jobs · populated + run detail drawer · 1440 × 900</p>
+    <div data-screen-label="Jobs desktop" style="width: 1440px; height: 900px; display: flex; border: 1px solid #2E3830; background: #141A16; overflow: hidden;">
+      <aside style="width: 260px; flex: none; border-right: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column;">
+        <div style="padding: 20px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#6B7C74"></rect><rect x="6" y="15.5" width="20" height="5" fill="#9BA9A1"></rect><rect x="9" y="7.5" width="20" height="5" fill="#63C8BC"></rect></svg>
+          <span style="font-size: 17px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+        </div>
+        <button type="button" style="padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; color: #F5F4ED; text-align: left; min-height: 44px;">
+          <span style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace</span>
+            <span style="font-size: 15px; font-weight: 500;">Euaell’s workspace</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC;">ws_a1f9</span>
+          </span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+        <nav aria-label="Sections" style="display: flex; flex-direction: column; padding: 12px 0; gap: 2px;">
+          <a href="/dashboard" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Overview</a>
+          <a href="/dashboard/files" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Files</a>
+          <a href="/dashboard/jobs" aria-current="page" style="display: flex; align-items: center; padding: 0 20px; min-height: 44px; color: #F5F4ED; font-size: 15px; background: #1D251F; border-left: 3px solid #63C8BC;">Jobs</a>
+          <a href="/dashboard/usage" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Usage</a>
+          <a href="/dashboard/settings" style="display: flex; align-items: center; padding: 0 20px 0 23px; min-height: 44px; color: #8E9A92; font-size: 15px;">Settings</a>
+        </nav>
+        <button type="button" style="margin-top: auto; width: 100%; padding: 14px 20px; background: transparent; border: none; border-top: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; cursor: pointer; min-height: 56px; text-align: left;">
+          <span style="width: 32px; height: 32px; background: #2E3830; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">EA</span>
+          <span style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 14px; color: #F5F4ED;">Euaell A.</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">PROFILE · SIGN OUT</span>
+          </span>
+          <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">&#9662;</span>
+        </button>
+      </aside>
+
+      <main style="flex: 1; display: flex; overflow: hidden;">
+        <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+          <div style="padding: 24px 32px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex: none;">
+            <div>
+              <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Workspace ws_a1f9</p>
+              <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.03em;">Jobs</h1>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <span style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC; border: 1px solid #2E3830; height: 44px; padding: 0 12px;"><span style="width: 7px; height: 7px; background: #63C8BC;"></span> Live · 5s poll</span>
+              <button type="button" style="height: 44px; padding: 0 18px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; white-space: nowrap;">Enqueue job</button>
+            </div>
+          </div>
+
+          <div style="padding: 16px 32px; border-bottom: 1px solid #2E3830; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: none;">
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; background: #63C8BC; color: #141A16; height: 36px; padding: 0 12px; display: inline-flex; align-items: center;">All 24</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px;">&#9633; Queued 2</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px;">&#9642; Running 1</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px;">&#9632; Succeeded 19</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px;">&#9650; Failed 2</span>
+            <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: #8E9A92;">LAST 7 DAYS</span>
+          </div>
+
+          <div style="padding: 0 32px; overflow: hidden; flex: 1;">
+            <div style="display: grid; grid-template-columns: 120px 130px minmax(150px,1fr) 140px 44px; gap: 16px; padding: 14px 0; border-bottom: 1px solid #2E3830; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">
+              <span>Job</span><span>State</span><span>Asset · kind</span><span>Progress</span><span></span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 120px 130px minmax(150px,1fr) 140px 44px; gap: 16px; padding: 16px 8px; margin: 0 -8px; border-bottom: 1px solid #2E3830; align-items: center; background: #1D251F;">
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">job_8f31c0</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #141A16; background: #63C8BC; padding: 4px 8px; justify-self: start;">RUNNING &#9642;</span>
+              <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                <span style="font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">renders/quarterly-map.png v2</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">IMAGE.GENERATE</span>
+              </span>
+              <span style="display: flex; flex-direction: column; gap: 5px;">
+                <span style="height: 6px; background: #2E3830;"><span style="display: block; width: 60%; height: 6px; background: #63C8BC;"></span></span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC;">STEP 3/5 RENDER · 1m 12s</span>
+              </span>
+              <button type="button" aria-label="Row actions" style="width: 44px; height: 44px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; cursor: pointer; font-family: var(--font-mono);">&#8943;</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 120px 130px minmax(150px,1fr) 140px 44px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center;" style-hover="background: #1D251F;">
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">job_8f31bd</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #63C8BC; border: 1px solid #63C8BC; padding: 4px 8px; justify-self: start;">QUEUED &#9633;</span>
+              <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                <span style="font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">exports/ledger-2026-q2.csv v5</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">CSV.VALIDATE</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #8E9A92;">WAITING 00:34</span>
+              <button type="button" aria-label="Row actions" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #8E9A92; cursor: pointer; font-family: var(--font-mono);">&#8943;</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 120px 130px minmax(150px,1fr) 140px 44px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center; border-left: 4px solid #F5F4ED; margin-left: -12px; padding-left: 8px;">
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">job_8f31a4</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #141A16; background: #F5F4ED; padding: 4px 8px; justify-self: start;">FAILED &#9650;</span>
+              <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                <span style="font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">imports/inventory.xlsx v1</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #F5F4ED;">SHEET.PARSE · schema_mismatch</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #F5F4ED;">ATTEMPT 3/3 · 18s</span>
+              <button type="button" aria-label="Retry job" style="width: 44px; height: 44px; background: transparent; border: 1px solid #F5F4ED; color: #F5F4ED; cursor: pointer; font-family: var(--font-mono); font-size: 12px;">&#8635;</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 120px 130px minmax(150px,1fr) 140px 44px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center;" style-hover="background: #1D251F;">
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">job_8f3192</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #B4C0B6; border: 1px solid #414D45; padding: 4px 8px; justify-self: start;">SUCCEEDED &#9632;</span>
+              <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                <span style="font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">renders/hero-frame.png v1 &#8594; v2</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">IMAGE.RESIZE</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #8E9A92;">5/5 STEPS · 42s</span>
+              <button type="button" aria-label="Row actions" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #8E9A92; cursor: pointer; font-family: var(--font-mono);">&#8943;</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 120px 130px minmax(150px,1fr) 140px 44px; gap: 16px; padding: 16px 0; border-bottom: 1px solid #2E3830; align-items: center;" style-hover="background: #1D251F;">
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">job_8f3180</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #B4C0B6; border: 1px solid #414D45; padding: 4px 8px; justify-self: start;">SUCCEEDED &#9632;</span>
+              <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                <span style="font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">archive/2025-backup.tar.gz v2</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">ARCHIVE.VERIFY</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #8E9A92;">2/2 STEPS · 6m 03s</span>
+              <button type="button" aria-label="Row actions" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #8E9A92; cursor: pointer; font-family: var(--font-mono);">&#8943;</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 120px 130px minmax(150px,1fr) 140px 44px; gap: 16px; padding: 16px 0; align-items: center; opacity: 0.6;">
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">job_8f3171</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #8E9A92; border: 1px dashed #414D45; padding: 4px 8px; justify-self: start;">CANCELLED &#8213;</span>
+              <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                <span style="font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">uploads/site-audit.pdf v1</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">PDF.EXTRACT · BY EUAELL A.</span>
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #8E9A92;">STOPPED 1/4 · 9s</span>
+              <button type="button" aria-label="Row actions" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #8E9A92; cursor: pointer; font-family: var(--font-mono);">&#8943;</button>
+            </div>
+          </div>
+        </div>
+
+        <aside aria-label="Job detail" style="width: 480px; flex: none; border-left: 1px solid #2E3830; background: #121815; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="padding: 20px 24px; border-bottom: 1px solid #2E3830; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;">
+            <div style="min-width: 0;">
+              <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Job</p>
+              <h2 style="margin: 0 0 8px; font-family: var(--font-mono); font-size: 20px; font-weight: 700; letter-spacing: 0.02em;">job_8f31c0</h2>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #141A16; background: #63C8BC; padding: 4px 8px;">RUNNING &#9642;</span>
+            </div>
+            <button type="button" aria-label="Close drawer" style="width: 44px; height: 44px; flex: none; background: transparent; border: 1px solid #414D45; color: #F5F4ED; cursor: pointer; font-family: var(--font-mono);">&#215;</button>
+          </div>
+
+          <div style="padding: 20px 24px; border-bottom: 1px solid #2E3830; display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #8E9A92;">KIND</span><span style="font-family: var(--font-mono); font-size: 13px;">image.generate</span></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #8E9A92;">ATTEMPT</span><span style="font-family: var(--font-mono); font-size: 13px;">1 / 3</span></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #8E9A92;">ENQUEUED</span><span style="font-family: var(--font-mono); font-size: 13px;">14:01:12 UTC</span></span>
+            <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #8E9A92;">LEASED BY</span><span style="font-family: var(--font-mono); font-size: 13px;">worker-04</span></span>
+          </div>
+
+          <div style="padding: 20px 24px; border-bottom: 1px solid #2E3830;">
+            <p style="margin: 0 0 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Steps · 3 of 5</p>
+            <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px;">
+              <li style="display: flex; gap: 12px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 12px; color: #63C8BC;">&#9632;</span><span style="flex: 1; font-size: 14px;">Fetch source version</span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">0.4s</span></li>
+              <li style="display: flex; gap: 12px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 12px; color: #63C8BC;">&#9632;</span><span style="flex: 1; font-size: 14px;">Validate dimensions</span><span style="font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">0.1s</span></li>
+              <li style="display: flex; gap: 12px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 12px; color: #63C8BC;">&#9642;</span><span style="flex: 1; font-size: 14px; color: #F5F4ED; font-weight: 700;">Render output</span><span style="font-family: var(--font-mono); font-size: 11px; color: #63C8BC;">RUNNING</span></li>
+              <li style="display: flex; gap: 12px; align-items: baseline; color: #8E9A92;"><span style="font-family: var(--font-mono); font-size: 12px;">&#9633;</span><span style="flex: 1; font-size: 14px;">Commit new version</span><span style="font-family: var(--font-mono); font-size: 11px;">PENDING</span></li>
+              <li style="display: flex; gap: 12px; align-items: baseline; color: #8E9A92;"><span style="font-family: var(--font-mono); font-size: 12px;">&#9633;</span><span style="flex: 1; font-size: 14px;">Emit result metadata</span><span style="font-family: var(--font-mono); font-size: 11px;">PENDING</span></li>
+            </ol>
+          </div>
+
+          <div style="padding: 20px 24px; overflow: hidden; flex: 1; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+              <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Worker log · tail</p>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #63C8BC;">FOLLOWING</span>
+            </div>
+            <pre style="margin: 0; border: 1px solid #2E3830; background: #141A16; padding: 14px; font-family: var(--font-mono); font-size: 12px; line-height: 1.7; color: #B4C0B6; overflow: auto; flex: 1;"><code>14:01:12  leased by worker-04
+14:01:12  step 1 fetch source version v2
+14:01:13  step 1 ok (2.1 MB)
+14:01:13  step 2 validate dimensions
+14:01:13  step 2 ok 2048x1152
+14:01:13  step 3 render output
+14:02:24  step 3 … 60%</code></pre>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #F5F4ED; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Cancel job</button>
+              <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Copy job id</button>
+              <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Download log</button>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 520px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Jobs · states &amp; events</p>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">EMPTY · NO JOBS</p>
+        <div style="border: 1px solid #2E3830; background: #1D251F; padding: 28px; display: flex; flex-direction: column; gap: 14px; align-items: flex-start;">
+          <h3 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.02em;">No jobs have run yet</h3>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #B4C0B6; max-width: 48ch;">Enqueue work against a version and it appears here within a second, before a worker picks it up.</p>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="button" style="height: 44px; padding: 0 16px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Enqueue job</button>
+            <a href="/docs/jobs" style="height: 44px; padding: 0 16px; border: 1px solid #414D45; color: #F5F4ED; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">Docs</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">FAILED · DRAWER DETAIL</p>
+        <div style="border: 1px solid #2E3830; background: #121815;">
+          <div style="padding: 16px 18px; border-bottom: 1px solid #2E3830; display: flex; align-items: baseline; gap: 12px;">
+            <span style="font-family: var(--font-mono); font-size: 17px; font-weight: 700; letter-spacing: 0.02em;">job_8f31a4</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #141A16; background: #F5F4ED; padding: 4px 8px;">FAILED &#9650;</span>
+            <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #8E9A92;">ATTEMPT 3/3 · 18s</span>
+          </div>
+          <div style="padding: 16px 18px; border-bottom: 1px solid #2E3830; border-left: 4px solid #F5F4ED;">
+            <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;">&#9650; schema_mismatch</p>
+            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #B4C0B6;">Row 412 has 14 columns; the sheet header declares 12. No version was written and no bytes were changed.</p>
+          </div>
+          <div style="padding: 16px 18px; border-bottom: 1px solid #2E3830;">
+            <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Attempts</p>
+            <div style="display: flex; flex-direction: column; gap: 8px; font-family: var(--font-mono); font-size: 12px; color: #B4C0B6;">
+              <span style="display: flex; gap: 10px;"><span style="color: #F5F4ED;">&#9650;</span> 3 · 14:22:09 · schema_mismatch · 18s</span>
+              <span style="display: flex; gap: 10px;"><span style="color: #F5F4ED;">&#9650;</span> 2 · 14:19:44 · schema_mismatch · 17s</span>
+              <span style="display: flex; gap: 10px;"><span style="color: #F5F4ED;">&#9650;</span> 1 · 14:18:31 · schema_mismatch · 19s</span>
+            </div>
+          </div>
+          <div style="padding: 16px 18px; display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" style="height: 40px; padding: 0 14px; background: #F5F4ED; border: none; color: #141A16; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Retry job</button>
+            <button type="button" style="height: 40px; padding: 0 14px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Copy error</button>
+            <a href="/docs/errors" style="height: 40px; padding: 0 14px; border: 1px solid #414D45; color: #F5F4ED; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;">Error reference</a>
+          </div>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">Retry counts as a new attempt against job minutes. The dialog says so before it runs.</p>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">EVENT · JOB SUCCEEDED WHILE VIEWING</p>
+        <div style="border: 1px solid #63C8BC; padding: 14px 16px; display: flex; gap: 12px; align-items: center;">
+          <span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span>
+          <p style="margin: 0; flex: 1; font-size: 14px; line-height: 1.6; color: #B4C0B6;"><code style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">job_8f31c0</code> succeeded. <code style="font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">renders/quarterly-map.png</code> is now at v4.</p>
+          <a href="/dashboard/files" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #63C8BC; white-space: nowrap;">View file &#8594;</a>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #8E9A92;">Rows update in place. The state pill crossfades 180ms; the glyph swaps instantly. Nothing re-sorts under the cursor while a row is hovered.</p>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 520px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Jobs · enqueue &amp; blocked</p>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">ENQUEUE JOB · FORM</p>
+        <div style="border: 1px solid #414D45; background: #141A16;">
+          <div style="padding: 18px 20px; border-bottom: 1px solid #2E3830;">
+            <h3 style="margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.02em;">Enqueue a job</h3>
+          </div>
+          <div style="padding: 18px 20px; display: flex; flex-direction: column; gap: 16px;">
+            <label style="display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Asset</span>
+              <span style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">renders/quarterly-map.png <span style="color: #8E9A92;">&#9662;</span></span>
+            </label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+              <label style="display: flex; flex-direction: column; gap: 8px;">
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Version</span>
+                <span style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; font-family: var(--font-mono); font-size: 13px;">v3 (current) <span style="color: #8E9A92;">&#9662;</span></span>
+              </label>
+              <label style="display: flex; flex-direction: column; gap: 8px;">
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Kind</span>
+                <span style="height: 44px; background: #1D251F; border: 1px solid #414D45; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; font-family: var(--font-mono); font-size: 13px;">image.generate <span style="color: #8E9A92;">&#9662;</span></span>
+              </label>
+            </div>
+            <label style="display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8E9A92;">Parameters · JSON</span>
+              <textarea rows="3" style="background: #1D251F; border: 1px solid #414D45; padding: 10px 12px; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED; resize: vertical;">{ "width": 2048, "format": "png" }</textarea>
+            </label>
+            <p style="margin: 0; display: flex; gap: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;"><span>&#9632;</span> RESULT IS COMMITTED AS A NEW VERSION. THE SOURCE VERSION IS NOT MODIFIED.</p>
+          </div>
+          <div style="padding: 16px 20px; border-top: 1px solid #2E3830; display: flex; gap: 10px; justify-content: flex-end;">
+            <button type="button" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Cancel</button>
+            <button type="button" style="height: 44px; padding: 0 18px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Enqueue</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">ENQUEUE BLOCKED · JOB MINUTES AT LIMIT</p>
+        <div style="border: 1px solid #F5F4ED; border-left-width: 4px; padding: 16px 18px;">
+          <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;">&#9650; Job minutes limit reached</p>
+          <p style="margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: #B4C0B6;">2 000 of 2 000 minutes used this period. New jobs are rejected with <code style="font-family: var(--font-mono); font-size: 13px;">quota_exceeded</code>. Running jobs finish; reads and downloads continue.</p>
+          <a href="/dashboard/usage" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: #F5F4ED; color: #141A16; padding: 10px 12px; display: inline-block;">Review usage</a>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">NO WORKERS AVAILABLE</p>
+        <div style="border: 1px solid #414D45; padding: 16px 18px;">
+          <p style="margin: 0 0 6px; display: flex; gap: 10px; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #F5F4ED;"><span>&#9633;</span> Queued longer than usual</p>
+          <p style="margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: #B4C0B6;">2 jobs have waited over 5 minutes. Workers may be degraded. Nothing is lost — do not re-enqueue, duplicates are billed.</p>
+          <a href="/status" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #414D45; color: #F5F4ED; padding: 10px 12px; display: inline-block;">Check status</a>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #2E3830; background: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #63C8BC;">CANCEL RUNNING JOB · CONFIRMATION</p>
+        <div style="border: 1px solid #414D45; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px;">
+          <h3 style="margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.02em;">Cancel job_8f31c0?</h3>
+          <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.6; color: #B4C0B6;">
+            <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono);">&#9650;</span> The worker stops after the current step. Partial output is discarded.</li>
+            <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> Minutes already consumed are still counted.</li>
+            <li style="display: flex; gap: 10px;"><span style="font-family: var(--font-mono); color: #63C8BC;">&#9632;</span> No version is written. The source version is untouched.</li>
+          </ul>
+          <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button type="button" style="height: 44px; padding: 0 16px; background: transparent; border: 1px solid #414D45; color: #F5F4ED; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Keep running</button>
+            <button type="button" style="height: 44px; padding: 0 16px; background: #F5F4ED; border: none; color: #141A16; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Cancel job</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8E9A92;">Files &amp; Jobs · mobile 390 × 844</p>
+      <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+        <div data-screen-label="Files mobile" style="width: 390px; height: 844px; border: 1px solid #2E3830; background: #141A16; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="padding: 14px 16px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; flex: none;">
+            <button type="button" aria-label="Open navigation" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #F5F4ED; cursor: pointer; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;">
+              <span style="width: 16px; height: 2px; background: currentColor;"></span><span style="width: 16px; height: 2px; background: currentColor;"></span><span style="width: 16px; height: 2px; background: currentColor;"></span>
+            </button>
+            <h1 style="margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.02em;">Files</h1>
+            <button type="button" style="margin-left: auto; height: 40px; padding: 0 12px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Upload</button>
+          </div>
+          <div style="padding: 12px 16px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 10px; flex: none;">
+            <div style="flex: 1; height: 40px; border: 1px solid #414D45; display: flex; align-items: center; gap: 8px; padding: 0 10px;">
+              <span style="font-family: var(--font-mono); color: #8E9A92;" aria-hidden="true">&#9906;</span>
+              <input type="text" placeholder="Filter" style="flex: 1; background: transparent; border: none; outline: none; font-family: var(--font-mono); font-size: 13px; color: #F5F4ED;">
+            </div>
+            <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92; white-space: nowrap;">6 · 4.9 GB</span>
+          </div>
+          <div style="display: flex; flex-direction: column; overflow: hidden;">
+            <button type="button" style="text-align: left; background: #1D251F; border: none; border-bottom: 1px solid #2E3830; border-left: 3px solid #63C8BC; padding: 16px 16px 16px 13px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; color: #F5F4ED;">
+              <span style="font-size: 15px; overflow-wrap: anywhere;">renders/quarterly-map.png</span>
+              <span style="display: flex; gap: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC;">CURRENT v3 · 3 VERSIONS</span>
+              <span style="display: flex; gap: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">2.1 MB · sha 9f21c4 · 2026-07-14</span>
+            </button>
+            <button type="button" style="text-align: left; background: transparent; border: none; border-bottom: 1px solid #2E3830; padding: 16px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; color: #F5F4ED;">
+              <span style="font-size: 15px; overflow-wrap: anywhere;">exports/ledger-2026-q2.csv</span>
+              <span style="display: flex; gap: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">CURRENT v5 · 5 VERSIONS</span>
+              <span style="display: flex; gap: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">840 KB · sha 2d80af · 2026-07-11</span>
+            </button>
+            <div style="border-bottom: 1px solid #2E3830; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+              <span style="font-size: 15px; overflow-wrap: anywhere;">renders/hero-frame.png</span>
+              <span style="height: 6px; background: #2E3830;"><span style="display: block; width: 62%; height: 6px; background: #63C8BC;"></span></span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC;">UPLOADING 62%</span>
+            </div>
+            <div style="border-bottom: 1px solid #2E3830; border-left: 4px solid #F5F4ED; padding: 16px 16px 16px 12px; display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-size: 15px; overflow-wrap: anywhere;">imports/inventory.xlsx</span>
+              <span style="display: flex; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #F5F4ED; white-space: nowrap;"><span>&#9650;</span> UPLOAD FAILED · url_expired</span>
+              <button type="button" style="align-self: flex-start; height: 40px; padding: 0 12px; background: transparent; border: 1px solid #F5F4ED; color: #F5F4ED; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Retry</button>
+            </div>
+            <button type="button" style="text-align: left; background: transparent; border: none; padding: 16px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; color: #F5F4ED;">
+              <span style="font-size: 15px; overflow-wrap: anywhere;">archive/2025-backup.tar.gz</span>
+              <span style="display: flex; gap: 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">CURRENT v2 · 1.4 GB · 2026-06-28</span>
+            </button>
+          </div>
+          <p style="margin: auto 16px 16px; font-family: var(--font-mono); font-size: 10px; line-height: 1.8; letter-spacing: 0.06em; color: #6B776F;">TAPPING A ROW OPENS VERSION HISTORY AS A FULL-SCREEN SHEET, NOT A SIDE DRAWER.</p>
+        </div>
+
+        <div data-screen-label="Jobs mobile" style="width: 390px; height: 844px; border: 1px solid #2E3830; background: #141A16; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="padding: 14px 16px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; gap: 12px; flex: none;">
+            <button type="button" aria-label="Open navigation" style="width: 44px; height: 44px; background: transparent; border: 1px solid #2E3830; color: #F5F4ED; cursor: pointer; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;">
+              <span style="width: 16px; height: 2px; background: currentColor;"></span><span style="width: 16px; height: 2px; background: currentColor;"></span><span style="width: 16px; height: 2px; background: currentColor;"></span>
+            </button>
+            <h1 style="margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.02em;">Jobs</h1>
+            <span style="margin-left: auto; display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #63C8BC;"><span style="width: 6px; height: 6px; background: #63C8BC;"></span> LIVE</span>
+          </div>
+          <div style="padding: 12px 16px; border-bottom: 1px solid #2E3830; display: flex; gap: 8px; overflow-x: auto; flex: none;">
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; background: #63C8BC; color: #141A16; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; white-space: nowrap;">All 24</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; white-space: nowrap;">&#9642; Running 1</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #2E3830; color: #B4C0B6; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; white-space: nowrap;">&#9650; Failed 2</span>
+          </div>
+          <div style="display: flex; flex-direction: column; overflow: hidden;">
+            <button type="button" style="text-align: left; background: #1D251F; border: none; border-bottom: 1px solid #2E3830; padding: 16px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; color: #F5F4ED;">
+              <span style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-family: var(--font-mono); font-size: 13px;">job_8f31c0</span>
+                <span style="margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #141A16; background: #63C8BC; padding: 3px 8px;">RUNNING &#9642;</span>
+              </span>
+              <span style="font-size: 14px; overflow-wrap: anywhere;">renders/quarterly-map.png v2</span>
+              <span style="height: 6px; background: #2E3830;"><span style="display: block; width: 60%; height: 6px; background: #63C8BC;"></span></span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #63C8BC;">STEP 3/5 RENDER · 1m 12s</span>
+            </button>
+            <button type="button" style="text-align: left; background: transparent; border: none; border-bottom: 1px solid #2E3830; padding: 16px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; color: #F5F4ED;">
+              <span style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-family: var(--font-mono); font-size: 13px;">job_8f31bd</span>
+                <span style="margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #63C8BC; border: 1px solid #63C8BC; padding: 3px 8px;">QUEUED &#9633;</span>
+              </span>
+              <span style="font-size: 14px; overflow-wrap: anywhere;">exports/ledger-2026-q2.csv v5</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">CSV.VALIDATE · WAITING 00:34</span>
+            </button>
+            <button type="button" style="text-align: left; background: transparent; border: none; border-bottom: 1px solid #2E3830; border-left: 4px solid #F5F4ED; padding: 16px 16px 16px 12px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; color: #F5F4ED;">
+              <span style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-family: var(--font-mono); font-size: 13px;">job_8f31a4</span>
+                <span style="margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #141A16; background: #F5F4ED; padding: 3px 8px;">FAILED &#9650;</span>
+              </span>
+              <span style="font-size: 14px; overflow-wrap: anywhere;">imports/inventory.xlsx v1</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #F5F4ED;">schema_mismatch · ATTEMPT 3/3</span>
+            </button>
+            <button type="button" style="text-align: left; background: transparent; border: none; border-bottom: 1px solid #2E3830; padding: 16px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; color: #F5F4ED;">
+              <span style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-family: var(--font-mono); font-size: 13px;">job_8f3192</span>
+                <span style="margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #B4C0B6; border: 1px solid #414D45; padding: 3px 8px;">SUCCEEDED &#9632;</span>
+              </span>
+              <span style="font-size: 14px; overflow-wrap: anywhere;">renders/hero-frame.png v1 &#8594; v2</span>
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: #8E9A92;">IMAGE.RESIZE · 5/5 · 42s</span>
+            </button>
+          </div>
+          <button type="button" style="margin: auto 16px 16px; height: 48px; background: #63C8BC; border: none; color: #141A16; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;">Enqueue job</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

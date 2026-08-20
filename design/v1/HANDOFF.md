@@ -1,5 +1,7 @@
 # Relay — design handoff
 
+Version: v1 historical snapshot; not approved for the current registry-first product
+
 Identity **Ledger** (Direction B, owner-selected 2026-07-29) · design pass only ·
 no production code in this deliverable.
 
@@ -31,7 +33,7 @@ Reviewable exploration of all three directions: `Relay Identity Directions.dc.ht
 ## 2. File map
 
 ```text
-design/relay/
+design/v1/
   DESIGN.md                  design system: surfaces, colour, type, grid, states, motion, a11y
   tokens.json                machine-readable tokens (hex + oklch + contrast + motion + a11y)
   content-guidelines.md      voice, casing, claims discipline, naming, error/empty copy
@@ -165,7 +167,7 @@ contract: **default · hover · focus · active · disabled · loading · error*
 
 ## 9. Implementation notes (React + Vite)
 
-1. **Assets.** Copy `design/relay/brand/` and `design/relay/assets/` into
+1. **Assets.** Copy `design/v1/brand/` and `design/v1/assets/` into
    `apps/web/public/relay/`. Reference diagrams as `<img src>` — do not inline
    them into JSX; they are documents with their own `<title>`.
 2. **Favicons.** `favicon.svg` (any-size), `favicon-32.png`, `favicon-16.png`,
@@ -222,10 +224,9 @@ contract: **default · hover · focus · active · disabled · loading · error*
    design system, and product facts came from the brief itself. Re-check three
    things against the repo before merging: exact route list, legal footer wording,
    and versioning/changelog category vocabulary.
-2. **Git worktree, branch and commits were not created** — this environment is
-   not the Relay repo. Copy `design/relay/` plus the four `.dc.html` sources onto
-   `design/relay-identity` and commit in the order the brief specifies, then
-   report the commit hash to the owner.
+2. **Historical source gap.** This v1 snapshot was committed without the four
+   referenced `.dc.html` sources. Use its PNGs and tokens only as historical
+   evidence; do not reconstruct or implement the current product from v1.
 3. **`/docs` and `/status` are undesigned.** Both are in scope for the product
    but not in the brief's deliverable list; say the word and they follow the same
    public-surface system.

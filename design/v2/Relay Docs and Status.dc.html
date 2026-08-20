@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/tokens/base.css">
+<link rel="stylesheet" href="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/styles.css">
+<script src="_ds/zaftech-design-system-a3688ca0-fd9f-4bec-a124-8152db6c01cc/_ds_bundle.js"></script>
+<style>body { background: #0E1310; }</style>
+</helmet>
+
+<div style="--rm: #8E9A92; background: #0E1310; color: #F5F4ED; font-family: var(--font-sans); padding: 48px; display: flex; flex-direction: column; gap: 56px; min-height: 100vh;">
+
+  <div style="display: flex; flex-direction: column; gap: 12px; max-width: 880px;">
+    <p class="kicker"><span class="kicker-num">// 08</span> Public surface · docs &amp; status</p>
+    <h1 style="margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05;">Documentation and service status</h1>
+    <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #B4C0B6; max-width: 72ch; text-wrap: pretty;">Both sit on the paper surface with the marketing header, so they read as part of the public site rather than the product. Docs is a three-column reference; status is a single column of facts with no marketing language anywhere on it. Sample content is illustrative.</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/docs/quickstart · desktop 1440 × 1000</p>
+    <div data-screen-label="Docs desktop" style="--rm: #5F6B64; width: 1440px; height: 1000px; background: #F5F4ED; color: #141A16; border: 1px solid #2E3830; display: flex; flex-direction: column; overflow: hidden;">
+      <header style="border-bottom: 1px solid #D8D5C8; padding: 12px 32px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex: none;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#8E9A92"></rect><rect x="6" y="15.5" width="20" height="5" fill="#46514B"></rect><rect x="9" y="7.5" width="20" height="5" fill="#1F776E"></rect></svg>
+          <span style="font-size: 20px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+          <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm); padding-top: 3px;">by ZafTech</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button type="button" style="height: 40px; min-width: 300px; padding: 0 14px; background: #EFEDE2; border: 1px solid #C9C7BA; display: flex; align-items: center; gap: 10px; cursor: pointer; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: #46514B; text-align: left;" style-hover="border-color: #1F776E;">
+            <span aria-hidden="true">&#9906;</span><span style="flex: 1;">SEARCH DOCS</span><span style="border: 1px solid #C9C7BA; padding: 1px 5px;">/</span>
+          </button>
+          <nav aria-label="Primary" style="display: flex; align-items: center; gap: 2px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;">
+            <a href="/#product" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center;">Product</a>
+            <a href="/changelog" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center;">Changelog</a>
+            <a href="/docs" aria-current="page" style="color: #141A16; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; border-bottom: 2px solid #1F776E;">Docs</a>
+            <a href="/dashboard" style="background: #1F776E; color: #F5F4ED; padding: 0 16px; height: 44px; display: inline-flex; align-items: center; font-weight: 700; margin-left: 8px; white-space: nowrap;">Open dashboard</a>
+          </nav>
+        </div>
+      </header>
+
+      <div style="flex: 1; display: flex; overflow: hidden;">
+        <nav aria-label="Documentation" style="width: 260px; flex: none; border-right: 1px solid #D8D5C8; background: #EFEDE2; padding: 28px 0; display: flex; flex-direction: column; gap: 24px; overflow: hidden;">
+          <div style="display: flex; flex-direction: column;">
+            <p style="margin: 0 24px 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Start here</p>
+            <a href="/docs" style="padding: 0 24px; min-height: 40px; display: flex; align-items: center; font-size: 15px; color: #46514B;" style-hover="color: #141A16;">Introduction</a>
+            <a href="/docs/quickstart" aria-current="page" style="padding: 0 24px 0 21px; min-height: 40px; display: flex; align-items: center; font-size: 15px; color: #141A16; font-weight: 700; border-left: 3px solid #1F776E; background: #F5F4ED;">Quickstart</a>
+            <a href="/docs/concepts" style="padding: 0 24px; min-height: 40px; display: flex; align-items: center; font-size: 15px; color: #46514B;" style-hover="color: #141A16;">Core concepts</a>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <p style="margin: 0 24px 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Guides</p>
+            <a href="/docs/uploads" style="padding: 0 24px; min-height: 40px; display: flex; align-items: center; font-size: 15px; color: #46514B;">Uploading objects</a>
+            <a href="/docs/versions" style="padding: 0 24px; min-height: 40px; display: flex; align-items: center; font-size: 15px; color: #46514B;">Assets and versions</a>
+            <a href="/docs/jobs" style="padding: 0 24px; min-height: 40px; display: flex; align-items: center; font-size: 15px; color: #46514B;">Running jobs</a>
+            <a href="/docs/delivery" style="padding: 0 24px; min-height: 40px; display: flex; align-items: center; font-size: 15px; color: #46514B;">Signed delivery</a>
+            <a href="/docs/store" style="padding: 0 24px; min-height: 40px; display: flex; align-items: center; font-size: 15px; color: #46514B;">Configuring your store</a>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <p style="margin: 0 24px 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Reference</p>
+            <a href="/docs/mcp" style="padding: 0 24px; min-height: 40px; display: flex; align-items: center; font-size: 15px; color: #46514B;">MCP tools</a>
+            <a href="/docs/api" style="padding: 0 24px; min-height: 40px; display: flex; align-items: center; font-size: 15px; color: #46514B;">HTTP API</a>
+            <a href="/docs/errors" style="padding: 0 24px; min-height: 40px; display: flex; align-items: center; gap: 8px; font-size: 15px; color: #46514B;">Error codes</a>
+            <a href="/docs/limits" style="padding: 0 24px; min-height: 40px; display: flex; align-items: center; gap: 8px; font-size: 15px; color: #46514B;">Limits <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; border: 1px solid #C9C7BA; padding: 2px 6px; margin-left: auto;">SOON</span></a>
+          </div>
+        </nav>
+
+        <main style="flex: 1; overflow: hidden; padding: 44px 48px;">
+          <nav aria-label="Breadcrumb" style="display: flex; gap: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--rm); margin-bottom: 20px;">
+            <a href="/docs" style="color: var(--rm);">Docs</a><span>/</span><span style="color: #141A16;">Quickstart</span>
+          </nav>
+          <h1 style="margin: 0 0 16px; font-size: 44px; font-weight: 700; letter-spacing: -0.04em; line-height: 1.05;">Quickstart</h1>
+          <p style="margin: 0 0 28px; font-size: 18px; line-height: 1.65; color: #46514B; max-width: 62ch; text-wrap: pretty;">Store a file, turn it into a versioned asset, run a job against it, and hand out a signed URL. Four calls, no SDK required.</p>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 32px; padding-bottom: 28px; border-bottom: 1px solid #D8D5C8;">
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #46514B; border: 1px solid #C9C7BA; padding: 6px 10px;">10 MINUTES</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #46514B; border: 1px solid #C9C7BA; padding: 6px 10px;">NEEDS A WORKSPACE</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #46514B; border: 1px solid #C9C7BA; padding: 6px 10px;">CURL OR MCP CLIENT</span>
+          </div>
+
+          <h2 style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #1F776E;">01 · Request an upload URL</h2>
+          <p style="margin: 0 0 18px; font-size: 17px; line-height: 1.65; color: #141A16; max-width: 62ch;">Relay signs a PUT against your configured store. The URL is scoped to your workspace prefix and expires in fifteen minutes.</p>
+          <div style="border: 1px solid #D8D5C8; background: #141A16; margin-bottom: 28px;">
+            <div style="padding: 10px 14px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92;">POST /v1/uploads</span>
+              <div style="display: flex; gap: 6px;">
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #141A16; background: #63C8BC; padding: 3px 8px;">CURL</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92; border: 1px solid #2E3830; padding: 3px 8px;">MCP</span>
+                <button type="button" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92; background: transparent; border: 1px solid #2E3830; padding: 3px 8px; cursor: pointer;">COPY</button>
+              </div>
+            </div>
+            <pre style="margin: 0; padding: 18px 16px; font-family: var(--font-mono); font-size: 13px; line-height: 1.7; color: #B4C0B6; overflow-x: auto;"><code>curl -X POST https://api.relay.zaftech.co/v1/uploads \
+  -H <span style="color: #F5F4ED;">"Authorization: Bearer $RELAY_TOKEN"</span> \
+  -d <span style="color: #F5F4ED;">'{"key":"renders/quarterly-map.png"}'</span>
+
+<span style="color: #63C8BC;">200</span> { <span style="color: #F5F4ED;">"url"</span>: "https://…", <span style="color: #F5F4ED;">"expires_in"</span>: 900 }</code></pre>
+          </div>
+
+          <h2 style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #1F776E;">02 · Commit it as a version</h2>
+          <p style="margin: 0 0 18px; font-size: 17px; line-height: 1.65; color: #141A16; max-width: 62ch;">After the PUT succeeds, commit the object. It becomes the newest version of a named asset; earlier versions stay readable.</p>
+          <div style="border: 1px solid #1F776E; border-left-width: 4px; padding: 16px 18px; background: #EFEDE2; display: flex; gap: 12px; align-items: flex-start; margin-bottom: 28px;">
+            <span style="font-family: var(--font-mono); font-size: 13px; color: #1F776E;">&#9632;</span>
+            <div>
+              <p style="margin: 0 0 4px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #1F776E;">Note</p>
+              <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #141A16; max-width: 58ch;">Commit is idempotent per checksum. Committing the same bytes twice returns the existing version rather than creating a duplicate.</p>
+            </div>
+          </div>
+        </main>
+
+        <aside aria-label="On this page" style="width: 220px; flex: none; border-left: 1px solid #D8D5C8; padding: 44px 24px; display: flex; flex-direction: column; gap: 14px;">
+          <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">On this page</p>
+          <a href="#s1" style="font-size: 13px; line-height: 1.5; color: #141A16; border-left: 2px solid #1F776E; padding-left: 10px;">01 Request an upload URL</a>
+          <a href="#s2" style="font-size: 13px; line-height: 1.5; color: #46514B; border-left: 2px solid #D8D5C8; padding-left: 10px;">02 Commit it as a version</a>
+          <a href="#s3" style="font-size: 13px; line-height: 1.5; color: #46514B; border-left: 2px solid #D8D5C8; padding-left: 10px;">03 Enqueue a job</a>
+          <a href="#s4" style="font-size: 13px; line-height: 1.5; color: #46514B; border-left: 2px solid #D8D5C8; padding-left: 10px;">04 Hand out a signed URL</a>
+          <div style="border-top: 1px solid #D8D5C8; margin-top: 8px; padding-top: 16px; display: flex; flex-direction: column; gap: 10px;">
+            <a href="/status" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #1F776E;">Service status &#8594;</a>
+            <a href="https://github.com/ZafTec" style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #46514B;">Edit this page</a>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/docs · search open · 720 × 520</p>
+      <div data-screen-label="Docs search" style="--rm: #5F6B64; width: 720px; height: 520px; border: 1px solid #2E3830; background: #F5F4ED; position: relative; overflow: hidden;">
+        <div style="filter: blur(2px); opacity: 0.5; padding: 32px;">
+          <h1 style="margin: 0 0 12px; font-size: 36px; font-weight: 700; letter-spacing: -0.04em; color: #141A16;">Quickstart</h1>
+          <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #46514B;">Store a file, turn it into a versioned asset, run a job against it, and hand out a signed URL.</p>
+        </div>
+        <div style="position: absolute; inset: 0; background: rgba(20,26,22,0.4); display: flex; justify-content: center; padding-top: 56px;">
+          <div role="dialog" aria-modal="true" aria-label="Search documentation" style="width: 560px; background: #F5F4ED; border: 1px solid #141A16; box-shadow: 0 24px 48px rgba(0,0,0,0.28); display: flex; flex-direction: column; max-height: 400px;">
+            <div style="padding: 0 16px; height: 56px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #D8D5C8;">
+              <span style="font-family: var(--font-mono); color: #5F6B64;" aria-hidden="true">&#9906;</span>
+              <input type="text" value="signed url" style="flex: 1; border: none; background: transparent; font-family: var(--font-mono); font-size: 15px; color: #141A16; outline: none;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #5F6B64; border: 1px solid #C9C7BA; padding: 2px 6px;">ESC</span>
+            </div>
+            <div style="overflow: hidden; display: flex; flex-direction: column;">
+              <p style="margin: 0; padding: 12px 16px 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #5F6B64;">4 results</p>
+              <a href="/docs/delivery" style="padding: 12px 16px; border-left: 3px solid #1F776E; background: #EFEDE2; display: flex; flex-direction: column; gap: 4px; color: #141A16;">
+                <span style="font-size: 15px; font-weight: 700;">Signed delivery</span>
+                <span style="font-size: 13px; line-height: 1.5; color: #46514B;">Issue an expiring GET so a client can read bytes directly from the store.</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #5F6B64;">GUIDES / DELIVERY</span>
+              </a>
+              <a href="/docs/mcp" style="padding: 12px 16px 12px 19px; display: flex; flex-direction: column; gap: 4px; color: #141A16;" style-hover="background: #EFEDE2;">
+                <span style="font-size: 15px; font-weight: 700;">relay.create_download_url</span>
+                <span style="font-size: 13px; line-height: 1.5; color: #46514B;">Returns a signed URL and its expiry for a specific version.</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #5F6B64;">REFERENCE / MCP TOOLS</span>
+              </a>
+              <a href="/docs/errors" style="padding: 12px 16px 12px 19px; display: flex; flex-direction: column; gap: 4px; color: #141A16;" style-hover="background: #EFEDE2;">
+                <span style="font-size: 15px; font-weight: 700;"><code style="font-family: var(--font-mono); font-size: 14px;">url_expired</code></span>
+                <span style="font-size: 13px; line-height: 1.5; color: #46514B;">The signature is past its expiry. Request a new URL.</span>
+                <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #5F6B64;">REFERENCE / ERROR CODES</span>
+              </a>
+            </div>
+            <div style="margin-top: auto; border-top: 1px solid #D8D5C8; padding: 10px 16px; display: flex; gap: 16px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: #5F6B64;">
+              <span>&#8593;&#8595; NAVIGATE</span><span>&#8629; OPEN</span><span>ESC CLOSE</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex: 1 1 420px; min-width: 380px; display: flex; flex-direction: column; gap: 20px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/docs · states</p>
+
+      <div style="--rm: #5F6B64; border: 1px solid #2E3830; background: #F5F4ED; color: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #1F776E;">SEARCH · NO RESULTS</p>
+        <div style="border: 1px solid #D8D5C8; padding: 20px; text-align: left;">
+          <p style="margin: 0 0 8px; font-size: 16px; font-weight: 700;">Nothing matches “webhooks”</p>
+          <p style="margin: 0 0 14px; font-size: 14px; line-height: 1.6; color: #46514B;">Relay does not have webhooks yet. Job state is read by polling <code style="font-family: var(--font-mono); font-size: 13px;">relay.get_job</code>.</p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a href="/docs/jobs" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #C9C7BA; padding: 8px 10px; color: #141A16;">Running jobs</a>
+            <a href="/changelog" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #C9C7BA; padding: 8px 10px; color: #141A16;">Changelog</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="--rm: #5F6B64; border: 1px solid #2E3830; background: #F5F4ED; color: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #1F776E;">PAGE NOT FOUND · 404</p>
+        <div style="border: 1px solid #D8D5C8; padding: 20px;">
+          <p style="margin: 0 0 6px; font-family: var(--font-mono); font-size: 32px; font-weight: 700; letter-spacing: 0.02em;">404</p>
+          <p style="margin: 0 0 8px; font-size: 16px; font-weight: 700;">That page does not exist</p>
+          <p style="margin: 0 0 14px; font-size: 14px; line-height: 1.6; color: #46514B;">It may have moved with a release. The docs index lists everything currently published.</p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a href="/docs" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: #141A16; color: #F5F4ED; padding: 10px 12px;">Docs index</a>
+            <button type="button" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #C9C7BA; background: transparent; padding: 10px 12px; cursor: pointer; color: #141A16;">Search docs</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="--rm: #5F6B64; border: 1px solid #2E3830; background: #F5F4ED; color: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #1F776E;">SECTION NOT WRITTEN YET</p>
+        <div style="border: 1px dashed #C9C7BA; padding: 20px;">
+          <p style="margin: 0 0 8px; display: flex; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #141A16;"><span>&#9633;</span> Limits · not published</p>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #46514B;">Entitlements are not shipped, so their reference page is empty on purpose. The nav entry stays visible and focusable, tagged <code style="font-family: var(--font-mono); font-size: 13px;">SOON</code>.</p>
+        </div>
+      </div>
+
+      <div style="--rm: #5F6B64; border: 1px solid #2E3830; background: #F5F4ED; color: #141A16; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #1F776E;">CODE BLOCK · COPIED</p>
+        <div style="border: 1px solid #D8D5C8; background: #141A16;">
+          <div style="padding: 10px 14px; border-bottom: 1px solid #2E3830; display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92;">POST /v1/uploads</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #141A16; background: #63C8BC; padding: 3px 8px;">COPIED &#9632;</span>
+          </div>
+          <pre style="margin: 0; padding: 14px 16px; font-family: var(--font-mono); font-size: 12px; line-height: 1.7; color: #B4C0B6;"><code>curl -X POST …/v1/uploads</code></pre>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #46514B;">The label swaps to <code style="font-family: var(--font-mono); font-size: 12px;">COPIED ■</code> for 1.5s, then reverts. No toast.</p>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/docs · mobile 390 × 844</p>
+      <div data-screen-label="Docs mobile" style="--rm: #5F6B64; width: 390px; height: 844px; background: #F5F4ED; color: #141A16; border: 1px solid #2E3830; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="padding: 12px 16px; border-bottom: 1px solid #D8D5C8; display: flex; align-items: center; gap: 12px; flex: none;">
+          <button type="button" aria-label="Open navigation" style="width: 44px; height: 44px; border: 1px solid #C9C7BA; background: transparent; cursor: pointer; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;">
+            <span style="width: 16px; height: 2px; background: #141A16;"></span><span style="width: 16px; height: 2px; background: #141A16;"></span><span style="width: 16px; height: 2px; background: #141A16;"></span>
+          </button>
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="21" width="21" height="7" fill="#8E9A92"></rect><rect x="8" y="9" width="21" height="7" fill="#1F776E"></rect></svg>
+          <span style="font-size: 17px; font-weight: 500;">Relay</span>
+          <button type="button" aria-label="Search docs" style="margin-left: auto; width: 44px; height: 44px; border: 1px solid #C9C7BA; background: transparent; cursor: pointer; font-family: var(--font-mono); color: #141A16;">&#9906;</button>
+        </div>
+        <div style="padding: 12px 16px; border-bottom: 1px solid #D8D5C8; display: flex; gap: 8px; overflow-x: auto; flex: none;">
+          <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; background: #141A16; color: #F5F4ED; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; white-space: nowrap;">Quickstart</span>
+          <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #C9C7BA; color: #46514B; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; white-space: nowrap;">Concepts</span>
+          <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #C9C7BA; color: #46514B; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; white-space: nowrap;">MCP tools</span>
+        </div>
+        <div style="padding: 24px 16px; display: flex; flex-direction: column; gap: 18px; overflow: hidden;">
+          <nav aria-label="Breadcrumb" style="display: flex; gap: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--rm);"><span>Docs</span><span>/</span><span style="color: #141A16;">Quickstart</span></nav>
+          <h1 style="margin: 0; font-size: 32px; font-weight: 700; letter-spacing: -0.04em; line-height: 1.05;">Quickstart</h1>
+          <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #46514B;">Store a file, version it, run a job, hand out a signed URL. Four calls, no SDK.</p>
+          <h2 style="margin: 0; font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #1F776E;">01 · Request an upload URL</h2>
+          <div style="border: 1px solid #D8D5C8; background: #141A16; overflow: hidden;">
+            <div style="padding: 8px 12px; border-bottom: 1px solid #2E3830; display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92;">POST /v1/uploads</span>
+              <button type="button" style="font-family: var(--font-mono); font-size: 10px; color: #8E9A92; background: transparent; border: 1px solid #2E3830; padding: 3px 8px; cursor: pointer;">COPY</button>
+            </div>
+            <pre style="margin: 0; padding: 14px 12px; font-family: var(--font-mono); font-size: 12px; line-height: 1.7; color: #B4C0B6; overflow-x: auto;"><code>curl -X POST \
+  …/v1/uploads \
+  -d '{"key":"a.png"}'</code></pre>
+          </div>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #141A16;">The URL is scoped to your workspace prefix and expires in fifteen minutes.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/status · all operational · 1440 wide</p>
+    <div data-screen-label="Status operational" style="--rm: #5F6B64; width: 1440px; background: #F5F4ED; color: #141A16; border: 1px solid #2E3830;">
+      <header style="border-bottom: 1px solid #D8D5C8; padding: 12px 40px; display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="23.5" width="20" height="5" fill="#8E9A92"></rect><rect x="6" y="15.5" width="20" height="5" fill="#46514B"></rect><rect x="9" y="7.5" width="20" height="5" fill="#1F776E"></rect></svg>
+          <span style="font-size: 20px; font-weight: 500; letter-spacing: 0.01em;">Relay</span>
+          <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm); padding-top: 3px;">by ZafTech</span>
+        </div>
+        <nav aria-label="Primary" style="display: flex; align-items: center; gap: 2px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;">
+          <a href="/docs" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center;">Docs</a>
+          <a href="/changelog" style="color: #46514B; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center;">Changelog</a>
+          <a href="/status" aria-current="page" style="color: #141A16; padding: 12px 10px; min-height: 44px; display: inline-flex; align-items: center; border-bottom: 2px solid #1F776E;">Status</a>
+          <a href="/dashboard" style="background: #1F776E; color: #F5F4ED; padding: 0 16px; height: 44px; display: inline-flex; align-items: center; font-weight: 700; margin-left: 8px; white-space: nowrap;">Open dashboard</a>
+        </nav>
+      </header>
+
+      <div style="padding: 56px 40px 32px;">
+        <p style="margin: 0 0 16px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #1F776E;"><span style="color: var(--rm);">// 01</span> Service status</p>
+        <div style="border: 1px solid #141A16; border-left-width: 4px; background: #EFEDE2; padding: 28px 32px; display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 18px;">
+            <span style="font-family: var(--font-mono); font-size: 26px; color: #1F776E;" aria-hidden="true">&#9632;</span>
+            <div>
+              <h1 style="margin: 0 0 6px; font-size: 32px; font-weight: 700; letter-spacing: -0.03em;">All systems operational</h1>
+              <p style="margin: 0; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; color: #46514B;">CHECKED 2026-08-17 14:02 UTC · REFRESHES EVERY 60S</p>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <a href="/status.json" style="border: 1px solid #C9C7BA; color: #141A16; height: 44px; padding: 0 16px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">status.json</a>
+            <a href="/status/subscribe" style="background: #141A16; color: #F5F4ED; height: 44px; padding: 0 16px; display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;">Subscribe to updates</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding: 0 40px 40px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 16px;">
+          <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Components · last 45 days</p>
+          <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: var(--rm);">EACH BAR = ONE DAY · TALLER GAP = DEGRADED · HOLLOW = OUTAGE</p>
+        </div>
+        <div style="border: 1px solid #D8D5C8;">
+          <div style="padding: 20px 24px; border-bottom: 1px solid #D8D5C8; display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center;">
+            <span style="flex: 1 1 260px; display: flex; align-items: center; gap: 12px;">
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #1F776E;" aria-hidden="true">&#9632;</span>
+              <span style="font-size: 17px; font-weight: 700;">API</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #46514B;">Operational</span>
+            </span>
+            <span style="flex: 2 1 420px; display: flex; gap: 2px; align-items: flex-end; height: 32px;">
+              <sc-for list="{{ bars45 }}" as="b" hint-placeholder-count="45"><span style="flex: 1; height: 32px; background: #1F776E;"></span></sc-for>
+
+            </span>
+            <span style="flex: 0 0 90px; text-align: right; font-family: var(--font-mono); font-size: 13px; color: #141A16;">100%</span>
+          </div>
+          <div style="padding: 20px 24px; border-bottom: 1px solid #D8D5C8; display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center;">
+            <span style="flex: 1 1 260px; display: flex; align-items: center; gap: 12px;">
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #1F776E;" aria-hidden="true">&#9632;</span>
+              <span style="font-size: 17px; font-weight: 700;">Upload &amp; download signing</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #46514B;">Operational</span>
+            </span>
+            <span style="flex: 2 1 420px; display: flex; gap: 2px; align-items: flex-end; height: 32px;">
+              <sc-for list="{{ bars45 }}" as="b" hint-placeholder-count="45"><span style="flex: 1; height: 32px; background: #1F776E;"></span></sc-for>
+
+            </span>
+            <span style="flex: 0 0 90px; text-align: right; font-family: var(--font-mono); font-size: 13px; color: #141A16;">100%</span>
+          </div>
+          <div style="padding: 20px 24px; border-bottom: 1px solid #D8D5C8; display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center;">
+            <span style="flex: 1 1 260px; display: flex; align-items: center; gap: 12px;">
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #1F776E;" aria-hidden="true">&#9632;</span>
+              <span style="font-size: 17px; font-weight: 700;">Job workers</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #46514B;">Operational</span>
+            </span>
+            <span style="flex: 2 1 420px; display: flex; gap: 2px; align-items: flex-end; height: 32px;">
+              <sc-for list="{{ bars45mixed }}" as="b" hint-placeholder-count="45"><span style="{{ b.style }}"></span></sc-for>
+            </span>
+            <span style="flex: 0 0 90px; text-align: right; font-family: var(--font-mono); font-size: 13px; color: #141A16;">99.81%</span>
+          </div>
+          <div style="padding: 20px 24px; display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center;">
+            <span style="flex: 1 1 260px; display: flex; align-items: center; gap: 12px;">
+              <span style="font-family: var(--font-mono); font-size: 13px; color: #1F776E;" aria-hidden="true">&#9632;</span>
+              <span style="font-size: 17px; font-weight: 700;">Dashboard</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #46514B;">Operational</span>
+            </span>
+            <span style="flex: 2 1 420px; display: flex; gap: 2px; align-items: flex-end; height: 32px;">
+              <sc-for list="{{ bars45 }}" as="b" hint-placeholder-count="45"><span style="flex: 1; height: 32px; background: #1F776E;"></span></sc-for>
+
+            </span>
+            <span style="flex: 0 0 90px; text-align: right; font-family: var(--font-mono); font-size: 13px; color: #141A16;">100%</span>
+          </div>
+        </div>
+        <p style="margin: 14px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--rm);">OBJECT STORE HEALTH IS NOT REPORTED HERE — IT IS YOUR STORE. RELAY REPORTS ONLY WHAT RELAY OPERATES.</p>
+      </div>
+
+      <div style="border-top: 1px solid #D8D5C8; background: #EFEDE2; padding: 40px;">
+        <p style="margin: 0 0 20px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #1F776E;"><span style="color: var(--rm);">// 02</span> Incident history</p>
+        <div style="display: flex; flex-direction: column; gap: 1px; background: #D8D5C8; border: 1px solid #D8D5C8;">
+          <a href="/status/2026-08-02" style="background: #EFEDE2; padding: 22px 24px; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: baseline; color: #141A16;" style-hover="background: #F5F4ED;">
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #46514B; min-width: 110px;">2026-08-02</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; border: 1px solid #C9C7BA; padding: 3px 8px; white-space: nowrap;">DEGRADED</span>
+            <span style="flex: 1 1 320px; font-size: 16px; line-height: 1.55;">Job workers drained slowly after a deploy. Queued jobs ran late by up to 9 minutes; none were lost.</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; color: #46514B;">RESOLVED · 41m</span>
+          </a>
+          <a href="/status/2026-07-19" style="background: #EFEDE2; padding: 22px 24px; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: baseline; color: #141A16;" style-hover="background: #F5F4ED;">
+            <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: #46514B; min-width: 110px;">2026-07-19</span>
+            <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: #F5F4ED; background: #141A16; padding: 3px 8px; white-space: nowrap;">MAINTENANCE</span>
+            <span style="flex: 1 1 320px; font-size: 16px; line-height: 1.55;">Planned signing-key rotation. Signatures issued before the window were invalidated as announced.</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; color: #46514B;">COMPLETED · 15m</span>
+          </a>
+        </div>
+        <p style="margin: 16px 0 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--rm);">SAMPLE INCIDENTS ARE ILLUSTRATIVE.</p>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 20px; flex: 1 1 900px; min-width: 700px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/status · active incident · degraded</p>
+      <div data-screen-label="Status degraded" style="--rm: #5F6B64; background: #F5F4ED; color: #141A16; border: 1px solid #2E3830; padding: 40px;">
+        <div style="border: 1px solid #141A16; border-left-width: 4px; background: #EFEDE2; padding: 28px 32px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; margin-bottom: 28px;">
+          <div style="display: flex; align-items: center; gap: 18px;">
+            <span style="font-family: var(--font-mono); font-size: 26px; color: #141A16;" aria-hidden="true">&#9650;</span>
+            <div>
+              <h2 style="margin: 0 0 6px; font-size: 30px; font-weight: 700; letter-spacing: -0.03em;">Degraded performance · job workers</h2>
+              <p style="margin: 0; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; color: #46514B;">STARTED 13:18 UTC · INVESTIGATING · NEXT UPDATE BY 14:30 UTC</p>
+            </div>
+          </div>
+          <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #F5F4ED; background: #141A16; padding: 8px 12px;">Uploads &amp; reads unaffected</span>
+        </div>
+
+        <div style="display: flex; gap: 32px; flex-wrap: wrap;">
+          <div style="flex: 1 1 420px;">
+            <p style="margin: 0 0 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Updates · newest first</p>
+            <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column;">
+              <li style="display: flex; gap: 16px; padding-bottom: 20px;">
+                <span style="width: 1px; background: #C9C7BA; position: relative; flex: none;"><span style="position: absolute; top: 4px; left: -4px; width: 9px; height: 9px; background: #141A16;"></span></span>
+                <div style="padding-left: 8px;">
+                  <p style="margin: 0 0 4px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: #46514B;">14:02 UTC · IDENTIFIED</p>
+                  <p style="margin: 0; font-size: 16px; line-height: 1.6; max-width: 56ch;">A lease timeout regression is causing workers to re-queue jobs they already hold. A fix is rolling out. No job state has been lost and no version was written twice.</p>
+                </div>
+              </li>
+              <li style="display: flex; gap: 16px; padding-bottom: 20px;">
+                <span style="width: 1px; background: #C9C7BA; position: relative; flex: none;"><span style="position: absolute; top: 4px; left: -3px; width: 7px; height: 7px; border: 1px solid #46514B; background: #F5F4ED;"></span></span>
+                <div style="padding-left: 8px;">
+                  <p style="margin: 0 0 4px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: #46514B;">13:24 UTC · INVESTIGATING</p>
+                  <p style="margin: 0; font-size: 16px; line-height: 1.6; max-width: 56ch;">Queued jobs are starting later than normal. We are looking at worker lease handling. Uploads, commits and downloads are unaffected.</p>
+                </div>
+              </li>
+              <li style="display: flex; gap: 16px;">
+                <span style="width: 1px; background: transparent; position: relative; flex: none;"><span style="position: absolute; top: 4px; left: -3px; width: 7px; height: 7px; border: 1px solid #46514B; background: #F5F4ED;"></span></span>
+                <div style="padding-left: 8px;">
+                  <p style="margin: 0 0 4px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: #46514B;">13:18 UTC · DETECTED</p>
+                  <p style="margin: 0; font-size: 16px; line-height: 1.6; max-width: 56ch;">Automated check: queue wait time above threshold for 5 consecutive minutes.</p>
+                </div>
+              </li>
+            </ol>
+          </div>
+          <div style="flex: 0 1 320px; min-width: 280px; display: flex; flex-direction: column; gap: 16px;">
+            <div style="border: 1px solid #D8D5C8; padding: 20px;">
+              <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">Component status</p>
+              <div style="display: flex; flex-direction: column; gap: 10px; font-size: 15px;">
+                <span style="display: flex; gap: 10px; align-items: center;"><span style="font-family: var(--font-mono); color: #1F776E;">&#9632;</span> API <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #46514B;">OPERATIONAL</span></span>
+                <span style="display: flex; gap: 10px; align-items: center;"><span style="font-family: var(--font-mono); color: #1F776E;">&#9632;</span> Signing <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #46514B;">OPERATIONAL</span></span>
+                <span style="display: flex; gap: 10px; align-items: center; font-weight: 700;"><span style="font-family: var(--font-mono);">&#9650;</span> Job workers <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px;">DEGRADED</span></span>
+                <span style="display: flex; gap: 10px; align-items: center;"><span style="font-family: var(--font-mono); color: #1F776E;">&#9632;</span> Dashboard <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #46514B;">OPERATIONAL</span></span>
+              </div>
+            </div>
+            <div style="border: 1px solid #D8D5C8; padding: 20px;">
+              <p style="margin: 0 0 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">What you should do</p>
+              <p style="margin: 0 0 12px; font-size: 15px; line-height: 1.6; color: #141A16;">Nothing. Jobs will run; they are running late. Do not re-enqueue — duplicates are counted against job minutes.</p>
+              <a href="/dashboard/jobs" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: #141A16; color: #F5F4ED; padding: 10px 12px; display: inline-block;">Check your jobs</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/status · states</p>
+      <div style="display: flex; flex-direction: column; gap: 16px; width: 420px;">
+        <div style="--rm: #5F6B64; border: 1px solid #2E3830; background: #F5F4ED; color: #141A16; padding: 20px;">
+          <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #1F776E;">MAJOR OUTAGE</p>
+          <div style="border: 1px solid #141A16; border-left-width: 4px; background: #141A16; color: #F5F4ED; padding: 18px;">
+            <p style="margin: 0 0 6px; display: flex; gap: 12px; align-items: center; font-size: 20px; font-weight: 700; letter-spacing: -0.02em;"><span style="font-family: var(--font-mono);">&#9650;</span> Major outage · API</p>
+            <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #B4C0B6;">STARTED 09:41 UTC · UPDATE EVERY 15 MINUTES</p>
+          </div>
+          <p style="margin: 12px 0 0; font-size: 14px; line-height: 1.6; color: #46514B;">Outage inverts the banner to onyx — the only place the public surface goes dark. Still no red.</p>
+        </div>
+
+        <div style="--rm: #5F6B64; border: 1px solid #2E3830; background: #F5F4ED; color: #141A16; padding: 20px;">
+          <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #1F776E;">SCHEDULED MAINTENANCE · UPCOMING</p>
+          <div style="border: 1px dashed #C9C7BA; padding: 18px;">
+            <p style="margin: 0 0 6px; display: flex; gap: 10px; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;"><span>&#9633;</span> Signing-key rotation</p>
+            <p style="margin: 0 0 8px; font-family: var(--font-mono); font-size: 11px; color: #46514B;">2026-08-24 · 01:00–01:20 UTC</p>
+            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #141A16;">URLs issued before the window stop working. Reissue after 01:20 UTC.</p>
+          </div>
+        </div>
+
+        <div style="--rm: #5F6B64; border: 1px solid #2E3830; background: #F5F4ED; color: #141A16; padding: 20px;">
+          <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #1F776E;">STATUS FEED UNREACHABLE</p>
+          <div style="border: 1px solid #141A16; border-left-width: 4px; padding: 18px;">
+            <p style="margin: 0 0 6px; display: flex; gap: 10px; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;"><span>&#9650;</span> Cannot load current status</p>
+            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #46514B;">This page could not reach the status feed, which is hosted separately from the API. The service itself may be fine. Last known state was <strong style="font-weight: 700; color: #141A16;">operational at 13:58 UTC</strong>.</p>
+          </div>
+          <p style="margin: 12px 0 0; font-size: 14px; line-height: 1.6; color: #46514B;">The status page never claims health it cannot verify.</p>
+        </div>
+
+        <div style="--rm: #5F6B64; border: 1px solid #2E3830; background: #F5F4ED; color: #141A16; padding: 20px;">
+          <p style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: #1F776E;">SUBSCRIBE · EMAIL SUBMITTED</p>
+          <div style="border: 1px solid #D8D5C8; padding: 18px; display: flex; flex-direction: column; gap: 12px;">
+            <label style="display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #46514B;">Email</span>
+              <input type="email" value="ops@example.com" style="height: 44px; border: 1px solid #C9C7BA; background: #F5F4ED; padding: 0 12px; font-family: var(--font-mono); font-size: 14px; color: #141A16;">
+            </label>
+            <div style="border: 1px solid #1F776E; border-left-width: 4px; padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start;">
+              <span style="font-family: var(--font-mono); color: #1F776E;">&#9632;</span>
+              <p style="margin: 0; font-size: 14px; line-height: 1.6;">Check <code style="font-family: var(--font-mono); font-size: 13px;">ops@example.com</code> and confirm. You will get incident open, update and resolve notices — nothing else.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">/status · mobile 390 × 844</p>
+    <div data-screen-label="Status mobile" style="--rm: #5F6B64; width: 390px; height: 844px; background: #F5F4ED; color: #141A16; border: 1px solid #2E3830; display: flex; flex-direction: column; overflow: hidden;">
+      <div style="padding: 12px 16px; border-bottom: 1px solid #D8D5C8; display: flex; align-items: center; gap: 10px; flex: none;">
+        <svg width="20" height="20" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="21" width="21" height="7" fill="#8E9A92"></rect><rect x="8" y="9" width="21" height="7" fill="#1F776E"></rect></svg>
+        <span style="font-size: 17px; font-weight: 500;">Relay</span>
+        <span style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rm);">status</span>
+        <a href="/status.json" style="margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #C9C7BA; padding: 0 10px; height: 36px; display: inline-flex; align-items: center; color: #141A16;">JSON</a>
+      </div>
+      <div style="padding: 20px 16px; display: flex; flex-direction: column; gap: 20px; overflow: hidden;">
+        <div style="border: 1px solid #141A16; border-left-width: 4px; background: #EFEDE2; padding: 20px;">
+          <p style="margin: 0 0 8px; display: flex; gap: 12px; align-items: center; font-size: 22px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.2;"><span style="font-family: var(--font-mono); color: #1F776E;">&#9632;</span> All systems operational</p>
+          <p style="margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: #46514B;">CHECKED 14:02 UTC</p>
+        </div>
+        <div style="border: 1px solid #D8D5C8; display: flex; flex-direction: column;">
+          <div style="padding: 16px; border-bottom: 1px solid #D8D5C8; display: flex; flex-direction: column; gap: 10px;">
+            <span style="display: flex; align-items: center; gap: 10px;"><span style="font-family: var(--font-mono); font-size: 12px; color: #1F776E;">&#9632;</span><span style="font-size: 16px; font-weight: 700;">API</span><span style="margin-left: auto; font-family: var(--font-mono); font-size: 12px;">100%</span></span>
+            <span style="display: flex; gap: 1px; height: 24px;"><sc-for list="{{ bars30 }}" as="b" hint-placeholder-count="30"><span style="flex: 1; background: #1F776E;"></span></sc-for></span>
+          </div>
+          <div style="padding: 16px; border-bottom: 1px solid #D8D5C8; display: flex; flex-direction: column; gap: 10px;">
+            <span style="display: flex; align-items: center; gap: 10px;"><span style="font-family: var(--font-mono); font-size: 12px; color: #1F776E;">&#9632;</span><span style="font-size: 16px; font-weight: 700;">Signing</span><span style="margin-left: auto; font-family: var(--font-mono); font-size: 12px;">100%</span></span>
+            <span style="display: flex; gap: 1px; height: 24px;"><sc-for list="{{ bars30 }}" as="b" hint-placeholder-count="30"><span style="flex: 1; background: #1F776E;"></span></sc-for></span>
+          </div>
+          <div style="padding: 16px; border-bottom: 1px solid #D8D5C8; display: flex; flex-direction: column; gap: 10px;">
+            <span style="display: flex; align-items: center; gap: 10px;"><span style="font-family: var(--font-mono); font-size: 12px; color: #1F776E;">&#9632;</span><span style="font-size: 16px; font-weight: 700;">Job workers</span><span style="margin-left: auto; font-family: var(--font-mono); font-size: 12px;">99.81%</span></span>
+            <span style="display: flex; gap: 1px; align-items: flex-end; height: 24px;"><sc-for list="{{ bars30mixed }}" as="b" hint-placeholder-count="30"><span style="{{ b.style }}"></span></sc-for></span>
+          </div>
+          <div style="padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+            <span style="display: flex; align-items: center; gap: 10px;"><span style="font-family: var(--font-mono); font-size: 12px; color: #1F776E;">&#9632;</span><span style="font-size: 16px; font-weight: 700;">Dashboard</span><span style="margin-left: auto; font-family: var(--font-mono); font-size: 12px;">100%</span></span>
+            <span style="display: flex; gap: 1px; height: 24px;"><sc-for list="{{ bars30 }}" as="b" hint-placeholder-count="30"><span style="flex: 1; background: #1F776E;"></span></sc-for></span>
+          </div>
+        </div>
+        <a href="/status/subscribe" style="background: #141A16; color: #F5F4ED; height: 48px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;">Subscribe to updates</a>
+        <p style="margin: 0; font-family: var(--font-mono); font-size: 10px; line-height: 1.8; letter-spacing: 0.06em; color: var(--rm);">LAST 30 DAYS ON MOBILE · 45 ON DESKTOP. RELAY REPORTS ONLY WHAT RELAY OPERATES.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    // degraded days render shorter (a visible notch); outage days render hollow
+    const ok = { flex: 1, height: '32px', background: '#1F776E' };
+    const okS = { flex: 1, height: '24px', background: '#1F776E' };
+    const deg = { flex: 1, height: '18px', background: '#8E9A92' };
+    const degS = { flex: 1, height: '13px', background: '#8E9A92' };
+    const out = { flex: 1, height: '32px', background: '#F5F4ED', border: '1px solid #141A16' };
+    const outS = { flex: 1, height: '24px', background: '#F5F4ED', border: '1px solid #141A16' };
+    const mixed = (n, o, d, u) => Array.from({ length: n }, (_, i) => {
+      const day = n - 1 - i;
+      return { style: day === 15 ? u : (day === 14 || day === 16 ? d : o) };
+    });
+    const plain = (n, s) => Array.from({ length: n }, () => ({ style: s }));
+    return {
+      bars45: plain(45, ok),
+      bars30: plain(30, okS),
+      bars45mixed: mixed(45, ok, deg, out),
+      bars30mixed: mixed(30, okS, degS, outS)
+    };
+  }
+}
+</script>
+</body>
+</html>

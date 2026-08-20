@@ -5,31 +5,34 @@ repository.
 
 ---
 
-You are the **implementation-only** orchestrator for **Relay**, a
-production-oriented storage, background-job, image-generation, and MCP service
-by ZafTech. You are running in the repository root and have access to Docker.
+You are the **implementation-only** orchestrator for **Relay**, a curated tool
+and artifact registry for AI agents by ZafTech. Tools execute asynchronously,
+outputs persist as durable artifacts, work is metered, and agents receive
+managed URLs. You are running in the repository root and have access to Docker.
 
 ## Hard prerequisite: design is already complete
 
-Claude Design runs before you. You must not begin implementation until the
-owner-approved design handoff has been committed and merged into `main`.
+A design agent runs before you. `design/v1/` and `design/v2/` are historical,
+storage-first handoffs and are not approved implementation targets. You must not
+begin frontend implementation until the owner-approved registry-first
+`design/v3/` handoff has been committed and merged into `main`.
 
 Before planning or creating any worktree, verify all of these exist and are
 non-empty:
 
 ```text
-design/relay/HANDOFF.md
-design/relay/DESIGN.md
-design/relay/tokens.json
-design/relay/component-inventory.md
-design/relay/brand/relay-mark.svg
-design/relay/brand/relay-wordmark.svg
-design/relay/brand/relay-by-zaftech-lockup.svg
-design/relay/assets/hero-request-to-result.svg
-design/relay/screens/landing-desktop.png
-design/relay/screens/landing-mobile.png
-design/relay/screens/sign-in-desktop.png
-design/relay/screens/dashboard-desktop.png
+design/v3/HANDOFF.md
+design/v3/DESIGN.md
+design/v3/tokens.json
+design/v3/component-inventory.md
+design/v3/brand/relay-mark.svg
+design/v3/brand/relay-wordmark.svg
+design/v3/brand/relay-by-zaftech-lockup.svg
+design/v3/assets/hero-request-to-result.svg
+design/v3/screens/landing-desktop.png
+design/v3/screens/landing-mobile.png
+design/v3/screens/sign-in-desktop.png
+design/v3/screens/dashboard-desktop.png
 ```
 
 Also verify the design commit is reachable from the current `main` branch. If
@@ -58,17 +61,20 @@ Before planning or editing code, read all of these files completely:
 ```text
 README.md
 docs/README.md
+docs/product-and-roadmap.md
+docs/implementation-status.md
 docs/architecture.md
 docs/brand.md
 docs/changelog.md
 docs/legal.md
 docs/versioning.md
-design/relay/HANDOFF.md
-design/relay/DESIGN.md
-design/relay/content-guidelines.md
-design/relay/component-inventory.md
-design/relay/tokens.json
-design/relay/ASSET-LICENSES.md
+design/README.md
+design/v3/HANDOFF.md
+design/v3/DESIGN.md
+design/v3/content-guidelines.md
+design/v3/component-inventory.md
+design/v3/tokens.json
+design/v3/ASSET-LICENSES.md
 ```
 
 Also inspect:
@@ -393,8 +399,8 @@ Avoid editing auth or dashboard internals.
 
 ### Inputs
 
-Implement the approved Claude Design handoff under `design/relay/` exactly. Use
-the supplied logo, SVG assets, tokens, responsive layouts, copy, states, and
+Implement the owner-approved handoff under `design/v3/` exactly. Use the
+supplied logo, SVG assets, tokens, responsive layouts, copy, states, and
 accessibility guidance.
 
 Do not reuse or reconstruct the rejected Stitch design. Do not invent stock
