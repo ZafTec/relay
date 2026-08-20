@@ -4,25 +4,24 @@ Status: living implementation gate register
 
 ## P0 blockers before implementation waves
 
-### Commit and approve v3
+### Resolve v3 production facts
 
 Current state:
 
-- `design/v3/` is untracked.
-- Its handoff lives at `design/v3/design/relay/HANDOFF.md`.
-- The handoff explicitly says owner sign-off is pending.
-- Current implementation prompts expect a different v3 path.
+- `design/v3/` is normalized and tracked at `1eb7a3d`.
+- `design/v3/IMPLEMENTATION-MANIFEST.md` is the authoritative index.
+- The owner authorized v3 as the current implementation reference.
 
-Required:
+Still required before affected production UI/contracts:
 
-- Preserve and commit the raw package before creating any v3/web worktree;
-  untracked files are not shared across Git worktrees.
-- Record owner approval and exact commit.
-- Add `design/v3/IMPLEMENTATION-MANIFEST.md` as the authoritative index while
-  preserving the nested handoff at `design/v3/design/relay/`.
+- Resolve fixture providers, prices, route/tool names, and fallback policy.
+- Supply real generated-image and OAuth-mark assets before public launch.
+- Re-export current screens or establish browser snapshots as the review
+  baseline.
 - Keep raw canvas/runtime files immutable as provenance.
 
-Backend Wave 0 research can proceed independently. Production UI cannot.
+Web foundation and unaffected routes may proceed; fixture-dependent product
+claims and provider-specific flows remain blocked.
 
 ### Fix or isolate the backend Dockerfile
 

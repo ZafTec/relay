@@ -256,8 +256,10 @@ high-cardinality BullMQ fields.
 
 ## v3 design findings
 
-`design/v3/` currently contains 78 untracked files and approximately 2.9 MB. Its
-actual handoff lives under `design/v3/design/relay/`, not directly under v3.
+The owner-supplied v3 package was normalized and committed at `1eb7a3d`. Its
+handoff, accessibility contract, tokens, assets, brand, and screens now live
+directly under `design/v3/`; raw canvases/runtime/provenance remain alongside
+them.
 
 Strengths:
 
@@ -271,12 +273,12 @@ Strengths:
 
 Implementation blockers or corrections:
 
-- v3 handoff explicitly says owner sign-off is pending.
+- The owner authorized v3 as the current implementation reference, while its
+  manifest keeps fixture and product-contract exceptions explicit.
 - New/changed canvases lack current PNG exports; existing exports are stale.
 - Provider/model names, prices, balances, rates, and latencies are fixtures.
 - Generated-output image slots contain no real images.
 - Official Google/GitHub marks are missing.
-- Nested handoff path conflicts with the current implementation prompt.
 - Raw canvases contain thousands of inline styles and inert controls.
 - Canvas runtime fetches editor/runtime dependencies and must not ship.
 - `component-inventory.md` and some copied canvases retain

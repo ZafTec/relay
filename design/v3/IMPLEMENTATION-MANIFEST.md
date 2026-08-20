@@ -2,7 +2,7 @@
 
 Status: owner-authorized repository snapshot and current implementation
 reference\
-Snapshot commit: recorded in the follow-up repository-status commit\
+Snapshot commit: `1eb7a3d` (`Add Relay v3 design handoff`)\
 Product authority:
 [`../../docs/product-and-roadmap.md`](../../docs/product-and-roadmap.md)\
 Engineering handoff:

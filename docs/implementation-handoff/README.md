@@ -2,7 +2,7 @@
 
 Status: implementation plan only; no production implementation is included\
 Research date: 2026-08-20\
-Repository baseline: `d4c574b` plus an untracked `design/v3/` handoff\
+Design baseline: `1eb7a3d` (`design/v3/` normalized and tracked)\
 Audience: implementation orchestrator and independent worktree agents
 
 ## Purpose
@@ -24,10 +24,9 @@ When sources disagree, use this order:
    invariants.
 2. This implementation handoff for implementation order and researched technical
    decisions.
-3. [`../../design/v3/design/relay/HANDOFF.md`](../../design/v3/design/relay/HANDOFF.md)
-   and
-   [`../../design/v3/design/relay/ACCESSIBILITY.md`](../../design/v3/design/relay/ACCESSIBILITY.md)
-   for visual and interaction intent.
+3. [`../../design/v3/HANDOFF.md`](../../design/v3/HANDOFF.md) and
+   [`../../design/v3/ACCESSIBILITY.md`](../../design/v3/ACCESSIBILITY.md) for
+   visual and interaction intent.
 4. Specialized Relay documents such as [`../changelog.md`](../changelog.md),
    [`../legal.md`](../legal.md), and [`../versioning.md`](../versioning.md).
 5. Historical design versions `design/v1/` and `design/v2/` for provenance only.
@@ -91,10 +90,11 @@ Known blockers:
 - `Dockerfile` is syntactically invalid around `deno compile`.
 - `/health/ready` performs no dependency checks.
 - Repository-wide `deno fmt --check` includes raw design exports.
-- `design/v3/` is untracked and its handoff still says owner sign-off is
-  pending.
-- v3 source is nested under `design/v3/design/relay/`, while older
-  implementation prompts expect files directly under `design/v3/`.
+- `design/v3/` is tracked at `1eb7a3d`, normalized to the same root layout as
+  v1/v2, and owner-authorized as the current implementation reference.
+- Fixture providers/prices, route names, current exports, missing
+  generated-image assets, and other manifest exceptions remain unresolved
+  production facts.
 
 ## Handoff files
 
@@ -117,8 +117,9 @@ Known blockers:
 ## How an implementation agent should work
 
 1. Start from a clean, current `main`.
-2. Never modify or stage unrelated user work. In particular, preserve the raw
-   untracked v3 package until the owner explicitly commits or approves it.
+2. Never modify or stage unrelated user work. Preserve raw v3 canvas/runtime
+   files as provenance and implement only through reviewed copies under
+   `apps/web`.
 3. Complete Wave 0 spikes before selecting versions or adding permanent package
    dependencies.
 4. Give one worktree ownership of shared contracts and migrations. Parallel

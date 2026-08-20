@@ -1,6 +1,7 @@
 # Relay — design handoff (v0.2.0, registry pivot)
 
-Repository snapshot: `design/v3/`
+Repository snapshot: `design/v3/`\
+Snapshot commit: `1eb7a3d`
 
 Supersedes the storage-first design direction while retaining the Ledger
 identity. This pass changes information architecture, screens, and copy—not the

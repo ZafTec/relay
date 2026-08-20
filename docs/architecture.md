@@ -55,6 +55,7 @@ src/main.ts           API/worker process dispatcher
 docs/                 Product and engineering decisions
 design/v1/            Initial historical Ledger handoff
 design/v2/            Expanded historical handoff and source bundle
+design/v3/            Current registry-first implementation reference
 ```
 
 Expected additions are described by milestone in the canonical document. The web

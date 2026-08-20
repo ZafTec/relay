@@ -83,14 +83,13 @@ then rebase after the owner merges the canonical manifest.
 Every lane uses a dedicated branch/worktree. Suggested names are illustrative;
 an orchestrator may use equivalent names while keeping write scopes disjoint.
 
-## Owner pre-step — preserve and approve v3
+## Owner pre-step — v3 baseline recorded
 
-Before any design/web worktree is created, commit the raw `design/v3/` snapshot,
-record its exact commit and owner approval, and add a precedence/route/state/
-viewport manifest at `design/v3/IMPLEMENTATION-MANIFEST.md`. It lists source
-precedence, routes, states, viewports, fixtures, missing assets, approved
-exceptions, owner, and commit. Untracked files do not appear in other Git
-worktrees. Backend spikes may proceed while this pre-step is pending.
+Completed by `1eb7a3d`: the raw `design/v3/` snapshot is committed and
+normalized, and `design/v3/IMPLEMENTATION-MANIFEST.md` records precedence,
+routes, states, viewports, fixtures, missing assets, exceptions, and owner
+authorization. Web worktrees use this exact commit or a later explicitly
+approved amendment.
 
 ## Wave 0 — compatibility and contract spikes
 

@@ -2,7 +2,7 @@
 
 Status: repository audit\
 Verified: 2026-08-20\
-Baseline revision: `d4c574b` plus the owner's untracked `design/v3/` package
+Design baseline: `1eb7a3d` (`design/v3/` normalized and tracked)
 
 ## Summary
 
@@ -65,7 +65,7 @@ existing API tests pass.
 | GitHub OAuth                   | Missing     | Configuration is not used by runtime                                               | Add email-scope handling and callback tests.                                                         |
 | Workspace tenancy              | Missing     | No organizations, membership, roles, or query scoping                              | Use owner/admin/member and keep superadmin separate.                                                 |
 | MCP server                     | Missing     | No MCP SDK, `/mcp`, discovery routes, or tools                                     | Use official SDK and Better Auth OAuth Provider, not the deprecated MCP plugin.                      |
-| Dashboard and landing          | Blocked     | No `apps/web` exists                                                               | Wait for a revised, owner-approved design aligned with the tool/artifact registry.                   |
+| Dashboard and landing          | Missing     | V3 design is tracked; no `apps/web` exists                                         | Implement from v3 while respecting manifest exceptions and the engineering handoff.                  |
 | SSE live updates               | Missing     | No event route or fan-out                                                          | Implement durable fetch plus workspace-scoped SSE reconnect/resync.                                  |
 | OpenTelemetry                  | Missing     | No SDK initialization or exporter configuration                                    | Add API/worker resources, trace propagation, metrics, and redaction.                                 |
 | Audit log                      | Missing     | No durable audit model or service                                                  | Required for admin, keys, roles, share links, tools, entitlements, and changelog.                    |
@@ -177,16 +177,15 @@ Two historical visual handoffs are tracked as versioned snapshots:
 - `design/v1/` is the initial Ledger handoff.
 - `design/v2/` is the expanded storage-first package.
 
-A newer untracked `design/v3/` package pivots to Tools, Runs, Artifacts,
-metering, provider administration, and managed sharing. Its embedded handoff
-still marks owner sign-off, current exports, real provider fixtures, and several
-contracts as unresolved. See [`../design/README.md`](../design/README.md) for
-the tracked history and
-[`implementation-handoff/08-web-v3.md`](implementation-handoff/08-web-v3.md) for
-the current implementation assessment.
+The normalized `design/v3/` package, committed at `1eb7a3d`, pivots to Tools,
+Runs, Artifacts, metering, provider administration, and managed sharing. The
+owner authorized it as the current implementation reference. Current exports,
+real provider fixtures, route/tool names, and several production facts remain
+explicit exceptions in its manifest. See
+[`../design/README.md`](../design/README.md) and
+[`implementation-handoff/08-web-v3.md`](implementation-handoff/08-web-v3.md).
 
-V1/v2 lack the current golden path; v3 represents it but is not yet a committed,
-approved implementation baseline:
+V1/v2 lack the current golden path; v3 represents it:
 
 ```text
 browse tool
@@ -199,10 +198,10 @@ browse tool
   -> create managed share link
 ```
 
-Frontend implementation remains blocked until v3 is preserved in Git, its
-precedence and open contracts are resolved, and the owner records approval of an
-exact commit. The raw canvas/runtime files remain provenance rather than
-production source.
+Shared frontend foundation and unaffected routes may start from v3. Production
+copy/contracts that depend on fixture providers, pricing, public route names, or
+missing assets remain blocked. Raw canvas/runtime files are provenance rather
+than production source.
 
 ## Decisions required before implementation workstreams fan out
 

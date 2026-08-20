@@ -28,11 +28,11 @@ state reference, not an approved implementation target for the current product.
 
 ### `v3`
 
-The registry-first Ledger handoff. It adds Tools, Runs, Artifacts, metering,
-provider administration, managed sharing, accessibility requirements, and ten
-raw `.dc.html` source canvases. The package is normalized at `design/v3/` with
-its handoff, tokens, assets, brand files, screens, source runtime, and
-provenance files at one predictable root.
+The registry-first Ledger handoff, committed in `1eb7a3d`. It adds Tools, Runs,
+Artifacts, metering, provider administration, managed sharing, accessibility
+requirements, and ten raw `.dc.html` source canvases. The package is normalized
+at `design/v3/` with its handoff, tokens, assets, brand files, screens, source
+runtime, and provenance files at one predictable root.
 
 Read [`v3/IMPLEMENTATION-MANIFEST.md`](v3/IMPLEMENTATION-MANIFEST.md) for source
 precedence and implementation status. The owner authorized preserving and

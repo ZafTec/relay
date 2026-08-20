@@ -4,8 +4,8 @@ Phase: Wave 2C foundation and Wave 4 route groups\
 Primary owner: web foundation worktree, then route-specific worktrees\
 Depends on: committed/approved v3 for Wave 2C; auth/API/SSE contracts for later
 route integration\
-Current status: design reference exists but is untracked and internally marks
-owner sign-off pending
+Current status: normalized and committed at `1eb7a3d`; owner-authorized as the
+current implementation reference with explicit unresolved fixture/product facts
 
 ## Objective
 
@@ -19,25 +19,24 @@ Actual current locations:
 
 ```text
 design/v3/*.dc.html                      raw canvas sources
-design/v3/design/relay/HANDOFF.md        pivot handoff
-design/v3/design/relay/ACCESSIBILITY.md  accessibility contract
-design/v3/design/relay/DESIGN.md         design system
-design/v3/design/relay/tokens.json       token values
-design/v3/design/relay/brand/            logo and icons
-design/v3/design/relay/assets/           diagrams
-design/v3/design/relay/screens/          mostly stale review exports
+design/v3/HANDOFF.md                     pivot handoff
+design/v3/IMPLEMENTATION-MANIFEST.md      source precedence and exceptions
+design/v3/ACCESSIBILITY.md               accessibility contract
+design/v3/DESIGN.md                      design system
+design/v3/tokens.json                    token values
+design/v3/brand/                         logo and icons
+design/v3/assets/                        diagrams
+design/v3/screens/                       mostly stale review exports
 ```
 
 Before UI implementation:
 
-1. Commit v3 as a preserved versioned snapshot.
-2. Record owner sign-off and exact commit.
-3. Add `design/v3/IMPLEMENTATION-MANIFEST.md` containing source precedence,
-   routes, states, viewports, fixtures, missing assets, approved exceptions,
-   owner, and exact commit.
-4. Resolve product assumptions listed below.
-5. Re-export current canvases or explicitly approve `.dc.html` as temporary
-   visual source while browser snapshots become the implementation baseline.
+1. Verify v3 commit `1eb7a3d` and its implementation manifest are reachable from
+   the worktree baseline.
+2. Resolve product assumptions listed below before affected production copy or
+   contracts are implemented.
+3. Re-export current canvases or explicitly use `.dc.html` as temporary visual
+   source while browser snapshots become the implementation baseline.
 
 Do not flatten or reformat the raw design package in place. Copy approved assets
 and derive production tokens/components under `apps/web`.

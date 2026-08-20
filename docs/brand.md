@@ -1,7 +1,7 @@
 # Relay brand direction
 
-Status: approved product name and voice; Ledger identity is a reusable
-foundation pending registry-first design revision\
+Status: approved product name and voice; Ledger v3 is the current registry-first
+implementation reference with documented fixture exceptions\
 Parent brand: ZafTech\
 Domain: `relay.zaftech.co`
 

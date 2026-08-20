@@ -8,14 +8,14 @@ this order.
 - `design/v1/` is the initial Ledger handoff.
 - `design/v2/` is the expanded storage-first handoff and includes its source
   canvases.
-- Neither version is approved for implementing the current registry-first
-  product.
+- `design/v3/` is the normalized registry-first implementation reference,
+  committed at `1eb7a3d`; its manifest lists unresolved production facts.
 
 See [`../../design/README.md`](../../design/README.md) for version status.
 
-## 1. Design revision
+## 1. Design amendments
 
-The next design agent must read:
+Any design agent changing v3 must read:
 
 ```text
 docs/product-and-roadmap.md
@@ -23,22 +23,20 @@ docs/brand.md
 docs/legal.md
 docs/versioning.md
 design/README.md
-design/v2/DESIGN-AGENT-SUGGESTIONS.md
+design/v3/IMPLEMENTATION-MANIFEST.md
+design/v3/HANDOFF.md
+design/v3/ACCESSIBILITY.md
 ```
 
-It should preserve useful Ledger foundations, resolve the backlog, and write the
-next reviewable handoff under:
-
-```text
-design/v3/
-```
+It should preserve the raw v3 sources, resolve only explicitly assigned open
+items, and record reviewed amendments without replacing historical v1/v2.
 
 [`claude-design.md`](claude-design.md) is the historical prompt that produced
 the earlier design direction. Do not run it unchanged; the canonical product
 document and v2 design-agent backlog supersede its storage-first product brief.
 
-The owner reviews the new handoff, requests revisions, approves an exact commit,
-and merges it into `main`.
+The owner reviews material amendments and records the approved commit/exception
+in the v3 manifest.
 
 ## 2. Codex implementation
 
