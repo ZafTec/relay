@@ -1,6 +1,7 @@
 # Versioning proposal
 
-Status: proposal for discussion; no release policy has been approved yet
+Status: proposal for discussion; no release policy has been approved yet\
+Product model authority: [`product-and-roadmap.md`](product-and-roadmap.md)
 
 Version tracking is separated into independent dimensions. A file version, API
 version, database migration, legal revision, and deployed application release
@@ -8,16 +9,18 @@ must never be treated as the same number.
 
 ## Version dimensions
 
-| Dimension              | Purpose                                                | Proposed representation                                 |
-| ---------------------- | ------------------------------------------------------ | ------------------------------------------------------- |
-| Product release        | Identifies a deployed application build                | Semantic Versioning plus Git revision                   |
-| HTTP API               | Preserves external HTTP contracts                      | Path prefix such as `/api/v1`                           |
-| MCP tool contract      | Preserves tool input/output compatibility              | Stable tool name; suffix only for breaking replacements |
-| Background job payload | Lets new workers process jobs queued by older releases | `input_schema_version` and `handler_version`            |
-| Database schema        | Orders database changes                                | Monotonic migration identifiers                         |
-| Asset version          | Tracks immutable user file revisions                   | Per-asset sequence plus globally unique version ID      |
-| Legal document         | Records exactly what a user accepted                   | Effective version and content hash                      |
-| Entitlement catalog    | Preserves historical plan behavior                     | Catalog or grant version independent of app release     |
+| Dimension              | Purpose                                                       | Proposed representation                                 |
+| ---------------------- | ------------------------------------------------------------- | ------------------------------------------------------- |
+| Product release        | Identifies a deployed application build                       | Semantic Versioning plus Git revision                   |
+| HTTP API               | Preserves external HTTP contracts                             | Path prefix such as `/api/v1`                           |
+| MCP tool contract      | Preserves public tool input/output compatibility              | Stable tool name; suffix only for breaking replacements |
+| Tool publication       | Identifies an immutable registry contract and handler binding | Per-tool version independent of the app release         |
+| Provider/model policy  | Explains model capability, routing, and pricing used by a run | Immutable provider/model and policy snapshots           |
+| Background job payload | Lets new workers process jobs queued by older releases        | `input_schema_version` and `handler_version`            |
+| Database schema        | Orders database changes                                       | Monotonic migration identifiers                         |
+| Artifact version       | Tracks immutable stored input and output revisions            | Per-artifact sequence plus globally unique version ID   |
+| Legal document         | Records exactly what a user accepted                          | Effective version and content hash                      |
+| Entitlement catalog    | Preserves historical plan behavior                            | Catalog or grant version independent of app release     |
 
 ## Proposed product SemVer policy
 
@@ -44,9 +47,9 @@ Examples:
 
 ```text
 0.1.0  Internal development foundation
-0.2.0  First authenticated upload and download workflow
-0.3.0  First public MCP contract
-0.3.1  Fix incorrect presigned URL expiration
+0.2.0  Authenticated landing and dashboard slice
+0.3.0  First registry, run, artifact, and MCP vertical slice
+0.3.1  Fix incorrect managed-URL expiration
 ```
 
 An alternative is to use patch releases for every backward-compatible feature
@@ -60,7 +63,8 @@ Do not tie `1.0.0` merely to deployment. Promote to 1.0 when:
 - The production data model and migration process are proven
 - The core MCP tools are documented and considered stable
 - Authentication and workspace authorization are production-ready
-- Upload, download, jobs, image generation, and usage accounting are operational
+- Tool discovery, asynchronous runs, durable artifacts, managed delivery, image
+  generation, and usage accounting are operational
 - Backup and restore procedures have been tested
 - Legal documents and product addendum are approved
 - Monitoring, alerting, and operational runbooks exist
@@ -119,9 +123,9 @@ OCI/Docker tags should include both a readable release and an immutable
 revision:
 
 ```text
-zaftech/<project>:0.3.1
-zaftech/<project>:git-8f91d2c
-zaftech/<project>:latest
+zaftech/relay:0.3.1
+zaftech/relay:git-8f91d2c
+zaftech/relay:latest
 ```
 
 Production Compose should preferably pin `0.3.1` or `git-8f91d2c`. `latest` can
@@ -183,8 +187,8 @@ For an unavoidable breaking change, publish a replacement tool while retaining
 the original temporarily:
 
 ```text
-files.create_upload
-files.create_upload_v2
+image.generate
+image.generate_v2
 ```
 
 The version suffix is a last resort, not a default naming convention.
@@ -208,16 +212,17 @@ Workers should either:
 A deployment must not strand queued jobs merely because the current application
 release changed.
 
-## Asset versioning
+## Artifact versioning
 
-Asset versions are immutable domain records and do not use SemVer.
+Artifact versions are immutable domain records and do not use SemVer.
 
 Use:
 
-- A globally unique `asset_version_id`
-- A per-asset monotonic sequence
+- A globally unique `artifact_version_id`
+- A per-artifact monotonic sequence
 - An immutable object key
 - Optional `parent_version_id`
+- Source run and output-set provenance
 - Optimistic concurrency against the current version
 
 S3-native version IDs may be recorded but are not the application versioning

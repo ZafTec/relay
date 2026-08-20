@@ -1,7 +1,17 @@
 # Documentation
 
-- [`architecture.md`](architecture.md): agreed architecture, boundaries,
-  workflows, security, deployment, and future considerations
+## Start here
+
+- [`product-and-roadmap.md`](product-and-roadmap.md): canonical product model,
+  architecture, contracts, security boundaries, milestones, and approved future
+  direction
+- [`implementation-status.md`](implementation-status.md): evidence-based matrix
+  of what is implemented, scaffolded, documented, missing, or blocked
+- [`architecture.md`](architecture.md): short architecture index and stable
+  technology decisions; detailed authority lives in the canonical document
+
+## Supporting decisions
+
 - [`brand.md`](brand.md): Relay naming, positioning, voice, visual direction,
   and imagery guidance
 - [`changelog.md`](changelog.md): Git-assisted, superadmin-published changelog
@@ -10,11 +20,14 @@
   changes required before launch
 - [`versioning.md`](versioning.md): independent version dimensions and proposed
   SemVer policy; currently awaiting approval
+
+## Agent handoffs
+
 - [`agent-prompts/README.md`](agent-prompts/README.md): mandatory agent
   execution order and handoff gates
-- [`agent-prompts/claude-design.md`](agent-prompts/claude-design.md): first-step
-  Claude Design prompt for a new Relay identity, logo, custom assets, and
-  approved product-design handoff
+- [`agent-prompts/claude-design.md`](agent-prompts/claude-design.md):
+  design-agent prompt for Relay identity, assets, and product-design handoff; it
+  must be reconciled with the canonical product document before reuse
 - [`agent-prompts/codex-implementation.md`](agent-prompts/codex-implementation.md):
-  second-step implementation-only worktree orchestration prompt for building and
-  testing the approved design and product
+  implementation-only worktree orchestration prompt; frontend work remains
+  blocked until an approved current design handoff exists

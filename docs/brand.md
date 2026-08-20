@@ -1,6 +1,7 @@
 # Relay brand direction
 
-Status: approved product name; voice and visual direction open for refinement\
+Status: approved product name and voice; Ledger identity is a reusable
+foundation pending registry-first design revision\
 Parent brand: ZafTech\
 Domain: `relay.zaftech.co`
 
@@ -10,10 +11,10 @@ Domain: `relay.zaftech.co`
 
 The name works across the full product rather than only one MVP feature:
 
-- Files move from clients to durable storage.
-- Jobs move from queued to completed.
-- Generated assets move back through signed URLs.
-- Status moves live to the dashboard.
+- Agent requests move through a curated tool contract.
+- Runs move from accepted to completed with durable status.
+- Provider outputs move into Relay-owned artifact records.
+- Managed URLs relay those artifacts to people and systems.
 - Future streaming remains consistent with the name.
 
 Use the lockup **Relay by ZafTech** when parent-company trust matters. Use
@@ -21,33 +22,39 @@ Use the lockup **Relay by ZafTech** when parent-company trust matters. Use
 
 ## Positioning
 
-Relay is production infrastructure for MCP clients and engineering teams that
-need somewhere durable to put files and long-running work.
+Relay is production infrastructure for AI agents and engineering teams that need
+a curated set of long-running tools, durable outputs, managed delivery, and
+usage they can explain.
 
-It is not positioned as:
+Image generation is the first tool family, not the limit of the product. Storage
+is the durable substrate for inputs and artifacts rather than the primary user
+experience.
+
+Relay is not positioned as:
 
 - A consumer cloud drive
 - A general file-sharing app
 - A workflow automation canvas
-- An AI image generator with storage attached
+- A thin proxy over one image provider
+- A marketplace for unreviewed executable code
 - A generic developer platform claiming to replace every service
 
 ## Core message
 
 Recommended lead:
 
-> Files in. Work underway. URLs out.
+> Call the tool. Track the work. Share the result.
 
 Supporting statement:
 
-> Relay gives MCP clients durable object storage, observable background jobs,
-> and signed delivery URLs—without routing file bytes through your application.
+> Relay gives AI agents curated asynchronous tools, stores every output as a
+> durable artifact, meters each run, and returns managed URLs.
 
 Alternative short lines:
 
-- Durable storage for work that does not finish in one request.
-- Store the file. Run the work. Return the result.
-- Storage and background work, exposed cleanly to MCP.
+- Tools agents can call. Artifacts teams can trust.
+- Long-running tools. Durable outputs. Managed delivery.
+- Agent work that survives the request.
 
 ## Voice sampled from ZafTech
 
@@ -114,12 +121,13 @@ site.
 Relay's visual motif is **movement through durable stages**:
 
 ```text
-input -> stored object -> immutable versions -> queued work -> result -> signed URL
+agent -> tool registry -> asynchronous run -> output set -> artifact -> managed URL
 ```
 
-Use horizontal connector lines, node states, version stacks, and precise
-operational labels. Avoid cloud illustrations, floating 3D shapes, glass cards,
-and decorative gradients.
+Use horizontal connector lines, node states, version stacks, artifact previews,
+and precise operational labels. The visual system should make the registry,
+provider boundary, metering checkpoint, and one-to-many outputs legible. Avoid
+cloud illustrations, floating 3D shapes, glass cards, and decorative gradients.
 
 ## Product mark brief
 
@@ -138,8 +146,9 @@ Requirements:
 - Has a square view box
 - Avoids similarity to generic sync, share, or play icons
 
-The mark remains a design concept until a generated option is reviewed and
-approved.
+The Ledger mark is the current approved identity foundation. A registry-first
+design revision may refine its application and supporting icon language, but
+must not silently replace the mark without owner approval.
 
 ## Imagery guidance
 
@@ -151,11 +160,12 @@ Preferred assets:
 1. Custom SVG operational diagram for the hero
 2. Custom thin-line feature icons
 3. Real dashboard screenshots once `/dashboard` exists
-4. Real generated-image examples once the provider flow exists
+4. Representative generated-image examples from approved Relay providers
 5. Real architecture or status captures for documentation
 
-Generated illustrative imagery is optional for demonstrating image-generation
-output, but it should not become the primary brand device.
+Generated-image examples are required to explain the initial product family, but
+they should demonstrate tools and artifacts rather than become decorative stock
+imagery or the sole brand device.
 
 The user does not need to source stock imagery for the first landing design.
 Later, provide real product captures rather than stock whenever possible.
@@ -177,17 +187,18 @@ authenticated application shell.
 ## Landing-page content structure
 
 1. Compact Relay by ZafTech header
-2. Direct hero and custom operational SVG
-3. Concrete infrastructure proof strip
-4. Request-to-result workflow
-5. Immutable file versioning
-6. Observable background jobs
-7. MCP tool contract
-8. Provider and deployment compatibility
-9. Entitlements and usage-control preview
-10. Security baseline
-11. Changelog preview
-12. Final CTA and ZafTech legal footer
+2. Direct hero and custom registry-to-artifact SVG
+3. Representative image outputs from more than one curated tool
+4. Tool discovery and typed contract
+5. Estimate, reservation, and asynchronous run workflow
+6. Observable status, attempts, retries, and cancellation
+7. Durable multi-output artifacts and managed share URLs
+8. MCP and HTTP integration proof
+9. Provider, storage, and deployment compatibility
+10. Entitlements, metering, and usage receipts
+11. Security and workspace-isolation baseline
+12. Published changelog preview
+13. Final CTA and ZafTech legal footer
 
 ## Calls to action
 
