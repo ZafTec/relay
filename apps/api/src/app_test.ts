@@ -14,6 +14,10 @@ const config = {
     connectTimeoutMs: 5_000,
     statementTimeoutMs: 30_000,
   },
+  redis: {
+    url: new URL("redis://test:test@localhost:6379"),
+    connectTimeoutMs: 5_000,
+  },
 } as const;
 
 Deno.test("liveness reports build information", async () => {

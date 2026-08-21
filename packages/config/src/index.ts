@@ -7,11 +7,17 @@ export interface DatabaseConfig {
   readonly statementTimeoutMs: number;
 }
 
+export interface RedisConfig {
+  readonly url: URL;
+  readonly connectTimeoutMs: number;
+}
+
 export interface RuntimeConfig {
   readonly appName: string;
   readonly port: number;
   readonly build: BuildInfo;
   readonly database: DatabaseConfig;
+  readonly redis: RedisConfig;
 }
 
 export interface OAuthProviderConfig {
@@ -116,6 +122,39 @@ function readDatabaseConfig(
   };
 }
 
+function readRedisConfig(
+  env: Record<string, string | undefined>,
+): RedisConfig {
+  const value = env.REDIS_URL;
+  if (value === undefined || value.trim() === "") {
+    throw new Error("REDIS_URL is required");
+  }
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("REDIS_URL must be a valid URL");
+  }
+
+  if (url.protocol !== "redis:" && url.protocol !== "rediss:") {
+    throw new Error(
+      `REDIS_URL must use the redis:// or rediss:// scheme; received ${url.protocol}`,
+    );
+  }
+
+  return {
+    url,
+    connectTimeoutMs: readBoundedInt(
+      "REDIS_CONNECT_TIMEOUT_MS",
+      env.REDIS_CONNECT_TIMEOUT_MS,
+      DEFAULT_DATABASE_CONNECT_TIMEOUT_MS,
+      1,
+      120_000,
+    ),
+  };
+}
+
 function readUrl(name: string, value: string | undefined): URL {
   if (value === undefined || value.trim() === "") {
     throw new Error(`${name} is required`);
@@ -198,5 +237,6 @@ export function loadRuntimeConfig(
       revision: env.GIT_SHA?.trim() || "unknown",
     },
     database: readDatabaseConfig(env),
+    redis: readRedisConfig(env),
   };
 }
