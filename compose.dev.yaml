@@ -1,0 +1,76 @@
+# Local development infrastructure only. Credentials here are throwaway
+# defaults for a loopback-bound Compose stack on a developer machine; they
+# are never used in Compose files or environments meant to reach production.
+#
+# Usage: docker compose -f compose.dev.yaml up -d
+#
+# Provides PostgreSQL 18, Redis, and MinIO so `apps/api`/`apps/worker` and
+# their tests run against the same engines and role/schema model documented
+# in docs/implementation-handoff/02-runtime-database.md and
+# docs/implementation-handoff/10-vps-remediation.md, without depending on the
+# shared VPS instances.
+
+services:
+  postgres:
+    image: postgres@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941 # 18.6
+    environment:
+      POSTGRES_DB: relay
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: relay_dev_only
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # PostgreSQL 18's image places data in a version-specific subdirectory
+      # of /var/lib/postgresql; do not mount at .../data directly (see
+      # docs/implementation-handoff/10-vps-remediation.md "PostgreSQL 18
+      # volume safety").
+      - relay_dev_postgres:/var/lib/postgresql
+      - ./scripts/dev/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d relay"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis@sha256:69549d08c5a19b8c28214dea5dfe3b6afa7ac1ad7ea61d66c29a8454b875df40 # 8.2
+    command: >
+      redis-server
+      --requirepass relay_dev_only
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory-policy noeviction
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - relay_dev_redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=relay_dev_only redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e # RELEASE.2025-09-07
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: relay_dev_only
+      MINIO_ROOT_PASSWORD: relay_dev_only
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - relay_dev_minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  relay_dev_postgres:
+  relay_dev_redis:
+  relay_dev_minio:
