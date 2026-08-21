@@ -47,23 +47,23 @@ unmodified and untracked.
 Versions below were current during research. The implementation agent must pin
 exact versions selected by Wave 0 and record any later change.
 
-| Package                  | Researched version                             | Status                                                                                            |
-| ------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Deno                     | `2.9.4`                                        | Existing repository base                                                                          |
-| Better Auth              | `1.7.1`                                        | Import/compile probe reported successful; live PostgreSQL integration still required              |
-| Better Auth CLI (`auth`) | `1.7.1`                                        | CLI help under Deno worked; real config generation remains a spike                                |
-| `@better-auth/mcp`       | `1.7.1`                                        | Selected in [ADR 0001](../adr/0001-mcp-auth-via-better-auth-mcp-plugin.md); compiled-Deno import/conformance remains a Wave 0 spike |
-| `pg`                     | `8.23.0`                                       | Shared Better Auth/Kysely candidate                                                               |
-| Kysely                   | `0.29.5`                                       | Domain query/migration candidate                                                                  |
-| BullMQ                   | `6.1.2` (npm now publishes `6.2.0` as of 2026-08-21) | Import and compiled module smoke passed at `6.1.2`; live Redis/container suite remains mandatory; re-check the newer patch during the Wave 0 spike before pinning |
-| `redis`                  | `6.2.1`                                        | Preferred first BullMQ v6 client-adapter lane                                                     |
-| `ioredis`                | `5.11.1` (npm now publishes `6.0.0` as of 2026-08-21 — a major bump; do not adopt without re-running the compatibility lane) | Parallel compatibility lane and Cluster/Sentinel fallback                                         |
-| `@opentelemetry/api`     | `1.x`                                          | Deno native provider requires API only                                                            |
-| MCP server               | `@modelcontextprotocol/server@2.0.0`           | Current v2 line supports Deno                                                                     |
-| MCP Hono middleware      | `@modelcontextprotocol/hono@2.0.0`             | Optional; avoid mixing incompatible Hono distributions                                            |
-| Zod                      | `4.4.3`                                        | Standard Schema implementation candidate                                                          |
-| AWS S3 client            | `@aws-sdk/client-s3@3.1113.0` at research time | Must pass compiled contract test; version freshness guard blocked a newer release during research |
-| Deno-native S3 fallback  | `jsr:@bradenmacdonald/s3-lite-client@1.0.0`    | Smaller and Deno-native, but less mature                                                          |
+| Package                  | Researched version                                                                                                           | Status                                                                                                                                                            |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deno                     | `2.9.4`                                                                                                                      | Existing repository base                                                                                                                                          |
+| Better Auth              | `1.7.1`                                                                                                                      | Import/compile probe reported successful; live PostgreSQL integration still required                                                                              |
+| Better Auth CLI (`auth`) | `1.7.1`                                                                                                                      | CLI help under Deno worked; real config generation remains a spike                                                                                                |
+| `@better-auth/mcp`       | `1.7.1`                                                                                                                      | Selected in [ADR 0001](../adr/0001-mcp-auth-via-better-auth-mcp-plugin.md); compiled-Deno import/conformance remains a Wave 0 spike                               |
+| `pg`                     | `8.23.0`                                                                                                                     | Shared Better Auth/Kysely candidate                                                                                                                               |
+| Kysely                   | `0.29.5`                                                                                                                     | Domain query/migration candidate                                                                                                                                  |
+| BullMQ                   | `6.1.2` (npm now publishes `6.2.0` as of 2026-08-21)                                                                         | Import and compiled module smoke passed at `6.1.2`; live Redis/container suite remains mandatory; re-check the newer patch during the Wave 0 spike before pinning |
+| `redis`                  | `6.2.1`                                                                                                                      | Preferred first BullMQ v6 client-adapter lane                                                                                                                     |
+| `ioredis`                | `5.11.1` (npm now publishes `6.0.0` as of 2026-08-21 — a major bump; do not adopt without re-running the compatibility lane) | Parallel compatibility lane and Cluster/Sentinel fallback                                                                                                         |
+| `@opentelemetry/api`     | `1.x`                                                                                                                        | Deno native provider requires API only                                                                                                                            |
+| MCP server               | `@modelcontextprotocol/server@2.0.0`                                                                                         | Current v2 line supports Deno                                                                                                                                     |
+| MCP Hono middleware      | `@modelcontextprotocol/hono@2.0.0`                                                                                           | Optional; avoid mixing incompatible Hono distributions                                                                                                            |
+| Zod                      | `4.4.3`                                                                                                                      | Standard Schema implementation candidate                                                                                                                          |
+| AWS S3 client            | `@aws-sdk/client-s3@3.1113.0` at research time                                                                               | Must pass compiled contract test; version freshness guard blocked a newer release during research                                                                 |
+| Deno-native S3 fallback  | `jsr:@bradenmacdonald/s3-lite-client@1.0.0`                                                                                  | Smaller and Deno-native, but less mature                                                                                                                          |
 
 ## Compatibility status
 
@@ -223,20 +223,20 @@ provider. This is not the historical deprecated MCP plugin. `mcp()` supplies
 `/oauth2/register`, and `jwt()` supplies `/jwks`; `requireMcpAuth()` wraps the
 MCP Streamable HTTP handler and verifies signature/issuer/audience/expiry/DPoP
 per request. Adopting the package does not remove any requirement below — it
-changes only which code implements them, and every item still needs
-conformance evidence during Wave 0/Wave 4B, not just import success.
+changes only which code implements them, and every item still needs conformance
+evidence during Wave 0/Wave 4B, not just import success.
 
 Streamable HTTP requirements include:
 
 - `POST /mcp` and the exact behavior required by the pinned protocol
 - Host and present-Origin validation
 - Per-request bearer/DPoP verification (still `Authorization: Bearer`; MCP's
-  stateless JSON-RPC transport has no other per-request credential channel,
-  and every conforming client, including Claude, sends it this way — see ADR
-  0001 for why this is not what "no manually managed tokens" ruled out)
+  stateless JSON-RPC transport has no other per-request credential channel, and
+  every conforming client, including Claude, sends it this way — see ADR 0001
+  for why this is not what "no manually managed tokens" ruled out)
 - Protected-resource metadata (`/.well-known/oauth-protected-resource/mcp`,
-  produced by `mcp()` for the configured `resource`; verify the pinned
-  version actually emits it correctly)
+  produced by `mcp()` for the configured `resource`; verify the pinned version
+  actually emits it correctly)
 - No cookie-only MCP authentication
 - No workspace trust based solely on a tool argument
 - Request-size limits so files never travel inside MCP JSON

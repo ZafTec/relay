@@ -3,6 +3,7 @@ import { loadAuthConfig, loadRuntimeConfig } from "./index.ts";
 
 const validDatabaseEnv = {
   DATABASE_URL: "postgres://user:pass@localhost:5432/relay",
+  REDIS_URL: "redis://:secret@localhost:6379",
 };
 
 const validAuthEnv = {
@@ -53,6 +54,32 @@ Deno.test("loadRuntimeConfig rejects an out-of-range DATABASE_POOL_MAX", () => {
     Error,
     "DATABASE_POOL_MAX",
   );
+});
+
+Deno.test("loadRuntimeConfig requires REDIS_URL", () => {
+  const { REDIS_URL: _drop, ...missing } = validDatabaseEnv;
+  assertThrows(
+    () => loadRuntimeConfig(missing),
+    Error,
+    "REDIS_URL is required",
+  );
+});
+
+Deno.test("loadRuntimeConfig rejects a non-redis REDIS_URL scheme", () => {
+  assertThrows(
+    () =>
+      loadRuntimeConfig({
+        ...validDatabaseEnv,
+        REDIS_URL: "http://localhost:6379",
+      }),
+    Error,
+    "redis://",
+  );
+});
+
+Deno.test("loadRuntimeConfig accepts a valid REDIS_URL", () => {
+  const config = loadRuntimeConfig(validDatabaseEnv);
+  assertEquals(config.redis.url.toString(), validDatabaseEnv.REDIS_URL);
 });
 
 Deno.test("loadAuthConfig requires BETTER_AUTH_SECRET to be at least 32 characters", () => {

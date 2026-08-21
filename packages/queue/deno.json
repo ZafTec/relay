@@ -1,0 +1,6 @@
+{
+  "name": "@relay/queue",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

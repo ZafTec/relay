@@ -231,15 +231,15 @@ when complete.
 ## OAuth resource protection
 
 Per [ADR 0001](../adr/0001-mcp-auth-via-better-auth-mcp-plugin.md), use Better
-Auth's `mcp` convenience package (`@better-auth/mcp`) plus the mandatory
-`jwt()` plugin, superseding the hand-built direct OAuth 2.1 Provider this
-section originally specified. Do not add the historical deprecated MCP
-plugin — `@better-auth/mcp` is a different, current package. `mcp()` supplies
+Auth's `mcp` convenience package (`@better-auth/mcp`) plus the mandatory `jwt()`
+plugin, superseding the hand-built direct OAuth 2.1 Provider this section
+originally specified. Do not add the historical deprecated MCP plugin —
+`@better-auth/mcp` is a different, current package. `mcp()` supplies
 `/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`, and optional
 `/oauth2/register`; `jwt()` supplies `/jwks`; `requireMcpAuth()` wraps the MCP
 Streamable HTTP handler and performs the per-request checks below. Every
-requirement in this section still needs conformance evidence against the
-pinned package version — adopting it is not itself proof it is correct.
+requirement in this section still needs conformance evidence against the pinned
+package version — adopting it is not itself proof it is correct.
 
 Resource:
 
@@ -317,10 +317,9 @@ Prefer:
 The operator command never prints a client secret after its one-time handoff and
 stores only the supported protected form.
 
-`@better-auth/mcp` (ADR 0001) can expose `/oauth2/register`. Confirm during
-Wave 0/4B whether the pinned version's DCR is opt-in or on-by-default, and
-disable or gate it if on-by-default — this policy is unchanged by the plugin
-swap.
+`@better-auth/mcp` (ADR 0001) can expose `/oauth2/register`. Confirm during Wave
+0/4B whether the pinned version's DCR is opt-in or on-by-default, and disable or
+gate it if on-by-default — this policy is unchanged by the plugin swap.
 
 A secure CIMD transport must pin DNS resolution, reject special-use addresses,
 preserve TLS SNI/certificate validation, refuse redirects, and enforce strict

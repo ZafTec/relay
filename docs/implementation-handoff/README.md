@@ -68,8 +68,8 @@ most convenient source.
 
 Status at research time (2026-08-20); superseded by
 [`../implementation-status.md`](../implementation-status.md), which an
-implementation agent updates with observed evidence as work lands -- read
-that file for current state, this section for the starting point.
+implementation agent updates with observed evidence as work lands -- read that
+file for current state, this section for the starting point.
 
 Implemented at research time:
 
