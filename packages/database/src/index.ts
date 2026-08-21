@@ -1,6 +1,8 @@
 export { createDatabasePool } from "./pool.ts";
 export type { DatabasePool, ProcessName } from "./pool.ts";
 
+export { withTransaction } from "./transaction.ts";
+
 export { checkDatabaseHealth } from "./health.ts";
 
 export { migrateStatus, migrateUp } from "./migrator.ts";

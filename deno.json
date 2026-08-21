@@ -2,6 +2,7 @@
   "workspace": [
     "./apps/api",
     "./apps/worker",
+    "./packages/audit",
     "./packages/auth",
     "./packages/config",
     "./packages/contracts",

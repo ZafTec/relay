@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import {
   grantSuperadmin,
@@ -91,7 +91,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "audit sink is invoked on grant and revoke",
+  name: "grant and revoke each record exactly one durable audit event",
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
@@ -100,24 +100,54 @@ Deno.test({
       const userId = await createUser(pool, "audited@example.com");
       const operatorId = await createUser(pool, "operator3@example.com");
 
-      const grants: unknown[] = [];
-      const revokes: unknown[] = [];
-      const audit = {
-        onGrant: (event: unknown) => {
-          grants.push(event);
-          return Promise.resolve();
-        },
-        onRevoke: (event: unknown) => {
-          revokes.push(event);
-          return Promise.resolve();
-        },
-      };
+      await grantSuperadmin(pool, userId, operatorId);
+      await revokeSuperadmin(pool, userId, operatorId);
 
-      await grantSuperadmin(pool, userId, operatorId, audit);
-      await revokeSuperadmin(pool, userId, operatorId, audit);
+      const events = await pool.query<
+        { action: string; target_id: string; actor_user_id: string }
+      >(
+        `select action, target_id, actor_user_id from relay.audit_events
+         where target_id = $1 order by occurred_at asc`,
+        [userId],
+      );
 
-      assertEquals(grants.length, 1);
-      assertEquals(revokes.length, 1);
+      assertEquals(events.rows.length, 2);
+      assertEquals(events.rows[0].action, "system_role.superadmin.grant");
+      assertEquals(events.rows[1].action, "system_role.superadmin.revoke");
+      assertEquals(events.rows[0].actor_user_id, operatorId);
+    } finally {
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "relay_app cannot update or delete audit events",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    try {
+      await reset(pool);
+      const userId = await createUser(pool, "immutable@example.com");
+      const operatorId = await createUser(pool, "operator4@example.com");
+      await grantSuperadmin(pool, userId, operatorId);
+
+      await assertRejects(
+        () =>
+          pool.query(
+            "update relay.audit_events set outcome = 'failure' where target_id = $1",
+            [userId],
+          ),
+        Error,
+      );
+      await assertRejects(
+        () =>
+          pool.query(
+            "delete from relay.audit_events where target_id = $1",
+            [userId],
+          ),
+        Error,
+      );
     } finally {
       await pool.end();
     }
