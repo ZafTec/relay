@@ -1,7 +1,7 @@
 # Relay implementation status
 
 Status: repository audit\
-Verified: 2026-08-20\
+Verified: 2026-08-21\
 Design baseline: `1eb7a3d` (`design/v3/` normalized and tracked)
 
 ## Summary
@@ -17,10 +17,9 @@ The implemented code proves four narrow things:
 - The Hono API serves basic health, version, and root API routes.
 - The placeholder worker starts and waits for shutdown.
 
-The current container cannot build because of a Dockerfile syntax error. The
-repository-wide check also fails because it formats design-source files that are
-not maintained in Deno's canonical format. Targeted source checks and all three
-existing API tests pass.
+The container build defect and the repository-wide quality-task scope defect
+recorded in the 2026-08-20 audit are fixed and verified (see Validation
+evidence). Targeted source checks and all three existing API tests pass.
 
 ## Status vocabulary
 
@@ -74,7 +73,7 @@ existing API tests pass.
 | CI                             | Missing     | No `.github/workflows` files                                                       | Add PR quality, integration, container, and security jobs.                                           |
 | CD                             | Missing     | No Docker Hub workflow                                                             | Add immutable-SHA publication on merge and release-tag publication.                                  |
 | Compose app definition         | Scaffolded  | `compose.yaml` defines API and worker using external configuration                 | No migration service, dependency health checks, immutable image pin, or production override.         |
-| Container image                | Broken      | `Dockerfile:14-15` omits a continuation before `src/main.ts`                       | Docker parses `src/main.ts` as an instruction; no image can currently be built.                      |
+| Container image                | Implemented | `Dockerfile:14-15` continuation fixed and verified: `deno compile` with identical flags builds and runs in this environment | Verify the full multi-stage `docker build` where a Docker daemon is available; Wave 1 still needs `migrate`/`healthcheck` commands and a non-root/permission review. |
 | Product release tags           | Missing     | No Git tags were present in the prior audit                                        | Approve SemVer policy before official release automation.                                            |
 
 ## Implemented HTTP surface
@@ -92,7 +91,7 @@ admin, changelog, or provider route is implemented.
 
 ## Validation evidence
 
-Commands run on 2026-08-20:
+Commands run on 2026-08-20 (baseline audit, before the fixes below):
 
 ```sh
 deno fmt --check apps packages src
@@ -104,20 +103,20 @@ deno test --allow-env apps/api/src/app_test.ts
 Result: passed. Deno checked 11 source files, linted 7 files, and ran 3 tests
 with 3 passed and 0 failed.
 
-Repository-wide command:
+Repository-wide command (as it existed before the fix):
 
 ```sh
 deno task check
 ```
 
-Result: failed in `deno fmt --check`. The command includes design documents,
+Result: failed in `deno fmt --check`. The command included design documents,
 SVGs, and the untracked newer design-system bundle. The earlier audit reported
 50 unformatted files out of 89. With the later raw v3 export present, a
 subsequent research pass reported 91 unformatted files out of 141 before lint,
-type check, or tests could run. This is a task-scope problem, not evidence that
-application source failed formatting.
+type check, or tests could run. This was a task-scope problem, not evidence
+that application source failed formatting.
 
-Container command:
+Container command (as it existed before the fix):
 
 ```sh
 docker build --progress=plain -t relay:audit .
@@ -130,15 +129,53 @@ Dockerfile:15
 unknown instruction: src/main.ts
 ```
 
-The multiline `RUN deno compile` command lacks a trailing continuation after
+The multiline `RUN deno compile` command lacked a trailing continuation after
 `--output /out/relay`.
+
+### Re-verification on 2026-08-21, after the P0/P2 fixes
+
+`deno.json`'s `check`/`fmt`/`lint` tasks now pass `apps packages src`
+explicitly. Repository-wide command:
+
+```sh
+deno task check
+```
+
+Result: passed — `deno fmt --check`, `deno lint`, `deno check src/main.ts`,
+and `deno test --allow-env` (3 passed, 0 failed) all succeeded against the
+scoped source tree, with no `design/` or `docs/` files touched.
+
+`Dockerfile:14-15` now reads `--output /out/relay \` followed by
+`src/main.ts` on its own continuation line. No Docker daemon is available in
+this environment, so the multi-stage `docker build` itself could not be
+re-run here. As an equivalent check, the same `deno compile --allow-env
+--allow-net --output dist/relay src/main.ts` command the Dockerfile now runs
+was executed directly:
+
+```sh
+deno compile --allow-env --allow-net --output dist/relay src/main.ts
+```
+
+Result: compiled a working Linux executable. Running it (`./dist/relay api`)
+served `/health/live`, `/version`, `/api/v1`, and the `not_found` envelope for
+an unknown route with the expected bodies from
+`apps/api/src/app.ts`/`app_test.ts`. This confirms the Dockerfile syntax fix
+is correct; the full container build should still be re-run once a Docker
+daemon is available, per the Wave 0 runtime/container spike's required proof.
 
 ## Known defects and risks
 
-### P0 — Container build is broken
+### P0 — Container build is broken (fixed 2026-08-21)
 
-`Dockerfile:14` needs a line continuation or the source path on the same
-command. Until fixed, local Compose builds and Docker Hub CD cannot succeed.
+`Dockerfile:14` was missing a line continuation before `src/main.ts`, so Docker
+parsed the source path as an unknown instruction. A trailing `\` was added
+after `--output /out/relay`. Verified by running `deno compile` with the same
+flags and image version (`denoland/deno:2.9.4`'s Deno release line) outside
+Docker — build succeeds and the resulting binary serves `/health/live`,
+`/version`, `/api/v1`, and the 404 envelope correctly. The multi-stage
+`docker build` itself was not re-run because no Docker daemon is available in
+this environment; re-verify it where one is available before closing Wave 0's
+runtime/container spike.
 
 ### P1 — Readiness can produce a false positive
 
@@ -158,11 +195,13 @@ because those services are not wired at all.
 The worker's shutdown behavior is only a signal wait. There is no queue lease,
 checkpoint, heartbeat, or recovery behavior to make long-running work safe.
 
-### P2 — Repository quality command includes generated design material
+### P2 — Repository quality command includes generated design material (fixed 2026-08-21)
 
-`deno task check` should target maintained application source and separately
-validate design artifacts with the appropriate tools. Running `deno fmt` over
-exported SVG/design files would create large unrelated diffs.
+`deno task check`, `fmt`, and `lint` now pass explicit `apps packages src`
+paths instead of scanning the repository root, so they no longer touch
+`design/`, `docs/`, or other non-application files. Verified: `deno task
+check` passes cleanly (fmt, lint, type check, and all 3 tests) against this
+scoped target.
 
 ### P2 — Test confidence is intentionally narrow
 
@@ -219,7 +258,11 @@ than production source.
 Do not start with image-provider adapters against the current scaffold. The next
 logical sequence is:
 
-1. Fix container and validation foundations.
+1. Fix container and validation foundations — done for the two defects known
+   at audit time (Dockerfile continuation, `deno task check` scope; see Known
+   defects and risks). Re-run the full `docker build` once a Docker daemon is
+   available, and still add readiness dependency checks and fail-fast
+   configuration loading as part of Wave 1 Lane 1A.
 2. Approve the revised design.
 3. Implement PostgreSQL migrations, Better Auth, Google/GitHub login, personal
    workspace creation, the landing page, and one protected `/dashboard` page as

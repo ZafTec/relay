@@ -11,7 +11,7 @@ RUN mkdir -p /out && \
     deno compile \
       --allow-env \
       --allow-net \
-      --output /out/relay
+      --output /out/relay \
       src/main.ts
 
 FROM debian:bookworm-slim AS runtime
