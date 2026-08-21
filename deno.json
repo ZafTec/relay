@@ -3,16 +3,19 @@
     "./apps/api",
     "./apps/worker",
     "./packages/config",
-    "./packages/contracts"
+    "./packages/contracts",
+    "./packages/database"
   ],
   "tasks": {
     "dev:api": "deno run --env-file=.env --allow-env --allow-net --watch src/main.ts api",
     "dev:worker": "deno run --env-file=.env --allow-env --allow-net --watch src/main.ts worker",
     "start:api": "deno run --env-file=.env --allow-env --allow-net src/main.ts api",
     "start:worker": "deno run --env-file=.env --allow-env --allow-net src/main.ts worker",
+    "migrate:up": "deno run --env-file=.env --allow-env --allow-net src/main.ts migrate up",
+    "migrate:status": "deno run --env-file=.env --allow-env --allow-net src/main.ts migrate status",
     "compile": "deno compile --allow-env --allow-net --output dist/relay src/main.ts",
-    "test": "deno test --allow-env",
-    "check": "deno fmt --check apps packages src && deno lint apps packages src && deno check src/main.ts && deno test --allow-env",
+    "test": "deno test --allow-env --allow-net",
+    "check": "deno fmt --check apps packages src && deno lint apps packages src && deno check src/main.ts && deno test --allow-env --allow-net",
     "fmt": "deno fmt apps packages src",
     "lint": "deno lint apps packages src"
   },
@@ -29,6 +32,8 @@
   },
   "imports": {
     "@hono/hono": "jsr:@hono/hono@^4.13.2",
-    "@std/assert": "jsr:@std/assert@^1.0.19"
+    "@std/assert": "jsr:@std/assert@^1.0.19",
+    "kysely": "npm:kysely@^0.29.5",
+    "pg": "npm:pg@^8.23.0"
   }
 }

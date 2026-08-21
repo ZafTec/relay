@@ -19,3 +19,10 @@ export interface ServiceHealth {
   readonly status: "ok" | "degraded";
   readonly build: BuildInfo;
 }
+
+export interface ReadinessCheck {
+  readonly name: string;
+  readonly status: "ok" | "error";
+  /** Sanitized detail only -- never a connection string, credential, or raw driver error. */
+  readonly message?: string;
+}
