@@ -12,4 +12,4 @@ export {
   isSuperadmin,
   revokeSuperadmin,
 } from "./system-roles.ts";
-export type { SystemRoleAuditSink, SystemRoleGrant } from "./system-roles.ts";
+export type { SystemRoleGrant } from "./system-roles.ts";

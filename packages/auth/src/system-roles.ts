@@ -1,3 +1,5 @@
+import { recordAuditEvent } from "@relay/audit";
+import { withTransaction } from "@relay/database";
 import type { DatabasePool } from "@relay/database";
 
 export interface SystemRoleGrant {
@@ -8,45 +10,58 @@ export interface SystemRoleGrant {
 }
 
 /**
- * Never derived from email or provider profile -- callers must supply an
- * explicit `grantedBy` operator identity. Durable audit persistence is
- * Wave 2B's; until that lane merges and Wave 2 integration wires it in,
- * `onAudited` is the seam a caller can pass to record grant/revoke events
- * itself rather than this module reaching for an audit port that doesn't
- * exist yet.
+ * Grant/revoke and their audit event commit in one transaction (fail-closed:
+ * an audit-insert failure rolls back the grant too) -- this is a governed,
+ * security-sensitive action, per
+ * docs/implementation-handoff/07-observability-audit.md "Durable audit
+ * events" and "For fail-closed governed changes, insert the audit event in
+ * the same PostgreSQL transaction as the change." Never derived from email
+ * or provider profile -- callers must supply an explicit `grantedBy`/
+ * `revokedBy` operator identity.
  */
-export interface SystemRoleAuditSink {
-  onGrant?(grant: { userId: string; grantedBy: string }): Promise<void>;
-  onRevoke?(revoke: { userId: string; revokedBy: string }): Promise<void>;
-}
-
 export async function grantSuperadmin(
   pool: DatabasePool,
   userId: string,
   grantedBy: string,
-  audit: SystemRoleAuditSink = {},
 ): Promise<void> {
-  await pool.query(
-    `insert into relay.system_role_assignments (user_id, role, granted_by)
-     values ($1, 'superadmin', $2)`,
-    [userId, grantedBy],
-  );
-  await audit.onGrant?.({ userId, grantedBy });
+  await withTransaction(pool, async (client) => {
+    await client.query(
+      `insert into relay.system_role_assignments (user_id, role, granted_by)
+       values ($1, 'superadmin', $2)`,
+      [userId, grantedBy],
+    );
+    await recordAuditEvent(client, {
+      actorType: "user",
+      actorUserId: grantedBy,
+      action: "system_role.superadmin.grant",
+      targetType: "user",
+      targetId: userId,
+      outcome: "success",
+    });
+  });
 }
 
 export async function revokeSuperadmin(
   pool: DatabasePool,
   userId: string,
   revokedBy: string,
-  audit: SystemRoleAuditSink = {},
 ): Promise<void> {
-  await pool.query(
-    `update relay.system_role_assignments
-     set revoked_by = $2, revoked_at = now()
-     where user_id = $1 and revoked_at is null`,
-    [userId, revokedBy],
-  );
-  await audit.onRevoke?.({ userId, revokedBy });
+  await withTransaction(pool, async (client) => {
+    await client.query(
+      `update relay.system_role_assignments
+       set revoked_by = $2, revoked_at = now()
+       where user_id = $1 and revoked_at is null`,
+      [userId, revokedBy],
+    );
+    await recordAuditEvent(client, {
+      actorType: "user",
+      actorUserId: revokedBy,
+      action: "system_role.superadmin.revoke",
+      targetType: "user",
+      targetId: userId,
+      outcome: "success",
+    });
+  });
 }
 
 /**
