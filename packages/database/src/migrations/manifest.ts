@@ -4,6 +4,13 @@ import { migration as personalWorkspaces } from "./0002_personal_workspaces.ts";
 import { migration as systemRoleAssignments } from "./0003_system_role_assignments.ts";
 import { migration as betterAuthRateLimit } from "./0004_better_auth_rate_limit.ts";
 import { migration as auditEvents } from "./0005_audit_events.ts";
+import { migration as capacityPoolsAndPolicies } from "./0006_capacity_pools_and_policies.ts";
+import { migration as toolRuns } from "./0007_tool_runs.ts";
+import { migration as idempotencyRecords } from "./0008_idempotency_records.ts";
+import { migration as executionJobsAndAttempts } from "./0009_execution_jobs_and_attempts.ts";
+import { migration as queueCounters } from "./0010_queue_counters.ts";
+import { migration as executionCapacityLeases } from "./0011_execution_capacity_leases.ts";
+import { migration as outboxEvents } from "./0012_outbox_events.ts";
 
 /**
  * Immutable, statically imported migration history, in application order.
@@ -22,4 +29,11 @@ export const MIGRATIONS: readonly Migration[] = [
   systemRoleAssignments,
   betterAuthRateLimit,
   auditEvents,
+  capacityPoolsAndPolicies,
+  toolRuns,
+  idempotencyRecords,
+  executionJobsAndAttempts,
+  queueCounters,
+  executionCapacityLeases,
+  outboxEvents,
 ];
