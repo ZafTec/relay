@@ -2,10 +2,13 @@ import { Hono } from "@hono/hono";
 import type { RuntimeConfig } from "@relay/config";
 import { loadRuntimeConfig } from "@relay/config";
 import type { ReadinessCheck } from "@relay/contracts";
+import type { Auth } from "@relay/auth";
 
 export interface AppDependencies {
   /** Defaults to reporting no checks (always ready) when omitted. */
   readonly checkReadiness?: () => Promise<readonly ReadinessCheck[]>;
+  /** Omitted in tests that don't need auth; mounts /api/auth/* when present. */
+  readonly auth?: Auth;
 }
 
 export function createApp(
@@ -15,6 +18,15 @@ export function createApp(
   const app = new Hono();
   const checkReadiness = dependencies.checkReadiness ??
     (() => Promise.resolve([]));
+
+  // Mounted before every other route per
+  // docs/implementation-handoff/03-auth-workspaces.md "Server
+  // configuration" -- Better Auth validates the HTTP method itself, so
+  // this can't shadow a legitimate non-auth route under /api/auth/*.
+  if (dependencies.auth) {
+    const auth = dependencies.auth;
+    app.all("/api/auth/*", (context) => auth.handler(context.req.raw));
+  }
 
   app.get("/health/live", (context) => {
     return context.json({

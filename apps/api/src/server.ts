@@ -1,14 +1,17 @@
 import type { RuntimeConfig } from "@relay/config";
-import { loadRuntimeConfig } from "@relay/config";
+import { loadAuthConfig, loadRuntimeConfig } from "@relay/config";
 import { checkDatabaseHealth, createDatabasePool } from "@relay/database";
+import { createAuth } from "@relay/auth";
 import { createApp } from "./app.ts";
 
 export function startApi(
   config: RuntimeConfig = loadRuntimeConfig(),
 ): Deno.HttpServer {
   const pool = createDatabasePool(config.database, "relay-api");
+  const auth = createAuth(pool, loadAuthConfig());
   const app = createApp(config, {
     checkReadiness: async () => [await checkDatabaseHealth(pool)],
+    auth,
   });
 
   const server = Deno.serve(

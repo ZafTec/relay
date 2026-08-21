@@ -2,6 +2,7 @@
   "workspace": [
     "./apps/api",
     "./apps/worker",
+    "./packages/auth",
     "./packages/config",
     "./packages/contracts",
     "./packages/database"
@@ -33,6 +34,8 @@
   "imports": {
     "@hono/hono": "jsr:@hono/hono@^4.13.2",
     "@std/assert": "jsr:@std/assert@^1.0.19",
+    "better-auth": "npm:better-auth@1.7.1",
+    "better-auth/plugins": "npm:better-auth@1.7.1/plugins",
     "kysely": "npm:kysely@^0.29.5",
     "pg": "npm:pg@^8.23.0"
   }
