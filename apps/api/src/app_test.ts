@@ -8,6 +8,12 @@ const config = {
     version: "test",
     revision: "test-revision",
   },
+  database: {
+    url: new URL("postgres://test:test@localhost:5432/relay_test"),
+    poolMax: 10,
+    connectTimeoutMs: 5_000,
+    statementTimeoutMs: 30_000,
+  },
 } as const;
 
 Deno.test("liveness reports build information", async () => {
@@ -37,5 +43,53 @@ Deno.test("unknown routes return the API error envelope", async () => {
       code: "not_found",
       message: "The requested resource was not found.",
     },
+  });
+});
+
+Deno.test("readiness reports ok with no configured checks", async () => {
+  const response = await createApp(config).request("/health/ready");
+
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), {
+    service: "api",
+    status: "ok",
+    checks: [],
+    build: config.build,
+  });
+});
+
+Deno.test("readiness returns 503 when a dependency check fails", async () => {
+  const app = createApp(config, {
+    checkReadiness: () =>
+      Promise.resolve([{
+        name: "database",
+        status: "error" as const,
+        message: "unreachable",
+      }]),
+  });
+  const response = await app.request("/health/ready");
+
+  assertEquals(response.status, 503);
+  assertEquals(await response.json(), {
+    service: "api",
+    status: "degraded",
+    checks: [{ name: "database", status: "error", message: "unreachable" }],
+    build: config.build,
+  });
+});
+
+Deno.test("readiness returns ok when every dependency check passes", async () => {
+  const app = createApp(config, {
+    checkReadiness: () =>
+      Promise.resolve([{ name: "database", status: "ok" as const }]),
+  });
+  const response = await app.request("/health/ready");
+
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), {
+    service: "api",
+    status: "ok",
+    checks: [{ name: "database", status: "ok" }],
+    build: config.build,
   });
 });

@@ -1,9 +1,20 @@
 import { Hono } from "@hono/hono";
 import type { RuntimeConfig } from "@relay/config";
 import { loadRuntimeConfig } from "@relay/config";
+import type { ReadinessCheck } from "@relay/contracts";
 
-export function createApp(config: RuntimeConfig = loadRuntimeConfig()): Hono {
+export interface AppDependencies {
+  /** Defaults to reporting no checks (always ready) when omitted. */
+  readonly checkReadiness?: () => Promise<readonly ReadinessCheck[]>;
+}
+
+export function createApp(
+  config: RuntimeConfig = loadRuntimeConfig(),
+  dependencies: AppDependencies = {},
+): Hono {
   const app = new Hono();
+  const checkReadiness = dependencies.checkReadiness ??
+    (() => Promise.resolve([]));
 
   app.get("/health/live", (context) => {
     return context.json({
@@ -13,13 +24,19 @@ export function createApp(config: RuntimeConfig = loadRuntimeConfig()): Hono {
     });
   });
 
-  app.get("/health/ready", (context) => {
-    return context.json({
-      service: "api",
-      status: "ok",
-      checks: [],
-      build: config.build,
-    });
+  app.get("/health/ready", async (context) => {
+    const checks = await checkReadiness();
+    const healthy = checks.every((check) => check.status === "ok");
+
+    return context.json(
+      {
+        service: "api",
+        status: healthy ? "ok" : "degraded",
+        checks,
+        build: config.build,
+      },
+      healthy ? 200 : 503,
+    );
   });
 
   app.get("/version", (context) => context.json(config.build));
