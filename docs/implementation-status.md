@@ -6,20 +6,35 @@ Design baseline: `1eb7a3d` (`design/v3/` normalized and tracked)
 
 ## Summary
 
-Relay is currently a small, healthy Deno/Hono process scaffold plus extensive
-planning and design material. It is not yet an authenticated storage service,
-tool registry, MCP server, job system, or image-generation platform.
+Relay is currently a small, healthy Deno/Hono process scaffold, a real
+PostgreSQL 18 foundation (pool, checksummed migrator, health checks), and
+extensive planning and design material. It is not yet an authenticated
+storage service, tool registry, MCP server, job system, or image-generation
+platform.
 
-The implemented code proves four narrow things:
+The implemented code proves:
 
 - The workspace resolves and type-checks.
-- One executable can dispatch an API process or worker process.
-- The Hono API serves basic health, version, and root API routes.
-- The placeholder worker starts and waits for shutdown.
+- One executable can dispatch an API process, a worker process, or the
+  `migrate up`/`migrate status` commands.
+- The Hono API serves basic health, version, and root API routes, and
+  `/health/ready` reflects real PostgreSQL reachability instead of always
+  reporting `ok`.
+- The placeholder worker starts and waits for shutdown; the API now has a
+  real graceful-shutdown path too (`SIGTERM` drains the server, then closes
+  the database pool).
+- The checksummed migrator applies migrations transactionally under a
+  session-level advisory lock, refuses tampered history, and enforces the
+  `relay_owner`/`relay_migrator`/`relay_app` privilege boundaries from
+  `02-runtime-database.md` -- proven against live PostgreSQL 18, not just
+  type-checked.
 
-The container build defect and the repository-wide quality-task scope defect
-recorded in the 2026-08-20 audit are fixed and verified (see Validation
-evidence). Targeted source checks and all three existing API tests pass.
+The container build defect, the repository-wide quality-task scope defect,
+and the readiness false-positive defect (for its one wired dependency,
+PostgreSQL) recorded in the 2026-08-20 audit are fixed and verified (see
+Validation evidence and Known defects and risks). Targeted source checks and
+all API/database tests pass; the database tests require `DATABASE_URL`
+(`compose.dev.yaml`) and are skipped, not failed, without it.
 
 ## Status vocabulary
 
@@ -36,17 +51,17 @@ evidence). Targeted source checks and all three existing API tests pass.
 | Area                           | State       | Repository evidence                                                                | Gap to target                                                                                        |
 | ------------------------------ | ----------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Deno workspace                 | Implemented | `deno.json`, workspace package manifests                                           | Add web app and future domain packages without losing compiled-runtime checks.                       |
-| Process dispatcher             | Implemented | `src/main.ts` dispatches `relay api` and `relay worker`                            | Add migration and operational one-shot commands when needed.                                         |
+| Process dispatcher             | Implemented | `src/main.ts` dispatches `relay api`, `relay worker`, and `relay migrate up\|status` | Add `relay healthcheck live\|ready` one-shot commands for the container healthcheck.                  |
 | HTTP server                    | Implemented | `apps/api/src/server.ts` starts Hono with `Deno.serve`                             | Add middleware, graceful shutdown, proxy policy, security headers, and production routing.           |
 | API shell                      | Scaffolded  | `apps/api/src/app.ts` exposes four basic routes and JSON errors                    | No domain endpoints, auth, request IDs, rate limits, or contract validation.                         |
 | Liveness                       | Implemented | `GET /health/live` returns service and build data                                  | Current behavior is adequate only as process liveness.                                               |
-| Readiness                      | Scaffolded  | `GET /health/ready` always returns `ok` with an empty check list                   | Must verify PostgreSQL, Redis, storage, migrations, and critical configuration.                      |
+| Readiness                      | Implemented | `GET /health/ready` runs an injected `checkReadiness`; wired to a real `select 1` database check in `server.ts`, returns 503 with a sanitized reason when the database is unreachable and 200 when it is reachable, verified live | Wire Redis, storage, and migration-compatibility checks as those packages land.                      |
 | Build information              | Scaffolded  | `/version`; `APP_VERSION` and `GIT_SHA` in `packages/config/src/index.ts`          | No CI injection, build timestamp, OCI labels, MCP metadata, or telemetry resource fields.            |
-| Runtime configuration          | Scaffolded  | Port validation and basic build fields in `packages/config/src/index.ts`           | Database, Redis, storage, auth, OAuth, provider, and telemetry settings are not loaded or validated. |
+| Runtime configuration          | Scaffolded  | Port, build fields, and a fail-fast typed `DatabaseConfig` (URL scheme, pool size, timeouts) in `packages/config/src/index.ts` | Redis, storage, auth, OAuth, provider, and telemetry settings are not loaded or validated yet.       |
 | Worker process                 | Scaffolded  | `apps/worker/src/worker.ts` logs startup, waits for a signal, and logs shutdown    | No queue, leases, jobs, heartbeats, attempts, handlers, retries, or cancellation.                    |
-| Shared contracts               | Scaffolded  | `packages/contracts/src/index.ts` defines six job statuses plus health/build types | No IDs, schemas, errors, tool, run, artifact, usage, or event contracts.                             |
+| Shared contracts               | Scaffolded  | `packages/contracts/src/index.ts` defines six job statuses, health/build types, and `ReadinessCheck` | No IDs, schemas, errors, tool, run, artifact, usage, or event contracts.                             |
 | Structured logging             | Scaffolded  | API and worker write a few JSON console records                                    | No common logger, request/trace context, redaction, levels, sinks, or schema tests.                  |
-| PostgreSQL                     | Missing     | No driver, pool, migrations, schema, repositories, or database package             | Required for every durable domain and Better Auth.                                                   |
+| PostgreSQL                     | Implemented (foundation) | `packages/database`: one `pg.Pool` per process, a checksummed migrator (session advisory lock, `SET ROLE relay_owner`, transactional apply, ledger), and health checks -- verified against live PostgreSQL 18 (fresh apply, idempotent re-run, checksum-mismatch rejection, rollback-on-failure, concurrent-migrator convergence, and `relay_app` role-boundary denial) | No domain or Better Auth schema yet -- `migrations/manifest.ts` is intentionally empty pending Wave 2A/3.0. Kysely typed `Database` interface not started. |
 | Redis                          | Missing     | No client or adapter                                                               | Required for queue transport, coordination, rate limits, and SSE fan-out.                            |
 | Queue                          | Missing     | No implementation or compatibility spike                                           | Select a Deno-compatible adapter and prove compile, retry, cancellation, and shutdown.               |
 | Tool registry                  | Missing     | No tool or tool-version domain code                                                | Implement code-first handlers and database-controlled publication metadata.                          |
@@ -197,11 +212,15 @@ evidence). Both produce a binary/image that serves `/health/live`, `/version`,
 (`65532:65532`). Wave 0's runtime/container spike proof is satisfied for this
 defect.
 
-### P1 — Readiness can produce a false positive
+### P1 — Readiness can produce a false positive (database check fixed 2026-08-21)
 
-`/health/ready` reports healthy without checking dependencies. An orchestrator
-could route traffic to an instance that cannot reach PostgreSQL, Redis, or
-storage.
+`/health/ready` now runs a real `select 1` against PostgreSQL via an injected
+`checkReadiness` function and returns `503` with a sanitized reason when it
+fails; verified live by stopping the compose Postgres container mid-run and
+observing `/health/ready` flip to `503` while `/health/live` stayed `200`.
+Redis and storage checks are not implemented yet -- add them as those
+packages land (Wave 3A/3B) so this defect isn't closed until all required
+dependencies are covered.
 
 ### P1 — Configuration presents more capability than runtime supports
 
