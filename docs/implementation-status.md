@@ -244,14 +244,19 @@ than production source.
 
 ## Decisions required before implementation workstreams fan out
 
-| Decision                              | Why it gates work                                                                                  |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Approve a current design handoff      | Landing, IA, dashboard routes, artifact UI, and generator flow otherwise encode the wrong product. |
-| Select database and migration tooling | Auth, catalog, jobs, artifacts, metering, audit, and changelog all need one migration owner.       |
-| Complete queue compatibility spike    | Job schema and shutdown semantics depend on what can run reliably in a compiled Deno image.        |
-| Select first image provider/model     | Defines the first real input, output, error, safety, and usage contract.                           |
-| Approve initial meter policy          | Reservations and run receipts cannot be implemented from provider cost alone.                      |
-| Approve pre-1.0 release policy        | CI/CD tagging and changelog release creation need one source of release truth.                     |
+Resolved by the owner on 2026-08-21 (see below); remaining rows still gate
+their listed work.
+
+| Decision                              | Why it gates work                                                                                  | Status |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------- | ------ |
+| Approve a current design handoff      | Landing, IA, dashboard routes, artifact UI, and generator flow otherwise encode the wrong product. | Resolved: v3 is the implementation target; v2 stays a component/state reference, matching `design/README.md`. No change to the recorded manifest exceptions. |
+| Select database and migration tooling | Auth, catalog, jobs, artifacts, metering, audit, and changelog all need one migration owner.       | Resolved: PostgreSQL 18 per the VPS remediation doc; `pg` + Kysely + Better Auth's `pg` adapter sharing one pool, as already recorded in `00-research-decisions.md`. Local dev/test infra runs via Docker Compose (Postgres 18, Redis, MinIO), not native installs. |
+| Select MCP SDK/protocol version       | Determines the Streamable HTTP contract implemented in Wave 4B.                                    | Resolved: `@modelcontextprotocol/server@2.0.0`, protocol `2026-07-28` — confirmed still current against the npm registry on 2026-08-21. |
+| Select MCP OAuth/auth mechanism       | Determines how both users and MCP clients authenticate.                                            | Resolved: [ADR 0001](adr/0001-mcp-auth-via-better-auth-mcp-plugin.md) — Better Auth's `@better-auth/mcp` + `jwt()` plugins for both user sessions and MCP client OAuth, superseding the hand-built provider `06-http-mcp-events.md` originally specified. |
+| Complete queue compatibility spike    | Job schema and shutdown semantics depend on what can run reliably in a compiled Deno image.        | Open. Note: npm now publishes BullMQ `6.2.0` and ioredis `6.0.0` (a major bump) against the `6.1.2`/`5.11.1` researched snapshot — re-verify at spike time. |
+| Select first image provider/model     | Defines the first real input, output, error, safety, and usage contract.                           | Open |
+| Approve initial meter policy          | Reservations and run receipts cannot be implemented from provider cost alone.                      | Open |
+| Approve pre-1.0 release policy        | CI/CD tagging and changelog release creation need one source of release truth.                     | Open |
 
 ## Recommended next implementation slice
 
