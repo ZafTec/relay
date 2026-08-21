@@ -18,3 +18,7 @@ export type {
   Queryable,
   RelayOutboxBatchResult,
 } from "./outbox-relay.ts";
+export { admitToolRun } from "./admission.ts";
+export type { AdmitRunInput, AdmitRunResult } from "./admission.ts";
+export { claimJobForDispatch, deferJob, heartbeatJob } from "./dispatch.ts";
+export type { ClaimedJob, ClaimResult } from "./dispatch.ts";
