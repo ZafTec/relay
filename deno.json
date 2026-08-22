@@ -34,7 +34,7 @@
     ]
   },
   "lock": {
-    "frozen": false
+    "frozen": true
   },
   "imports": {
     "@hono/hono": "jsr:@hono/hono@^4.13.2",

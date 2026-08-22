@@ -226,17 +226,37 @@ export function loadAuthConfig(
   };
 }
 
+export function loadBuildInfo(
+  env: Record<string, string | undefined> = Deno.env.toObject(),
+): BuildInfo {
+  return {
+    version: env.APP_VERSION?.trim() || "development",
+    revision: env.GIT_SHA?.trim() || "unknown",
+  };
+}
+
+/**
+ * Split out from `loadRuntimeConfig` for the same reason `loadAuthConfig`
+ * is its own function: not every process needs every dependency
+ * configured. `migrate up`/`migrate status` only ever touch PostgreSQL --
+ * requiring REDIS_URL for them (as `loadRuntimeConfig` alone would) fails
+ * a migration run in any environment that hasn't provisioned Redis yet,
+ * for a dependency migration never uses.
+ */
+export function loadDatabaseConfig(
+  env: Record<string, string | undefined> = Deno.env.toObject(),
+): DatabaseConfig {
+  return readDatabaseConfig(env);
+}
+
 export function loadRuntimeConfig(
   env: Record<string, string | undefined> = Deno.env.toObject(),
 ): RuntimeConfig {
   return {
     appName: env.APP_NAME?.trim() || "Relay",
     port: readPort(env.PORT),
-    build: {
-      version: env.APP_VERSION?.trim() || "development",
-      revision: env.GIT_SHA?.trim() || "unknown",
-    },
-    database: readDatabaseConfig(env),
+    build: loadBuildInfo(env),
+    database: loadDatabaseConfig(env),
     redis: readRedisConfig(env),
   };
 }
