@@ -1,4 +1,4 @@
-import { assertEquals, assertNotEquals } from "@std/assert";
+import { assertEquals, assertNotEquals, assertRejects } from "@std/assert";
 import type { AuthConfig } from "@relay/config";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import { createAuth } from "./auth.ts";
@@ -55,11 +55,16 @@ function unique(label: string): string {
 async function createTestUser(
   auth: Awaited<ReturnType<typeof createAuth>>,
   email: string,
+  options: { emailVerified?: boolean } = {},
 ) {
   const ctx = await auth.$context;
   return await ctx.adapter.create<{ id: string }>({
     model: "user",
-    data: { email, name: "Test User", emailVerified: true },
+    data: {
+      email,
+      name: "Test User",
+      emailVerified: options.emailVerified ?? true,
+    },
   });
 }
 
@@ -135,6 +140,42 @@ Deno.test({
       );
       assertNotEquals(response.status, 200);
     } finally {
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "a session cannot be created for a user with an unverified email",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let userId: string | undefined;
+    try {
+      const auth = createAuth(pool, testAuthConfig());
+      const user = await createTestUser(
+        auth,
+        `${unique("unverified")}@example.com`,
+        { emailVerified: false },
+      );
+      userId = user.id;
+      const ctx = await auth.$context;
+
+      await assertRejects(() =>
+        ctx.internalAdapter.createSession(user.id, undefined, false, {}, false)
+      );
+
+      const workspaces = await pool.query(
+        "select 1 from relay.personal_workspaces where user_id = $1",
+        [user.id],
+      );
+      assertEquals(
+        workspaces.rowCount,
+        0,
+        "a refused session must not provision a workspace either",
+      );
+    } finally {
+      if (userId) await cleanupUser(pool, userId);
       await pool.end();
     }
   },

@@ -159,6 +159,31 @@ export function createAuth(pool: DatabasePool, config: AuthConfig): Auth {
           // real request arrives, well after this module finishes
           // evaluating.
           before: async (session: { userId: string }) => {
+            // Requires a *currently* verified email, not just "was
+            // verified at some point" -- read fresh on every session
+            // rather than trusted from anywhere cached. Google/GitHub
+            // (packages/auth's only providers) both report a real
+            // per-address verified flag (Google's email_verified OIDC
+            // claim; GitHub's verified flag on the specific address in
+            // use, via @better-auth/core's provider adapters), and
+            // Better Auth persists it verbatim as the local user's
+            // emailVerified on sign-up. This is the same hook personal-
+            // workspace provisioning already runs in -- the one place
+            // guaranteed to run before any session exists -- so an
+            // unverified user is refused a session (and never gets a
+            // workspace provisioned) rather than merely warned.
+            const emailVerified = await pool.query<
+              { emailVerified: boolean }
+            >(
+              `select "emailVerified" from auth."user" where id = $1`,
+              [session.userId],
+            );
+            if (!emailVerified.rows[0]?.emailVerified) {
+              throw new Error(
+                "A verified email address is required to sign in.",
+              );
+            }
+
             const ctx = await auth.$context;
             const organizationId = await ensurePersonalWorkspace(
               ctx.adapter,
