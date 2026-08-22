@@ -271,6 +271,128 @@ The three tests cover liveness, version output, and 404 shape only. There are no
 configuration edge tests, readiness tests, process smoke tests, worker tests,
 container tests, or dependency integration tests.
 
+## Reviewer feedback response (2026-08-22)
+
+An external review of the Wave 3A/3B work (`packages/database`,
+`packages/queue`, `packages/capacity`, `packages/catalog`, `packages/auth`)
+listed 20 "blocking defects reproduced or verified." Each was independently
+re-verified against live PostgreSQL/Redis before being treated as real; one
+(the generic-`DATABASE_URL` risk in database integration tests) was
+confirmed by directly reproducing it against this session's own dev
+database while fixing the ledger-privilege item, then fixed for real rather
+than just theoretically.
+
+### Fixed, live-verified, and covered by new/updated tests
+
+- **`relay_app` could modify/delete `relay.schema_migrations`.** Fixed via
+  an explicit `REVOKE INSERT, UPDATE, DELETE ... FROM relay_app` in
+  `ensureLedgerTable`, matching the existing `relay.audit_events` pattern.
+- **Database integration tests could drop the real migration ledger.**
+  `migrator_test.ts`'s destructive tests now require a dedicated
+  `MIGRATOR_TEST_DATABASE_URL` pointing at a disposable `relay_test`
+  database (`scripts/dev/postgres-init/002-test-database.sql`) and refuse
+  to run unless the target database name ends in `_test`.
+- **`admitToolRun` deadlocked under `poolMax: 1`.** Membership is now
+  checked through the transaction's own client, not the outer pool.
+- **Idempotency replay ran before authorization; concurrent identical
+  requests could throw a raw unique-violation.** Membership is now
+  checked first on every call; the final idempotency insert uses
+  `ON CONFLICT DO NOTHING` with an explicit rollback-and-reresolve path.
+- **Queue limits were caller-supplied.** `admitToolRun` now resolves them
+  from `relay.capacity_policies`, with a conservative built-in default
+  when a tool has no policy configured yet.
+- **Queue counters only ever grew.** `claimJobForDispatch`/`deferJob` now
+  shift `queued_count`/`running_count` on claim and on capacity deferral,
+  in the same fixed lock order admission uses.
+- **Capacity deferrals consumed a real attempt and could be republished
+  immediately.** `deferJob` now reverses the claim's provisional
+  `attempt_count`/`job_attempts` bookkeeping (capacity waiting is not an
+  attempt, per the handoff doc) and gives the `job.deferred` outbox event
+  the job's own `eligible_at` instead of defaulting to `now()`.
+- **Capacity Lua scripts trusted the worker's clock.** Every script
+  (lease acquire/renew, GCRA rate limiting, cooldown extension) now calls
+  Redis `TIME` internally instead of taking "now" as an argument.
+- **Published tool versions and routing decisions were mutable by
+  `relay_app`.** A trigger freezes every behavior-defining
+  `tool_versions` column once `published_at` is set (lifecycle columns
+  `deprecated_at`/`retired_at` stay open for a mutator that doesn't exist
+  yet); `relay.routing_decisions` lost `UPDATE`/`DELETE` the same way
+  `audit_events`/`schema_migrations` did.
+- **Readiness only proved connectivity.** `checkMigrationLedgerHealth`
+  reads the ledger (read-only, so it works under `relay_app`) and applies
+  the same order/checksum/completeness check `migrateUp` enforces,
+  reporting drift as `error` instead of staying silently "ready."
+- **No repo-level LF policy.** Added `.gitattributes` (`text=auto
+  eol=lf`).
+- **The 40-passed/59-ignored gap had no teeth.** `deno task check:live`
+  refuses to run at all unless `DATABASE_URL`/`MIGRATOR_TEST_DATABASE_URL`/
+  `REDIS_URL` are all set, then fails if anything is still reported
+  `ignored`. Currently: 107 passed, 0 ignored.
+- **Several Wave 3 FKs were missing.** `job_attempts.routing_decision_id`
+  was `text` against `routing_decisions.id bigint`; altered in place
+  (column was always `null` in practice) and FK'd.
+  `tool_runs`/`execution_jobs.tool_version_id` predate the catalog they
+  reference and were left unconstrained; both FK'd to `tool_versions` now.
+- **Personal-workspace provisioning didn't heal a missing membership
+  row.** A crash between claiming the `personal_workspaces` mapping and
+  creating the `auth.member` row could permanently lock a user out of a
+  workspace `getMembership` would never recognize them in. Every call now
+  checks and, if needed, recreates that membership row, including the
+  already-mapped fast path.
+
+### Investigated, found substantially mitigated by existing config — not changed
+
+- **OAuth does not enforce a currently verified provider email.** Traced
+  through Better Auth 1.7.1's actual OAuth callback path (not just its
+  docs): `@better-auth/core`'s `google`/`github` provider adapters compute
+  `emailVerified` correctly from the real provider signal (Google's
+  `email_verified` OIDC claim; GitHub's per-address `verified` flag off
+  `/user/emails`, matched to the specific email being used). Relay's own
+  `account.accountLinking.enabled = false` (`packages/auth/src/auth.ts`)
+  independently blocks every implicit-linking path in
+  `oauth2/link-account.mjs` regardless of `emailVerified` — a sign-in that
+  matches an existing user's email returns `"account not linked"`, never a
+  session for that user. A brand-new user created from an unverified
+  provider email is stored with the correct `emailVerified: false`; nothing
+  in Relay currently trusts a user's email for anything security-sensitive
+  (authorization runs entirely off `userId`/`auth.member`, never email).
+  Residual risk is forward-looking, not current: **any future feature that
+  trusts `auth.user.email` for something security-relevant (workspace
+  invitations by email, notification delivery treated as proof of
+  ownership, support-driven account actions) must check `emailVerified`
+  before honoring it.** Flag this explicitly in that feature's own review
+  rather than treating today's OAuth config as needing a change.
+
+### Deferred — large enough to need their own implementation pass, not a patch
+
+- **Better Auth's organization routes bypass audit coverage.** Member/role/
+  invitation mutations reachable through the `organization` plugin's own
+  routes (`/api/auth/organization/*`) don't go through
+  `packages/audit`'s `recordAuditEvent`. Closing this needs Better Auth's
+  hook surface (`databaseHooks`/plugin `after` hooks per mutation) wired
+  per route, each mapped to the right `AuditEventInput` shape and target
+  type — real, scoped work, not a one-line fix, and not started.
+- **Usage reservation is absent.** `admitToolRun`'s step 6 ("Reserve
+  usage") stays deferred to metering, which doesn't exist as a package or
+  schema yet. Nothing to wire it into until that lands.
+- **`apps/worker` is still a signal-waiting placeholder.** BullMQ
+  consumption, cancellation, retries, graceful shutdown, reconciliation,
+  and fair scheduling are all unwired — this is the largest single gap
+  left after this pass and the natural next-wave target, since
+  `packages/queue`'s dispatch/outbox-relay and `packages/capacity`'s
+  coordinator (both exercised end-to-end by tests, per Validation
+  evidence) are exactly the pieces a real worker composes.
+- **Redis state loss / reconciliation.** A lost Redis dataset can drop
+  already-published BullMQ tickets and reset provider capacity state with
+  nothing to detect or repair it. Meaningfully depends on the worker
+  existing first (reconciliation is something a worker's startup/sweep
+  does), so it's grouped with that gap rather than fixed standalone.
+- **Weighted standard/paid/enterprise/internal scheduling.** Needs
+  `relay.workspace_scheduling_profiles` (doesn't exist) and a fair-share
+  dispatch algorithm layered on top of the capacity coordinator -- Wave
+  5 territory per the handoff doc's own "Weighted fair scheduling"
+  section, not implementable as a side effect of this review pass.
+
 ## Design readiness
 
 Two historical visual handoffs are tracked as versioned snapshots:
