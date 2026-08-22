@@ -48,16 +48,38 @@ async function createSuperadmin(
   return { actorUserId, operatorId };
 }
 
+const FOREIGN_KEY_VIOLATION = "23503";
+
+/** See packages/queue/src/test_support.ts's tryDelete for why this tolerates exactly a foreign-key violation. */
+async function tryDelete(
+  pool: DatabasePool,
+  sqlText: string,
+  params: readonly unknown[],
+): Promise<void> {
+  try {
+    await pool.query(sqlText, params as unknown[]);
+  } catch (error) {
+    if ((error as { code?: string } | null)?.code === FOREIGN_KEY_VIOLATION) {
+      return;
+    }
+    throw error;
+  }
+}
+
 /**
  * `tools.active_version_id`/`tool_versions.tool_id` are mutually
- * referential (see 0013_tool_registry.ts), and `system_role_assignments
- * .granted_by`/`revoked_by` don't cascade -- deleting the operator/actor
- * pair in the same statement without clearing their grant row first can
- * hit the FK before the other row's cascade clears it (Postgres's per-
- * row RI trigger order isn't "all cascades, then all restricts"). Same
- * reasoning as packages/queue/src/test_support.ts's fixture cleanup;
- * left behind, any of this breaks packages/auth's tests, which do a
- * full-table `auth.user` reset assuming exclusive ownership.
+ * referential (see 0013_tool_registry.ts). relay_app also has no DELETE
+ * on relay.system_role_assignments at all
+ * (0023_system_role_assignment_immutability.ts) -- only a cascade from
+ * deleting the grant's own user_id removes it; granted_by/revoked_by
+ * never cascade. `createSuperadmin` always returns `[actorUserId,
+ * operatorId]` with actorUserId as the grantee, so every caller's
+ * `userIds` has the grantee first -- deleting it first cascades its
+ * grant row away before the operator (referenced as granted_by) is
+ * processed. Left behind, any of this breaks packages/auth's tests,
+ * which used to do a full-table `auth.user` reset assuming exclusive
+ * ownership -- no longer true (see auth_test.ts), but scoped deletes
+ * here are still correct on their own merits.
  */
 async function cleanupCatalogFixture(
   pool: DatabasePool,
@@ -90,13 +112,9 @@ async function cleanupCatalogFixture(
       ]);
     }
   }
-  await pool.query(
-    "delete from relay.system_role_assignments where user_id = any($1::text[]) or granted_by = any($1::text[]) or revoked_by = any($1::text[])",
-    [fixture.userIds],
-  );
-  await pool.query('delete from auth."user" where id = any($1::text[])', [
-    fixture.userIds,
-  ]);
+  for (const userId of fixture.userIds) {
+    await tryDelete(pool, 'delete from auth."user" where id = $1', [userId]);
+  }
 }
 
 function versionInput(toolId: string, overrides: Record<string, unknown> = {}) {
