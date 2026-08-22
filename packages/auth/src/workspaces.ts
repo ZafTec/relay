@@ -37,30 +37,31 @@ function personalWorkspaceSlug(userId: string): string {
  * this, not just the ones that just created the mapping, so a user in
  * that state self-heals on their very next call instead of being
  * permanently locked out of a workspace `getMembership` will never
- * recognize them in. The cost is one extra indexed SELECT on the
- * overwhelmingly common already-a-member path.
+ * recognize them in.
+ *
+ * A plain `select`-then-`create` here is a check-then-act race: five
+ * concurrent session-create calls for a brand-new user (`auth_test.ts`'s
+ * "concurrent first sessions" case) really did produce five membership
+ * rows in the live suite, since `auth.member` had nothing stopping it.
+ * This writes the row directly with `insert ... on conflict do nothing`
+ * against the unique `("organizationId", "userId")` constraint
+ * `0020_member_uniqueness.ts` added, bypassing `adapter.create` (which
+ * has no conflict-handling in its interface) the same way this file
+ * already bypasses `auth.api.createOrganization` for the organization
+ * insert -- direct, race-safe SQL against a table this package already
+ * owns writing to.
  */
 async function ensureMembership(
-  adapter: BetterAuthAdapter,
   pool: DatabasePool,
   organizationId: string,
   userId: string,
 ): Promise<void> {
-  const { rows } = await pool.query(
-    `select 1 from auth.member where "organizationId" = $1 and "userId" = $2`,
+  await pool.query(
+    `insert into auth.member (id, "organizationId", "userId", role, "createdAt")
+     values (gen_random_uuid()::text, $1, $2, 'owner', now())
+     on conflict ("organizationId", "userId") do nothing`,
     [organizationId, userId],
   );
-  if (rows.length > 0) return;
-
-  await adapter.create({
-    model: "member",
-    data: {
-      organizationId,
-      userId,
-      role: "owner",
-      createdAt: new Date(),
-    },
-  });
 }
 
 /**
@@ -84,7 +85,7 @@ export async function ensurePersonalWorkspace(
   );
   if (existing.rows[0]) {
     const organizationId = existing.rows[0].organization_id;
-    await ensureMembership(adapter, pool, organizationId, userId);
+    await ensureMembership(pool, organizationId, userId);
     return organizationId;
   }
 
@@ -107,7 +108,7 @@ export async function ensurePersonalWorkspace(
   );
 
   if (claimed.rows[0]) {
-    await ensureMembership(adapter, pool, organization.id, userId);
+    await ensureMembership(pool, organization.id, userId);
     return organization.id;
   }
 
@@ -125,6 +126,6 @@ export async function ensurePersonalWorkspace(
     );
   }
   const winnerOrganizationId = winner.rows[0].organization_id;
-  await ensureMembership(adapter, pool, winnerOrganizationId, userId);
+  await ensureMembership(pool, winnerOrganizationId, userId);
   return winnerOrganizationId;
 }
