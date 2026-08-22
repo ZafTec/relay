@@ -22,6 +22,10 @@ import { migration as memberUniqueness } from "./0020_member_uniqueness.ts";
 import { migration as capacityAndCounterForeignKeys } from "./0021_capacity_and_counter_foreign_keys.ts";
 import { migration as toolVersionDeleteAndRoutingPolicyImmutability } from "./0022_tool_version_delete_and_routing_policy_immutability.ts";
 import { migration as systemRoleAssignmentImmutability } from "./0023_system_role_assignment_immutability.ts";
+import { migration as authAuditHardening } from "./0024_auth_audit_hardening.ts";
+import { migration as schedulerProfiles } from "./0025_scheduler_profiles.ts";
+import { migration as executionLifecycle } from "./0026_execution_lifecycle.ts";
+import { migration as catalogIntegrity } from "./0027_catalog_integrity.ts";
 
 /**
  * Immutable, statically imported migration history, in application order.
@@ -58,4 +62,8 @@ export const MIGRATIONS: readonly Migration[] = [
   capacityAndCounterForeignKeys,
   toolVersionDeleteAndRoutingPolicyImmutability,
   systemRoleAssignmentImmutability,
+  authAuditHardening,
+  schedulerProfiles,
+  executionLifecycle,
+  catalogIntegrity,
 ];
