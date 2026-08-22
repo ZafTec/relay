@@ -276,122 +276,317 @@ container tests, or dependency integration tests.
 An external review of the Wave 3A/3B work (`packages/database`,
 `packages/queue`, `packages/capacity`, `packages/catalog`, `packages/auth`)
 listed 20 "blocking defects reproduced or verified." Each was independently
-re-verified against live PostgreSQL/Redis before being treated as real; one
-(the generic-`DATABASE_URL` risk in database integration tests) was
-confirmed by directly reproducing it against this session's own dev
-database while fixing the ledger-privilege item, then fixed for real rather
-than just theoretically.
+re-verified against live PostgreSQL/Redis before being treated as real; one (the
+generic-`DATABASE_URL` risk in database integration tests) was confirmed by
+directly reproducing it against this session's own dev database while fixing the
+ledger-privilege item, then fixed for real rather than just theoretically.
 
 ### Fixed, live-verified, and covered by new/updated tests
 
-- **`relay_app` could modify/delete `relay.schema_migrations`.** Fixed via
-  an explicit `REVOKE INSERT, UPDATE, DELETE ... FROM relay_app` in
+- **`relay_app` could modify/delete `relay.schema_migrations`.** Fixed via an
+  explicit `REVOKE INSERT, UPDATE, DELETE ... FROM relay_app` in
   `ensureLedgerTable`, matching the existing `relay.audit_events` pattern.
 - **Database integration tests could drop the real migration ledger.**
   `migrator_test.ts`'s destructive tests now require a dedicated
-  `MIGRATOR_TEST_DATABASE_URL` pointing at a disposable `relay_test`
-  database (`scripts/dev/postgres-init/002-test-database.sql`) and refuse
-  to run unless the target database name ends in `_test`.
-- **`admitToolRun` deadlocked under `poolMax: 1`.** Membership is now
-  checked through the transaction's own client, not the outer pool.
-- **Idempotency replay ran before authorization; concurrent identical
-  requests could throw a raw unique-violation.** Membership is now
-  checked first on every call; the final idempotency insert uses
-  `ON CONFLICT DO NOTHING` with an explicit rollback-and-reresolve path.
-- **Queue limits were caller-supplied.** `admitToolRun` now resolves them
-  from `relay.capacity_policies`, with a conservative built-in default
-  when a tool has no policy configured yet.
-- **Queue counters only ever grew.** `claimJobForDispatch`/`deferJob` now
-  shift `queued_count`/`running_count` on claim and on capacity deferral,
-  in the same fixed lock order admission uses.
+  `MIGRATOR_TEST_DATABASE_URL` pointing at a disposable `relay_test` database
+  (`scripts/dev/postgres-init/002-test-database.sql`) and refuse to run unless
+  the target database name ends in `_test`.
+- **`admitToolRun` deadlocked under `poolMax: 1`.** Membership is now checked
+  through the transaction's own client, not the outer pool.
+- **Idempotency replay ran before authorization; concurrent identical requests
+  could throw a raw unique-violation.** Membership is now checked first on every
+  call; the final idempotency insert uses `ON CONFLICT DO NOTHING` with an
+  explicit rollback-and-reresolve path.
+- **Queue limits were caller-supplied.** `admitToolRun` now resolves them from
+  `relay.capacity_policies`, with a conservative built-in default when a tool
+  has no policy configured yet.
+- **Queue counters only ever grew.** `claimJobForDispatch`/`deferJob` now shift
+  `queued_count`/`running_count` on claim and on capacity deferral, in the same
+  fixed lock order admission uses.
 - **Capacity deferrals consumed a real attempt and could be republished
   immediately.** `deferJob` now reverses the claim's provisional
   `attempt_count`/`job_attempts` bookkeeping (capacity waiting is not an
-  attempt, per the handoff doc) and gives the `job.deferred` outbox event
-  the job's own `eligible_at` instead of defaulting to `now()`.
-- **Capacity Lua scripts trusted the worker's clock.** Every script
-  (lease acquire/renew, GCRA rate limiting, cooldown extension) now calls
-  Redis `TIME` internally instead of taking "now" as an argument.
-- **Published tool versions and routing decisions were mutable by
-  `relay_app`.** A trigger freezes every behavior-defining
-  `tool_versions` column once `published_at` is set (lifecycle columns
-  `deprecated_at`/`retired_at` stay open for a mutator that doesn't exist
-  yet); `relay.routing_decisions` lost `UPDATE`/`DELETE` the same way
-  `audit_events`/`schema_migrations` did.
-- **Readiness only proved connectivity.** `checkMigrationLedgerHealth`
-  reads the ledger (read-only, so it works under `relay_app`) and applies
-  the same order/checksum/completeness check `migrateUp` enforces,
-  reporting drift as `error` instead of staying silently "ready."
+  attempt, per the handoff doc) and gives the `job.deferred` outbox event the
+  job's own `eligible_at` instead of defaulting to `now()`.
+- **Capacity Lua scripts trusted the worker's clock.** Every script (lease
+  acquire/renew, GCRA rate limiting, cooldown extension) now calls Redis `TIME`
+  internally instead of taking "now" as an argument.
+- **Published tool versions and routing decisions were mutable by `relay_app`.**
+  A trigger freezes every behavior-defining `tool_versions` column once
+  `published_at` is set (lifecycle columns `deprecated_at`/`retired_at` stay
+  open for a mutator that doesn't exist yet); `relay.routing_decisions` lost
+  `UPDATE`/`DELETE` the same way `audit_events`/`schema_migrations` did.
+- **Readiness only proved connectivity.** `checkMigrationLedgerHealth` reads the
+  ledger (read-only, so it works under `relay_app`) and applies the same
+  order/checksum/completeness check `migrateUp` enforces, reporting drift as
+  `error` instead of staying silently "ready."
 - **No repo-level LF policy.** Added `.gitattributes` (`text=auto
   eol=lf`).
-- **The 40-passed/59-ignored gap had no teeth.** `deno task check:live`
-  refuses to run at all unless `DATABASE_URL`/`MIGRATOR_TEST_DATABASE_URL`/
-  `REDIS_URL` are all set, then fails if anything is still reported
-  `ignored`. Currently: 107 passed, 0 ignored.
-- **Several Wave 3 FKs were missing.** `job_attempts.routing_decision_id`
-  was `text` against `routing_decisions.id bigint`; altered in place
-  (column was always `null` in practice) and FK'd.
+- **The 40-passed/59-ignored gap had no teeth.** `deno task check:live` refuses
+  to run at all unless `DATABASE_URL`/`MIGRATOR_TEST_DATABASE_URL`/ `REDIS_URL`
+  are all set, then fails if anything is still reported `ignored`. Currently:
+  107 passed, 0 ignored.
+- **Several Wave 3 FKs were missing.** `job_attempts.routing_decision_id` was
+  `text` against `routing_decisions.id bigint`; altered in place (column was
+  always `null` in practice) and FK'd.
   `tool_runs`/`execution_jobs.tool_version_id` predate the catalog they
   reference and were left unconstrained; both FK'd to `tool_versions` now.
-- **Personal-workspace provisioning didn't heal a missing membership
-  row.** A crash between claiming the `personal_workspaces` mapping and
-  creating the `auth.member` row could permanently lock a user out of a
-  workspace `getMembership` would never recognize them in. Every call now
-  checks and, if needed, recreates that membership row, including the
-  already-mapped fast path.
+- **Personal-workspace provisioning didn't heal a missing membership row.** A
+  crash between claiming the `personal_workspaces` mapping and creating the
+  `auth.member` row could permanently lock a user out of a workspace
+  `getMembership` would never recognize them in. Every call now checks and, if
+  needed, recreates that membership row, including the already-mapped fast path.
 
 ### Investigated, found substantially mitigated by existing config — not changed
 
-- **OAuth does not enforce a currently verified provider email.** Traced
-  through Better Auth 1.7.1's actual OAuth callback path (not just its
-  docs): `@better-auth/core`'s `google`/`github` provider adapters compute
+- **OAuth does not enforce a currently verified provider email.** Traced through
+  Better Auth 1.7.1's actual OAuth callback path (not just its docs):
+  `@better-auth/core`'s `google`/`github` provider adapters compute
   `emailVerified` correctly from the real provider signal (Google's
   `email_verified` OIDC claim; GitHub's per-address `verified` flag off
   `/user/emails`, matched to the specific email being used). Relay's own
   `account.accountLinking.enabled = false` (`packages/auth/src/auth.ts`)
-  independently blocks every implicit-linking path in
-  `oauth2/link-account.mjs` regardless of `emailVerified` — a sign-in that
-  matches an existing user's email returns `"account not linked"`, never a
-  session for that user. A brand-new user created from an unverified
-  provider email is stored with the correct `emailVerified: false`; nothing
-  in Relay currently trusts a user's email for anything security-sensitive
-  (authorization runs entirely off `userId`/`auth.member`, never email).
-  Residual risk is forward-looking, not current: **any future feature that
-  trusts `auth.user.email` for something security-relevant (workspace
-  invitations by email, notification delivery treated as proof of
-  ownership, support-driven account actions) must check `emailVerified`
-  before honoring it.** Flag this explicitly in that feature's own review
-  rather than treating today's OAuth config as needing a change.
+  independently blocks every implicit-linking path in `oauth2/link-account.mjs`
+  regardless of `emailVerified` — a sign-in that matches an existing user's
+  email returns `"account not linked"`, never a session for that user. A
+  brand-new user created from an unverified provider email is stored with the
+  correct `emailVerified: false`; nothing in Relay currently trusts a user's
+  email for anything security-sensitive (authorization runs entirely off
+  `userId`/`auth.member`, never email). Residual risk is forward-looking, not
+  current: **any future feature that trusts `auth.user.email` for something
+  security-relevant (workspace invitations by email, notification delivery
+  treated as proof of ownership, support-driven account actions) must check
+  `emailVerified` before honoring it.** Flag this explicitly in that feature's
+  own review rather than treating today's OAuth config as needing a change.
 
 ### Deferred — large enough to need their own implementation pass, not a patch
 
 - **Better Auth's organization routes bypass audit coverage.** Member/role/
-  invitation mutations reachable through the `organization` plugin's own
-  routes (`/api/auth/organization/*`) don't go through
-  `packages/audit`'s `recordAuditEvent`. Closing this needs Better Auth's
-  hook surface (`databaseHooks`/plugin `after` hooks per mutation) wired
-  per route, each mapped to the right `AuditEventInput` shape and target
-  type — real, scoped work, not a one-line fix, and not started.
-- **Usage reservation is absent.** `admitToolRun`'s step 6 ("Reserve
-  usage") stays deferred to metering, which doesn't exist as a package or
-  schema yet. Nothing to wire it into until that lands.
-- **`apps/worker` is still a signal-waiting placeholder.** BullMQ
-  consumption, cancellation, retries, graceful shutdown, reconciliation,
-  and fair scheduling are all unwired — this is the largest single gap
-  left after this pass and the natural next-wave target, since
-  `packages/queue`'s dispatch/outbox-relay and `packages/capacity`'s
-  coordinator (both exercised end-to-end by tests, per Validation
-  evidence) are exactly the pieces a real worker composes.
+  invitation mutations reachable through the `organization` plugin's own routes
+  (`/api/auth/organization/*`) don't go through `packages/audit`'s
+  `recordAuditEvent`. Closing this needs Better Auth's hook surface
+  (`databaseHooks`/plugin `after` hooks per mutation) wired per route, each
+  mapped to the right `AuditEventInput` shape and target type — real, scoped
+  work, not a one-line fix, and not started.
+- **Usage reservation is absent.** `admitToolRun`'s step 6 ("Reserve usage")
+  stays deferred to metering, which doesn't exist as a package or schema yet.
+  Nothing to wire it into until that lands.
+- **`apps/worker` is still a signal-waiting placeholder.** BullMQ consumption,
+  cancellation, retries, graceful shutdown, reconciliation, and fair scheduling
+  are all unwired — this is the largest single gap left after this pass and the
+  natural next-wave target, since `packages/queue`'s dispatch/outbox-relay and
+  `packages/capacity`'s coordinator (both exercised end-to-end by tests, per
+  Validation evidence) are exactly the pieces a real worker composes.
 - **Redis state loss / reconciliation.** A lost Redis dataset can drop
   already-published BullMQ tickets and reset provider capacity state with
-  nothing to detect or repair it. Meaningfully depends on the worker
-  existing first (reconciliation is something a worker's startup/sweep
-  does), so it's grouped with that gap rather than fixed standalone.
+  nothing to detect or repair it. Meaningfully depends on the worker existing
+  first (reconciliation is something a worker's startup/sweep does), so it's
+  grouped with that gap rather than fixed standalone.
 - **Weighted standard/paid/enterprise/internal scheduling.** Needs
   `relay.workspace_scheduling_profiles` (doesn't exist) and a fair-share
-  dispatch algorithm layered on top of the capacity coordinator -- Wave
-  5 territory per the handoff doc's own "Weighted fair scheduling"
-  section, not implementable as a side effect of this review pass.
+  dispatch algorithm layered on top of the capacity coordinator -- Wave 5
+  territory per the handoff doc's own "Weighted fair scheduling" section, not
+  implementable as a side effect of this review pass.
+
+## Reviewer feedback response, round 2 (2026-08-22)
+
+A second, more detailed review reasserted one round-1 item, flagged several
+genuine round-1 regressions, and added new blocking findings across
+auth/workspaces, admission/catalog, worker/capacity, and database/runtime. Each
+was independently re-verified against live PostgreSQL/Redis before being treated
+as real, matching round 1's discipline.
+
+### Fixed, live-verified, and covered by new/updated tests
+
+- **Concurrent first sessions still created duplicate membership rows.** A real
+  regression from round 1's own fix: `ensureMembership`'s check-then-insert
+  raced under genuine concurrency (5 parallel session-create calls for one new
+  user produced 5 `auth.member` rows in the live suite). Fixed with a new
+  `("organizationId", "userId")` unique constraint (`0020_member_uniqueness.ts`)
+  and rewriting `ensureMembership` to `INSERT ... ON CONFLICT DO NOTHING`
+  directly, bypassing the Better Auth adapter (which has no conflict-handling in
+  its interface). Verified by reproducing the duplicate rows first, then
+  confirming the fix holds across 5 repeated runs.
+- **OAuth still did not require a currently verified provider email.** Round 1
+  investigated this and found it substantially mitigated by
+  `accountLinking.enabled = false` (still true), but the reviewer reasserted it
+  directly rather than accepting that mitigation as sufficient. Added an
+  explicit, unambiguous gate in the `session.create.before` hook: session
+  creation is now rejected outright for any user whose `emailVerified` is false,
+  regardless of provider or linking state. Cheap, safe, and removes the
+  ambiguity rather than re-arguing the point.
+- **Superadmin tables remained directly mutable through broad runtime grants.**
+  `relay.system_role_assignments` is the only table in the schema matching this
+  description; `relay_app` had unrestricted UPDATE/DELETE on it. Added a trigger
+  permitting only a one-time revoke shape (no change to
+  `user_id`/`role`/`granted_by`/`granted_at`; a `revoked_at`/`revoked_by`
+  transition exactly once) and revoked DELETE from `relay_app` entirely
+  (`0023_system_role_assignment_immutability.ts`).
+- **Idempotency hashed/scoped too little.** The canonical idempotency hash now
+  includes the actor and tool version, not just the input payload -- the same
+  idempotency key and payload from a different actor, or against a different
+  tool version, is now a conflict rather than a silent replay.
+- **A duplicate request racing at a full queue boundary could return
+  `queue_full` instead of `replayed`.** `admitToolRun` now takes a
+  `pg_advisory_xact_lock` on `(workspaceId, idempotencyKey)` as the first
+  statement in its transaction, before the queue-full check runs, serializing
+  concurrent requests that share an idempotency key. Verified by firing two
+  concurrent identical requests against a queue limit of 1 and asserting the
+  outcome set is always `["admitted", "replayed"]`, never `queue_full`.
+- **Disabled provider, model, or capacity pool could still admit runs.** The
+  binding-resolution query now joins and filters on
+  `providers.lifecycle`/`provider_models.lifecycle` (excluding `disabled` and
+  `retired`) and `capacity_pools.enabled`.
+- **Admission did not persist a routing decision.** Every admitted run now
+  writes a `relay.routing_decisions` row (selected binding, provider, provider
+  model) alongside its `tool_runs` row.
+- **Concurrent `createToolVersion` could throw a raw uniqueness violation.** The
+  parent `tools` row is now locked with `SELECT ... FOR UPDATE` as the first
+  statement in the transaction, serializing version numbering; the function also
+  now returns a typed result (`ok`/`not_found`/`denied`) instead of throwing for
+  a missing tool. Verified with two concurrent calls against the same tool,
+  asserting sequential versions and no thrown error.
+- **Published tool versions could still be deleted; routing policy revisions
+  remained mutable.** A `BEFORE DELETE` trigger rejects deleting a
+  `tool_versions` row once `published_at` is set; `UPDATE`/`DELETE` were revoked
+  from `relay_app` on `relay.routing_policies`
+  (`0022_tool_version_delete_and_routing_policy_immutability.ts`).
+- **`capacity_pools.provider_model_id` conflicted with the provider-model ID
+  type.** Altered to `bigint` with a foreign key to `provider_models`.
+- **`execution_jobs.capacity_lease_id` and several tool/counter references
+  remained unconstrained.** Foreign keys added for
+  `execution_jobs.capacity_lease_id`, `tool_queue_counters.tool_id`, and
+  `workspace_tool_queue_counters.tool_id`
+  (`0021_capacity_and_counter_foreign_keys.ts`). Verified live that no orphaned
+  rows existed before either constraint was added.
+- **Nontransactional migrations remained allowed despite the documented
+  prohibition.** `validateManifest` now refuses to run any migration with
+  `transactional: false` unless it also carries a non-empty
+  `nonTransactionalReason`, checked before any DDL runs.
+- **Migration commands still required unrelated Redis configuration.**
+  `loadRuntimeConfig` split into `loadDatabaseConfig`/`loadBuildInfo`; the
+  `migrate` and new `healthcheck` commands in `src/main.ts` now load only what
+  they need, no `REDIS_URL` required.
+- **Lockfile enforcement was disabled; Docker compile was not frozen; image
+  metadata/healthcheck were incomplete.** `deno.json`'s `lock.frozen` is now
+  `true`; `Dockerfile`'s `deno compile` now passes `--frozen`; added full OCI
+  `LABEL` metadata (title, source, revision, version, licenses, etc.) and a
+  `HEALTHCHECK` that execs the compiled binary's own new `healthcheck` command
+  (checks database connectivity and migration-ledger drift) rather than
+  depending on `curl`/`wget`. Verified with a real `docker build` and
+  `docker run` against the live dev Postgres/Redis network: confirmed OCI labels
+  via `docker inspect`, confirmed `Health.Status: "healthy"`, confirmed the
+  image still runs as non-root.
+- **Live validation was not green.** Both reported failures were reproduced and
+  fixed at their root cause, not papered over:
+  - "110 passed, 1 failed from concurrent personal-workspace membership" is the
+    same duplicate-membership regression above, fixed by
+    `0020_member_uniqueness.ts`.
+  - "108 passed, 3 failed due to auth test cleanup/isolation interacting with
+    catalog actors" was a real isolation bug: `packages/auth`'s live tests reset
+    shared tables with a blanket `DELETE FROM auth."user"`/`auth.organization`
+    at test start, which deleted rows a concurrently-running catalog/queue
+    fixture still depended on once all three packages' live suites ran together
+    (not the case when `packages/auth` ran alone, which is why round 1 didn't
+    catch it). Rewritten across `auth_test.ts`, `authorization_test.ts`, and
+    `system-roles_test.ts` to use `unique()`-scoped fixture emails and narrow,
+    per-row cleanup instead. Reproduced directly with
+    `deno test --parallel packages/auth/ packages/catalog/ packages/queue/`
+    before the fix (failures matched the report) and confirmed clean after
+    (47/47 passed).
+
+### Investigated, found already true or safely deferred by design
+
+- **Production test-utils separation.** `packages/queue/src/test_support.ts` is
+  the only test-fixture module in the repo. It is not exported from
+  `@relay/queue`'s package surface (only `./src/index.ts` is), and no production
+  entrypoint (`src/main.ts`, `apps/api`, `apps/worker`) imports it or anything
+  like it -- only `*_test.ts` files do. No change needed: this separation
+  already holds.
+- **Proxy/IP trust.** `packages/auth/src/auth.ts`'s rate-limit configuration has
+  no `trustedProxies` list set, and no code anywhere parses
+  `X-Forwarded-For`/`X-Real-IP` directly. Better Auth's rate limiter degrades to
+  one shared bucket per path rather than trusting a spoofable header -- a safe
+  default, not a vulnerability, and already documented in-code as pending the
+  production Nginx topology. Left as configuration to fill in once that topology
+  exists, not a code defect.
+
+### Investigated, confirmed real but not closeable this pass
+
+- **Session freshness / reauthentication for high-risk actions.**
+  `docs/implementation-handoff/03-auth-workspaces.md` specifies a 15-minute
+  session-freshness window with required reauthentication before high-risk
+  actions, but no "high-risk action" route or gate exists yet to attach it to --
+  there is nothing to wire a freshness check into. Tracked as unimplemented, not
+  mitigated; belongs with whatever feature first introduces a high-risk,
+  reauth-gated action rather than as a standalone patch now.
+- **Audit redaction is a shallow safety net, not a guarantee.**
+  `packages/audit`'s `redactSnapshot` does regex-match six key-name patterns
+  (password/secret/token/credential/authorization/cookie/apikey) on
+  `before`/`afterSnapshot` fields only, by the code's own comment "a safety net,
+  not a substitute for callers building clean snapshots." Sensitive data under a
+  differently-named key, embedded in a string value, or in a non-snapshot field
+  (`action`, `reasonCode`, etc.) is not caught. This is a real limitation of a
+  blocklist approach; closing it properly means moving callers toward
+  allowlisted, structured snapshot fields rather than widening the regex, which
+  is a design change bigger than this pass.
+
+### Deferred — unchanged from round 1, or newly confirmed to overlap with an existing deferral
+
+- **Workspace creation is still not one atomic organization/member/mapping
+  operation.** `ensurePersonalWorkspace` still creates the Better Auth
+  organization via `adapter.create` and claims `personal_workspaces`/
+  `auth.member` as separate statements, not one transaction --
+  `auth.api.createOrganization` was already spiked and rejected (401) from
+  inside the session hook, per the existing code comment, so true atomicity
+  needs Better Auth's own transactional surface, not something this package can
+  add unilaterally. Correctness under concurrency now comes from idempotent
+  conflict-handling at every step (`ON CONFLICT DO NOTHING` on both the mapping
+  and the membership insert) rather than atomicity: every caller converges on
+  the same organization and exactly one membership row, verified live under
+  5-way concurrency. The known cost is a harmless orphaned organization row on
+  the losing side of a race, already documented as acceptable pending an
+  organization-deletion UI.
+- **Better Auth organization mutation endpoints remain exposed without complete
+  audit coverage.** Unchanged from round 1 -- needs Better Auth's hook surface
+  wired per `organization` plugin route, scoped work not started.
+- **Scheduling class, cost, and deadlines remain caller assertions.** Overlaps
+  with the already-deferred weighted-fair-scheduling and metering gaps: a
+  scheduling class or deadline can't be verified against anything until
+  `relay.workspace_scheduling_profiles` and a real scheduler exist to interpret
+  it. Not separable from those items.
+- **Admission still succeeds without a usage reservation; queue counters still
+  lack terminal success/failure/cancellation accounting.** Both unchanged from
+  round 1 -- usage reservation needs metering (doesn't exist yet); terminal
+  counter accounting needs the worker to reach a terminal state to account for,
+  which doesn't exist yet either.
+- **Worker/capacity: the production worker is still a signal-waiting
+  placeholder.** BullMQ consumption, cancellation, retry classification,
+  provider execution, terminal transitions, reconciliation, bounded shutdown,
+  Redis-loss reconciliation, durable lease rehydration, weighted fair
+  scheduling, and full capacity-unit/lease-ownership behavior are all unchanged
+  from round 1's assessment -- this remains the largest gap and the intended
+  next-wave target.
+
+### On the validation report's remaining items
+
+- **`deno lint`: passes.** Unchanged, still true.
+- **Frozen type-check / lockfile wanted modification.** Fixed above --
+  `deno.json`'s `lock.frozen` is now `true`.
+- **73 CRLF files.** The current checkout has zero CRLF files, in both the
+  working tree and every committed blob (`git grep -Ilc $'\r'` across the repo
+  returns nothing). Round 1 already added `.gitattributes` (`text=auto eol=lf`)
+  to force LF on every fresh checkout. What `.gitattributes` cannot do is
+  retroactively rewrite files already sitting on disk in a checkout made before
+  that file existed -- Git only applies line-ending normalization on
+  checkout/clone or an explicit `git add --renormalize .`, never silently to an
+  existing working tree. The reviewer's "in this existing checkout" phrasing
+  matches that exactly: this is very likely a pre-existing local checkout, not
+  something a further repo-side change can reach. A fresh `git clone` or
+  `git add --renormalize . && git commit` in the affected checkout resolves it;
+  there is nothing left to fix from the repository side.
+- **Non-live run / live validation counts.** Superseded by this round's fixes
+  above; see the re-run counts noted in each fix.
 
 ## Design readiness
 
