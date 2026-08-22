@@ -214,10 +214,45 @@ export async function admitToolRun(
   pool: DatabasePool,
   input: AdmitRunInput,
 ): Promise<AdmitRunResult> {
-  const canonicalPayloadHash = await sha256Hex(canonicalStringify(input.input));
+  // Scoped to actor + tool version + payload, not payload alone: an
+  // idempotency key is only client-supplied and unique per
+  // (workspace, key) -- nothing stops two different actors, or the same
+  // actor targeting two different tool versions, from reusing the same
+  // key with a coincidentally-identical `input.input`. Hashing payload
+  // alone would treat that as a legitimate replay and hand back a run
+  // that belongs to a different actor/tool version than the one this
+  // call actually asked for; including createdBy/toolVersionId in the
+  // hash makes that a conflict instead.
+  const canonicalPayloadHash = await sha256Hex(canonicalStringify({
+    actor: input.createdBy,
+    toolVersionId: input.toolVersionId,
+    input: input.input,
+  }));
 
   try {
     return await withTransaction(pool, async (client) => {
+      // Serializes every concurrent admitToolRun call sharing this exact
+      // (workspace, idempotency key) pair before either one can decide
+      // anything -- released automatically on commit or rollback
+      // (transaction-scoped, not session-scoped). Without this, two
+      // truly concurrent duplicate requests can both pass the "existing
+      // record?" SELECT below before either commits (read committed
+      // isolation shows neither the other's uncommitted insert), so both
+      // proceed to the real counter checks; if capacity is tight enough
+      // that the winner's own admission fills the queue, the loser reads
+      // that same now-full counter and returns a genuine `queue_full`
+      // instead of ever discovering it was actually a duplicate of a
+      // request that succeeded. Serializing here means the second caller
+      // always sees the first's committed idempotency row (admitted or
+      // not) before making any capacity decision of its own. Two int32
+      // hashes, not one, to keep collision-driven false contention
+      // (never incorrectness -- just occasional unnecessary blocking)
+      // vanishingly rare.
+      await client.query(
+        `select pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+        [input.workspaceId, input.idempotencyKey],
+      );
+
       // Step 2: authorize workspace membership first, before anything
       // else -- including an idempotency replay. Membership can change
       // between two calls with the same key (the caller left the
