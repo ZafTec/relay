@@ -1,3 +1,4 @@
+import type pg from "pg";
 import type { DatabasePool } from "@relay/database";
 import type { ExecutionTicket } from "./tickets.ts";
 
@@ -50,6 +51,8 @@ export async function claimJobForDispatch(
         {
           id: string;
           run_id: string;
+          workspace_id: string;
+          tool_version_id: string;
           lease_epoch: string;
           attempt_count: number;
         }
@@ -64,7 +67,7 @@ export async function claimJobForDispatch(
          where id = $1
            and dispatch_generation = $4
            and status = 'queued'
-         returning id, run_id, lease_epoch, attempt_count`,
+         returning id, run_id, workspace_id, tool_version_id, lease_epoch, attempt_count`,
         [
           ticket.domainJobId,
           leaseOwner,
@@ -86,6 +89,17 @@ export async function claimJobForDispatch(
         [row.id, row.attempt_count, row.lease_epoch],
       );
 
+      // Mirror image of the admission-time increment in admission.ts: the
+      // job is leaving the queued state, so queued_count/running_count
+      // move together. Same fixed lock order (tool, then workspace, then
+      // workspace-tool) admission.ts uses, so this can never deadlock
+      // against a concurrent admission or another claim/defer.
+      const toolId = await resolveToolId(client, row.tool_version_id);
+      await shiftCounters(client, toolId, row.workspace_id, {
+        queuedDelta: -1,
+        runningDelta: 1,
+      });
+
       await client.query("commit");
       return {
         kind: "claimed",
@@ -104,6 +118,55 @@ export async function claimJobForDispatch(
   } finally {
     client.release();
   }
+}
+
+async function resolveToolId(
+  client: pg.PoolClient,
+  toolVersionId: string,
+): Promise<string> {
+  const { rows } = await client.query<{ tool_id: string }>(
+    `select tool_id from relay.tool_versions where id = $1`,
+    [toolVersionId],
+  );
+  return rows[0].tool_id;
+}
+
+/**
+ * Applies the same queued/running delta to all three durable queue-depth
+ * counters (global-tool, workspace-total, workspace-tool) in the fixed
+ * lock order admission.ts established, so claim/defer transactions can
+ * never deadlock against an admission or against each other.
+ */
+async function shiftCounters(
+  client: pg.PoolClient,
+  toolId: string,
+  workspaceId: string,
+  delta: { readonly queuedDelta: number; readonly runningDelta: number },
+): Promise<void> {
+  await client.query(
+    `update relay.tool_queue_counters
+       set queued_count = queued_count + $2,
+           running_count = running_count + $3,
+           updated_at = now()
+     where tool_id = $1`,
+    [toolId, delta.queuedDelta, delta.runningDelta],
+  );
+  await client.query(
+    `update relay.workspace_queue_counters
+       set queued_count = queued_count + $2,
+           running_count = running_count + $3,
+           updated_at = now()
+     where workspace_id = $1`,
+    [workspaceId, delta.queuedDelta, delta.runningDelta],
+  );
+  await client.query(
+    `update relay.workspace_tool_queue_counters
+       set queued_count = queued_count + $3,
+           running_count = running_count + $4,
+           updated_at = now()
+     where workspace_id = $1 and tool_id = $2`,
+    [workspaceId, toolId, delta.queuedDelta, delta.runningDelta],
+  );
 }
 
 /**
@@ -145,9 +208,15 @@ export async function heartbeatJob(
  * `dispatch_generation` -- so the BullMQ ticket that led to this claim
  * can never re-claim the job if it's redelivered, only a *new* ticket
  * for the new generation can. `deferral_count` increments, not
- * `attempt_count`: capacity waiting is not an attempt. A fresh outbox
- * `job.deferred` event lets the relay publish a new ticket once
- * `eligibleAt` arrives.
+ * `attempt_count`: capacity waiting is not an attempt -- so this also
+ * reverses the provisional `attempt_count` increment and deletes the
+ * `job_attempts` row `claimJobForDispatch` created for this lease_epoch,
+ * since it turned out to never be submitted to a provider (deleting it
+ * also frees its `attempt_number` for reuse by the claim that eventually
+ * does get capacity, since `job_attempts` unique-constrains on
+ * `(job_id, attempt_number)`). A fresh outbox `job.deferred` event, itself
+ * only eligible for relay at `eligibleAt` (not immediately), lets the
+ * relay publish a new ticket once that time arrives.
  */
 export async function deferJob(
   pool: DatabasePool,
@@ -162,29 +231,48 @@ export async function deferJob(
   try {
     await client.query("begin");
     try {
-      const { rowCount } = await client.query(
+      const { rows } = await client.query<
+        { workspace_id: string; tool_version_id: string }
+      >(
         `update relay.execution_jobs
            set status = 'queued',
                dispatch_generation = dispatch_generation + 1,
                deferral_count = deferral_count + 1,
+               attempt_count = attempt_count - 1,
                eligible_at = $4,
                lease_owner = null,
                lease_expires_at = null,
                state_version = state_version + 1
-         where id = $1 and lease_epoch = $2 and lease_owner = $3 and status = 'running'`,
+         where id = $1 and lease_epoch = $2 and lease_owner = $3 and status = 'running'
+         returning workspace_id, tool_version_id`,
         [jobId, leaseEpoch, leaseOwner, eligibleAt],
       );
 
-      if (rowCount !== 1) {
+      if (rows.length !== 1) {
         await client.query("rollback");
         return false;
       }
 
       await client.query(
+        `delete from relay.job_attempts where job_id = $1 and lease_epoch = $2`,
+        [jobId, leaseEpoch],
+      );
+
+      const toolId = await resolveToolId(client, rows[0].tool_version_id);
+      await shiftCounters(client, toolId, rows[0].workspace_id, {
+        queuedDelta: 1,
+        runningDelta: -1,
+      });
+
+      await client.query(
         `insert into relay.outbox_events
-           (aggregate_type, aggregate_id, aggregate_version, event_type, payload)
-         values ('execution_job', $1, 1, 'job.deferred', $2)`,
-        [jobId, JSON.stringify({ domainJobId: jobId, runId, reason })],
+           (aggregate_type, aggregate_id, aggregate_version, event_type, payload, eligible_at)
+         values ('execution_job', $1, 1, 'job.deferred', $2, $3)`,
+        [
+          jobId,
+          JSON.stringify({ domainJobId: jobId, runId, reason }),
+          eligibleAt,
+        ],
       );
 
       await client.query("commit");

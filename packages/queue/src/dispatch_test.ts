@@ -97,6 +97,23 @@ Deno.test({
       assertEquals(attempts.rows.length, 1);
       assertEquals(attempts.rows[0].attempt_number, 1);
       assertEquals(Number(attempts.rows[0].lease_epoch), 1);
+
+      const counters = await pool.query<
+        { queued_count: number; running_count: number }
+      >(
+        "select queued_count, running_count from relay.tool_queue_counters where tool_id = $1",
+        [admitted.fixture.toolId],
+      );
+      assertEquals(
+        counters.rows[0].queued_count,
+        0,
+        "a claimed job must leave the queued counter",
+      );
+      assertEquals(
+        counters.rows[0].running_count,
+        1,
+        "a claimed job must join the running counter",
+      );
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();
@@ -294,19 +311,45 @@ Deno.test({
       assertEquals(job.rows[0].deferral_count, 1);
       assertEquals(
         job.rows[0].attempt_count,
-        1,
-        "deferral must not increment attempt_count",
+        0,
+        "capacity waiting is not an attempt -- deferral must reverse claim's provisional increment",
       );
       assertEquals(job.rows[0].dispatch_generation, 1);
 
-      const outbox = await pool.query<{ event_type: string }>(
-        "select event_type from relay.outbox_events where aggregate_id = $1 order by created_at",
+      const attempts = await pool.query(
+        "select id from relay.job_attempts where job_id = $1",
+        [jobId],
+      );
+      assertEquals(
+        attempts.rows.length,
+        0,
+        "a deferred claim's attempt row must be removed, freeing its attempt_number for reuse",
+      );
+
+      const outbox = await pool.query<
+        { event_type: string; eligible_at: Date }
+      >(
+        "select event_type, eligible_at from relay.outbox_events where aggregate_id = $1 order by created_at",
         [jobId],
       );
       assertEquals(
         outbox.rows.map((row: { event_type: string }) => row.event_type),
         ["job.ready", "job.deferred"],
       );
+      assertEquals(
+        outbox.rows[1].eligible_at.getTime(),
+        eligibleAt.getTime(),
+        "the deferred outbox event must not be eligible for relay before the job itself is",
+      );
+
+      const counters = await pool.query<
+        { queued_count: number; running_count: number }
+      >(
+        "select queued_count, running_count from relay.tool_queue_counters where tool_id = $1",
+        [admitted.fixture.toolId],
+      );
+      assertEquals(counters.rows[0].queued_count, 1);
+      assertEquals(counters.rows[0].running_count, 0);
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();
