@@ -1,4 +1,4 @@
-import type { Redis } from "@relay/queue";
+import type { Redis } from "ioredis";
 
 /**
  * GCRA rate limiting, per "Capacity coordinator": "Use GCRA for smooth
@@ -103,12 +103,57 @@ export async function acquireSubmissionPermit(
   checks: readonly RateLimitCheck[],
   cooldownKeys: readonly string[],
 ): Promise<AcquirePermitResult> {
+  for (const [index, check] of checks.entries()) {
+    if (check.key.length === 0) {
+      throw new Error(`checks[${index}].key must not be empty`);
+    }
+    if (
+      !Number.isFinite(check.emissionIntervalMs) ||
+      check.emissionIntervalMs <= 0
+    ) {
+      throw new Error(
+        `checks[${index}].emissionIntervalMs must be a positive finite number`,
+      );
+    }
+    if (!Number.isFinite(check.burstMs) || check.burstMs < 0) {
+      throw new Error(
+        `checks[${index}].burstMs must be a finite non-negative number`,
+      );
+    }
+    if (!Number.isFinite(check.cost) || check.cost <= 0) {
+      throw new Error(
+        `checks[${index}].cost must be a positive finite number`,
+      );
+    }
+    const requestDebtMs = check.emissionIntervalMs * check.cost;
+    const maximumDebtMs = requestDebtMs + check.burstMs;
+    if (
+      !Number.isFinite(requestDebtMs) ||
+      requestDebtMs <= 0 ||
+      !Number.isSafeInteger(Math.ceil(maximumDebtMs))
+    ) {
+      throw new Error(`checks[${index}] exceeds Redis millisecond precision`);
+    }
+  }
+  for (const [index, key] of cooldownKeys.entries()) {
+    if (key.length === 0) {
+      throw new Error(`cooldownKeys[${index}] must not be empty`);
+    }
+  }
+
+  const keys = [...checks.map((check) => check.key), ...cooldownKeys];
+  if (new Set(keys).size !== keys.length) {
+    throw new Error("rate and cooldown keys must be unique");
+  }
+  if (keys.length === 0) {
+    throw new Error("at least one rate or cooldown key is required");
+  }
+
   const gcraArgs = checks.flatMap((check) => [
     check.emissionIntervalMs,
     check.burstMs,
     check.cost,
   ]);
-  const keys = [...checks.map((check) => check.key), ...cooldownKeys];
 
   const result = await client.relayAcquirePermit(
     keys.length,

@@ -390,6 +390,14 @@
       "npm:ioredis@5.11.1",
       "npm:kysely@~0.29.5",
       "npm:pg@^8.23.0"
-    ]
+    ],
+    "members": {
+      "packages/scheduler": {
+        "dependencies": [
+          "jsr:@std/assert@^1.0.19",
+          "npm:ioredis@5.11.1"
+        ]
+      }
+    }
   }
 }

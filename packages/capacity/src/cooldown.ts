@@ -1,21 +1,18 @@
-import type { Redis } from "@relay/queue";
+import type { Redis } from "ioredis";
 
 /**
  * "Cooldown cannot be shortened by an older response": a stale
  * (out-of-order) provider response setting a shorter cooldown than one
- * already in effect must not shrink it. Extend-only, computed from the
- * key's current TTL rather than trusting a caller-supplied "current
- * expiry" that could itself be stale. `new_expires_at` is a genuine
- * external input -- the caller's target expiry, typically derived from a
- * provider-reported retry-after -- but the `now` baseline it's compared
- * and converted to a TTL against comes from Redis's own `TIME`, not the
- * caller, for the same reason as `ACQUIRE_SCRIPT` in leases.ts.
+ * already in effect must not shrink it. Callers supply a relative duration,
+ * and Redis `TIME` derives the absolute expiry, so application clock skew can
+ * neither shorten nor accidentally extend a provider cooldown.
  */
 const SET_COOLDOWN_SCRIPT = `
 local key = KEYS[1]
-local new_expires_at = tonumber(ARGV[1])
+local duration_ms = tonumber(ARGV[1])
 local time = redis.call('TIME')
 local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+local new_expires_at = now + duration_ms
 local current_ttl = redis.call('PTTL', key)
 local current_expires_at = now - 1
 if current_ttl and current_ttl > 0 then
@@ -51,8 +48,12 @@ export function defineCooldownCommands(connection: Redis): CooldownClient {
 export async function setProviderCooldown(
   client: CooldownClient,
   key: string,
-  expiresAtMs: number,
+  durationMs: number,
 ): Promise<boolean> {
-  const result = await client.relaySetCooldown(key, expiresAtMs);
+  if (key.length === 0) throw new Error("cooldown key must not be empty");
+  if (!Number.isSafeInteger(durationMs) || durationMs <= 0) {
+    throw new Error("cooldown durationMs must be a positive safe integer");
+  }
+  const result = await client.relaySetCooldown(key, durationMs);
   return result === 1;
 }

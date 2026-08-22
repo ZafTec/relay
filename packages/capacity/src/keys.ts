@@ -1,11 +1,9 @@
 /**
  * Redis key layout from
- * docs/implementation-handoff/04-queue-capacity-scheduling.md
- * "Redis keys and leases". The `{capacity}` hash tag keeps every
- * coordination key for one environment in the same Cluster slot -- unused
- * today (Redis Cluster is out of scope for the MVP, per that section) but
- * free to keep now so a later move doesn't have to rewrite every key
- * builder.
+ * docs/implementation-handoff/04-queue-capacity-scheduling.md. The MVP uses a
+ * single standalone Redis authority. The `{capacity}` tag keeps the layout
+ * ready for a future, explicitly-designed cluster protocol without pretending
+ * that today's cross-scope scripts support independently-sharded authorities.
  */
 function prefix(env: string): string {
   return `relay:${env}:{capacity}`;
@@ -29,6 +27,16 @@ export function activeWorkspaceToolKey(
 
 export function activePoolKey(env: string, poolId: string): string {
   return `${prefix(env)}:active:pool:${poolId}`;
+}
+
+/** Companion hash containing weighted/fenced metadata for a scope ZSET. */
+export function leaseMetadataKey(scopeKey: string): string {
+  return `${scopeKey}:leases`;
+}
+
+/** One live lease fence per durable job. */
+export function executionLeaseJobKey(env: string, jobId: string): string {
+  return `${prefix(env)}:lease:job:${encodeURIComponent(jobId)}`;
 }
 
 export function rateToolKey(env: string, toolKey: string): string {

@@ -9,7 +9,8 @@
     "./packages/config",
     "./packages/contracts",
     "./packages/database",
-    "./packages/queue"
+    "./packages/queue",
+    "./packages/scheduler"
   ],
   "tasks": {
     "dev:api": "deno run --env-file=.env --allow-env --allow-net --watch src/main.ts api",

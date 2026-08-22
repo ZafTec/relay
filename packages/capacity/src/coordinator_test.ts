@@ -1,19 +1,8 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Redis } from "ioredis";
 import { CapacityCoordinator } from "./coordinator.ts";
+import { cooldownKey, leaseMetadataKey } from "./keys.ts";
 
-/**
- * Live-Redis tests, gated behind REDIS_URL like the rest of the repo
- * gates behind DATABASE_URL -- skipped, not failed, when it's absent.
- *
- * These use real `sleep`s to observe expiry/rate-limit/cooldown behavior
- * rather than passing a simulated `nowMs` into the coordinator: the
- * scripts under test source "now" from Redis's own `TIME` command
- * internally (see leases.ts/rate-limit.ts/cooldown.ts), not from a
- * caller-supplied timestamp, precisely so worker clock skew can't affect
- * capacity accounting -- so there is no longer a way to simulate time
- * passing without actually waiting.
- */
 const REDIS_URL = Deno.env.get("REDIS_URL");
 
 function sleep(ms: number): Promise<void> {
@@ -33,8 +22,8 @@ function withRedis(
       try {
         await fn(redis, env);
       } finally {
-        // Coordination keys carry the hash tag `{capacity}`; every key
-        // this test creates lands on the same slot, so KEYS is safe here.
+        // Tests intentionally assume the same standalone Redis authority as the
+        // production MVP. Every generated key is isolated by this unique env.
         const keys = await redis.keys(`relay:${env}:*`);
         if (keys.length > 0) await redis.del(...keys);
         await redis.quit();
@@ -43,169 +32,219 @@ function withRedis(
   });
 }
 
+const scope = {
+  toolKey: "image.generate",
+  workspaceId: "ws-1",
+  poolId: "pool-a",
+} as const;
+
+function limits(value: number) {
+  return {
+    globalTool: value,
+    pool: value,
+    workspaceTotal: value,
+    workspaceTool: value,
+  };
+}
+
+function leaseRequest(
+  jobId: string,
+  units: number,
+  ownerId = "worker-a",
+  leaseEpoch = 1,
+) {
+  return { jobId, units, ownerId, leaseEpoch };
+}
+
 withRedis(
-  "acquireExecutionLease grants up to the limit then denies, all-or-none",
+  "weighted execution leases never overshoot under concurrent acquisition",
   async (redis, env) => {
     const coordinator = new CapacityCoordinator(redis, {
       env,
       leaseDurationMs: 30_000,
     });
-    const scope = {
-      toolKey: "image.generate",
-      workspaceId: "ws-1",
-      poolId: "pool-a",
-    };
-    const limits = {
-      globalTool: 2,
-      pool: 10,
-      workspaceTotal: 10,
-      workspaceTool: 10,
-    };
 
-    const first = await coordinator.acquireExecutionLease(scope, limits);
-    const second = await coordinator.acquireExecutionLease(scope, limits);
-    const third = await coordinator.acquireExecutionLease(scope, limits);
+    const attempts = await Promise.all(
+      Array.from(
+        { length: 12 },
+        (_, index) =>
+          coordinator.acquireExecutionLease(
+            scope,
+            limits(10),
+            leaseRequest(`job-${index}`, 3),
+          ),
+      ),
+    );
+    const acquired = attempts.filter((result) => result.ok);
+    assertEquals(acquired.length, 3);
 
-    assertEquals(first.ok, true);
-    assertEquals(second.ok, true);
-    assertEquals(third.ok, false);
-    assertEquals(third.blockedScopeIndex, 0); // globalTool is scope index 0
+    const first = acquired[0];
+    assert(first.ok);
+    const usage = await coordinator.inspectCapacity(first.lease.scopeKeys);
+    for (const key of first.lease.scopeKeys) assertEquals(usage[key], 9);
 
-    const counts = await coordinator.inspectCapacity(first.scopeKeys);
-    assertEquals(counts[first.scopeKeys[0]], 2);
+    for (const denied of attempts.filter((result) => !result.ok)) {
+      assertEquals(denied.reason, "capacity");
+      if (denied.reason === "capacity") {
+        assertEquals(denied.usedUnits, 9);
+        assertEquals(denied.limit, 10);
+      }
+    }
   },
 );
 
 withRedis(
-  "a denial on a later scope does not consume capacity on an earlier scope",
+  "a weighted denial on a later scope consumes no earlier-scope units",
   async (redis, env) => {
     const coordinator = new CapacityCoordinator(redis, {
       env,
       leaseDurationMs: 30_000,
     });
-    const scope = {
-      toolKey: "image.generate",
-      workspaceId: "ws-1",
-      poolId: "pool-a",
-    };
-    // workspaceTool (scope index 3) is the tight constraint; globalTool is generous.
-    const limits = {
-      globalTool: 100,
-      pool: 100,
-      workspaceTotal: 100,
-      workspaceTool: 0,
-    };
-
-    const result = await coordinator.acquireExecutionLease(scope, limits);
-    assertEquals(result.ok, false);
-    assertEquals(result.blockedScopeIndex, 3);
-
-    const counts = await coordinator.inspectCapacity(result.scopeKeys);
-    assertEquals(
-      counts[result.scopeKeys[0]],
-      0,
-      "globalTool must not have been consumed",
-    );
-    assertEquals(
-      counts[result.scopeKeys[1]],
-      0,
-      "pool must not have been consumed",
-    );
-  },
-);
-
-withRedis(
-  "renewExecutionLease extends expiry; release frees the slot",
-  async (redis, env) => {
-    const coordinator = new CapacityCoordinator(redis, {
-      env,
-      leaseDurationMs: 300,
-    });
-    const scope = {
-      toolKey: "image.generate",
-      workspaceId: "ws-1",
-      poolId: "pool-a",
-    };
-    const limits = {
-      globalTool: 1,
-      pool: 1,
-      workspaceTotal: 1,
-      workspaceTool: 1,
-    };
-
-    const lease = await coordinator.acquireExecutionLease(scope, limits);
-    assertEquals(lease.ok, true);
-
-    const blocked = await coordinator.acquireExecutionLease(scope, limits);
-    assertEquals(blocked.ok, false, "slot is occupied until release/expiry");
-
-    // Renew before the 300ms lease expires -- proves renew actually
-    // extends it, since the slot is still occupied well past the
-    // original duration.
-    await sleep(200);
-    const renewed = await coordinator.renewExecutionLease(
-      lease.scopeKeys,
-      lease.leaseId!,
-    );
-    assertEquals(renewed.ok, true);
-
-    await sleep(200);
-    const stillBlocked = await coordinator.acquireExecutionLease(
+    const result = await coordinator.acquireExecutionLease(
       scope,
-      limits,
-    );
-    assertEquals(
-      stillBlocked.ok,
-      false,
-      "the renewed lease must still hold its slot past the original duration",
+      {
+        globalTool: 100,
+        pool: 100,
+        workspaceTotal: 100,
+        workspaceTool: 2,
+      },
+      leaseRequest("job-denied", 3),
     );
 
-    await coordinator.releaseExecutionLease(lease.scopeKeys, lease.leaseId!);
+    assertEquals(result.ok, false);
+    if (result.ok) throw new Error("expected capacity denial");
+    assertEquals(result.reason, "capacity");
+    if (result.reason === "capacity") assertEquals(result.blockedScopeIndex, 3);
+
+    const usage = await coordinator.inspectCapacity(result.scopeKeys);
+    for (const key of result.scopeKeys) assertEquals(usage[key], 0);
+  },
+);
+
+withRedis(
+  "owner, job, and epoch fencing rejects stale lease mutations",
+  async (redis, env) => {
+    const coordinator = new CapacityCoordinator(redis, {
+      env,
+      leaseDurationMs: 30_000,
+    });
+    const first = await coordinator.acquireExecutionLease(
+      scope,
+      limits(5),
+      leaseRequest("job-fenced", 2, "worker-a", 7),
+    );
+    assert(first.ok);
+
+    const duplicate = await coordinator.acquireExecutionLease(
+      scope,
+      limits(5),
+      leaseRequest("job-fenced", 2, "worker-a", 7),
+    );
+    assert(duplicate.ok);
+    assertEquals(duplicate.reused, true);
+    assertEquals(duplicate.lease.leaseId, first.lease.leaseId);
+
+    const competingOwner = await coordinator.acquireExecutionLease(
+      scope,
+      limits(5),
+      leaseRequest("job-fenced", 2, "worker-b", 7),
+    );
+    assertEquals(competingOwner.ok, false);
+    if (!competingOwner.ok) assertEquals(competingOwner.reason, "fenced");
+
+    const replacement = await coordinator.acquireExecutionLease(
+      scope,
+      limits(5),
+      leaseRequest("job-fenced", 2, "worker-b", 8),
+    );
+    assert(replacement.ok);
+    assertEquals(replacement.reused, false);
+
+    const usage = await coordinator.inspectCapacity(
+      replacement.lease.scopeKeys,
+    );
+    for (const key of replacement.lease.scopeKeys) assertEquals(usage[key], 2);
+
+    assertEquals(
+      (await coordinator.renewExecutionLease(first.lease)).ok,
+      false,
+    );
+    assertEquals(await coordinator.releaseExecutionLease(first.lease), false);
+
+    const renewed = await coordinator.renewExecutionLease(replacement.lease);
+    assert(renewed.ok);
+    assertEquals(await coordinator.releaseExecutionLease(renewed.lease), true);
+    const afterRelease = await coordinator.inspectCapacity(
+      replacement.lease.scopeKeys,
+    );
+    for (const key of replacement.lease.scopeKeys) {
+      assertEquals(afterRelease[key], 0);
+    }
+  },
+);
+
+withRedis(
+  "lease scope, metadata, and fence keys expire without a cleanup caller",
+  async (redis, env) => {
+    const coordinator = new CapacityCoordinator(redis, {
+      env,
+      leaseDurationMs: 500,
+    });
+    const acquired = await coordinator.acquireExecutionLease(
+      scope,
+      limits(1),
+      leaseRequest("job-expiring", 1),
+    );
+    assert(acquired.ok);
+
+    for (const key of acquired.lease.scopeKeys) {
+      assert((await redis.pttl(key)) > 0);
+      assert((await redis.pttl(leaseMetadataKey(key))) > 0);
+    }
+    assert((await redis.pttl(acquired.lease.jobKey)) > 0);
+
+    await sleep(750);
+    for (const key of acquired.lease.scopeKeys) {
+      assertEquals(await redis.exists(key), 0);
+      assertEquals(await redis.exists(leaseMetadataKey(key)), 0);
+    }
+    assertEquals(await redis.exists(acquired.lease.jobKey), 0);
+  },
+);
+
+withRedis(
+  "renew extends a weighted lease and release immediately frees its units",
+  async (redis, env) => {
+    const coordinator = new CapacityCoordinator(redis, {
+      env,
+      leaseDurationMs: 250,
+    });
+    const acquired = await coordinator.acquireExecutionLease(
+      scope,
+      limits(2),
+      leaseRequest("job-renew", 2),
+    );
+    assert(acquired.ok);
+
+    await sleep(150);
+    const renewed = await coordinator.renewExecutionLease(acquired.lease);
+    assert(renewed.ok);
+    await sleep(150);
+
+    const blocked = await coordinator.acquireExecutionLease(
+      scope,
+      limits(2),
+      leaseRequest("job-blocked", 1),
+    );
+    assertEquals(blocked.ok, false);
+
+    assertEquals(await coordinator.releaseExecutionLease(renewed.lease), true);
     const afterRelease = await coordinator.acquireExecutionLease(
       scope,
-      limits,
+      limits(2),
+      leaseRequest("job-after-release", 2),
     );
-    assertEquals(
-      afterRelease.ok,
-      true,
-      "release must free the slot immediately",
-    );
-  },
-);
-
-withRedis(
-  "expired leases are purged and their slots reclaimed",
-  async (redis, env) => {
-    const coordinator = new CapacityCoordinator(redis, {
-      env,
-      leaseDurationMs: 100,
-    });
-    const scope = {
-      toolKey: "image.generate",
-      workspaceId: "ws-1",
-      poolId: "pool-a",
-    };
-    const limits = {
-      globalTool: 1,
-      pool: 1,
-      workspaceTotal: 1,
-      workspaceTool: 1,
-    };
-
-    const lease = await coordinator.acquireExecutionLease(scope, limits);
-    assertEquals(lease.ok, true);
-
-    // Let the 100ms lease actually expire without a renew.
-    await sleep(200);
-    const afterExpiry = await coordinator.acquireExecutionLease(
-      scope,
-      limits,
-    );
-    assertEquals(
-      afterExpiry.ok,
-      true,
-      "an expired lease must not hold its slot forever",
-    );
+    assertEquals(afterRelease.ok, true);
   },
 );
 
@@ -224,27 +263,25 @@ withRedis(
       cost: 1,
     };
 
-    const first = await coordinator.acquireSubmissionPermit(poolId, [check]);
-    assertEquals(first.ok, true);
-
-    const second = await coordinator.acquireSubmissionPermit(poolId, [
-      check,
-    ]);
-    assertEquals(second.ok, false);
-    assertEquals(second.blockedReason, "rate");
-    assertEquals(second.retryAfterMs! > 0, true);
+    assertEquals(
+      (await coordinator.acquireSubmissionPermit(poolId, [check])).ok,
+      true,
+    );
+    const denied = await coordinator.acquireSubmissionPermit(poolId, [check]);
+    assertEquals(denied.ok, false);
+    assertEquals(denied.blockedReason, "rate");
+    assert((denied.retryAfterMs ?? 0) > 0);
 
     await sleep(350);
-    const thirdAfterInterval = await coordinator.acquireSubmissionPermit(
-      poolId,
-      [check],
+    assertEquals(
+      (await coordinator.acquireSubmissionPermit(poolId, [check])).ok,
+      true,
     );
-    assertEquals(thirdAfterInterval.ok, true);
   },
 );
 
 withRedis(
-  "setProviderCooldown blocks acquireSubmissionPermit and cannot be shortened",
+  "provider cooldown is monotonic and expires on Redis time",
   async (redis, env) => {
     const coordinator = new CapacityCoordinator(redis, {
       env,
@@ -258,69 +295,95 @@ withRedis(
       cost: 1,
     };
 
-    const extended = await coordinator.setProviderCooldown(
-      poolId,
-      Date.now() + 400,
-    );
-    assertEquals(extended, true);
-
-    const duringCooldown = await coordinator.acquireSubmissionPermit(poolId, [
-      check,
-    ]);
-    assertEquals(duringCooldown.ok, false);
-    assertEquals(duringCooldown.blockedReason, "cooldown");
-
-    // An older, shorter cooldown must not shrink the one already in effect.
-    const shortened = await coordinator.setProviderCooldown(
-      poolId,
-      Date.now() + 100,
-    );
-    assertEquals(shortened, false);
-
-    const stillCoolingDown = await coordinator.acquireSubmissionPermit(
-      poolId,
-      [check],
-    );
-    assertEquals(
-      stillCoolingDown.ok,
-      false,
-      "shortened cooldown must not have taken effect",
-    );
+    assertEquals(await coordinator.setProviderCooldown(poolId, 400), true);
+    const initialTtl = await redis.pttl(cooldownKey(env, poolId));
+    assert(initialTtl > 0 && initialTtl <= 400);
+    const during = await coordinator.acquireSubmissionPermit(poolId, [check]);
+    assertEquals(during.blockedReason, "cooldown");
+    assertEquals(await coordinator.setProviderCooldown(poolId, 100), false);
 
     await sleep(500);
-    const afterCooldown = await coordinator.acquireSubmissionPermit(poolId, [
-      check,
-    ]);
     assertEquals(
-      afterCooldown.ok,
+      (await coordinator.acquireSubmissionPermit(poolId, [check])).ok,
       true,
-      "cooldown must actually expire once its real extended duration elapses",
     );
   },
 );
 
-withRedis("scripts survive SCRIPT FLUSH", async (redis, env) => {
+withRedis("rate policy rejects invalid numeric inputs", async (redis, env) => {
+  const coordinator = new CapacityCoordinator(redis, {
+    env,
+    leaseDurationMs: 30_000,
+  });
+
+  await assertRejects(
+    () =>
+      coordinator.acquireSubmissionPermit("pool-a", [{
+        key: coordinator.rateKeys.tool("image.generate"),
+        emissionIntervalMs: 0,
+        burstMs: 0,
+        cost: 1,
+      }]),
+    Error,
+    "emissionIntervalMs",
+  );
+  await assertRejects(
+    () =>
+      coordinator.acquireSubmissionPermit("pool-a", [{
+        key: coordinator.rateKeys.tool("image.generate"),
+        emissionIntervalMs: 1,
+        burstMs: -1,
+        cost: 1,
+      }]),
+    Error,
+    "burstMs",
+  );
+  await assertRejects(
+    () =>
+      coordinator.acquireSubmissionPermit("pool-a", [{
+        key: coordinator.rateKeys.tool("image.generate"),
+        emissionIntervalMs: 1,
+        burstMs: 0,
+        cost: Number.NaN,
+      }]),
+    Error,
+    "cost",
+  );
+  await assertRejects(
+    () => coordinator.setProviderCooldown("pool-a", 1.5),
+    Error,
+    "positive safe integer",
+  );
+  const duplicateKey = coordinator.rateKeys.tool("image.generate");
+  await assertRejects(
+    () =>
+      coordinator.acquireSubmissionPermit("pool-a", [
+        { key: duplicateKey, emissionIntervalMs: 1, burstMs: 0, cost: 1 },
+        { key: duplicateKey, emissionIntervalMs: 2, burstMs: 0, cost: 1 },
+      ]),
+    Error,
+    "must be unique",
+  );
+});
+
+withRedis("weighted lease scripts survive SCRIPT FLUSH", async (redis, env) => {
   const coordinator = new CapacityCoordinator(redis, {
     env,
     leaseDurationMs: 5_000,
   });
-  const scope = {
-    toolKey: "image.generate",
-    workspaceId: "ws-1",
-    poolId: "pool-a",
-  };
-  const limits = {
-    globalTool: 5,
-    pool: 5,
-    workspaceTotal: 5,
-    workspaceTool: 5,
-  };
-
-  const before = await coordinator.acquireExecutionLease(scope, limits);
-  assertEquals(before.ok, true);
+  const before = await coordinator.acquireExecutionLease(
+    scope,
+    limits(5),
+    leaseRequest("job-before-flush", 2),
+  );
+  assert(before.ok);
 
   await redis.script("FLUSH");
 
-  const after = await coordinator.acquireExecutionLease(scope, limits);
+  const after = await coordinator.acquireExecutionLease(
+    scope,
+    limits(5),
+    leaseRequest("job-after-flush", 3),
+  );
   assertEquals(after.ok, true);
 });

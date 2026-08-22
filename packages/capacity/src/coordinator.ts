@@ -1,9 +1,12 @@
-import type { Redis } from "@relay/queue";
+import type { Redis } from "ioredis";
 import {
   acquireLease,
   type AcquireLeaseResult,
   defineLeaseCommands,
+  inspectLeaseUnits,
   type LeaseClient,
+  type LeaseHandle,
+  type LeaseRequest,
   releaseLease,
   renewLease,
 } from "./leases.ts";
@@ -25,6 +28,7 @@ import {
   activeWorkspaceKey,
   activeWorkspaceToolKey,
   cooldownKey,
+  executionLeaseJobKey,
   rateProviderKey,
   rateToolKey,
 } from "./keys.ts";
@@ -40,12 +44,7 @@ export interface ExecutionLeaseScope {
   readonly poolId: string;
 }
 
-/**
- * "Execution lease checks": global tool active limit, capacity-pool /
- * provider active limit, workspace-total active limit, workspace-tool
- * active limit. Scheduling-class share limiting is a fair-scheduler
- * concern layered on top of this, not implemented here yet.
- */
+/** Limits and occupancy are weighted execution units, not lease counts. */
 export interface ExecutionLeaseLimits {
   readonly globalTool: number;
   readonly pool: number;
@@ -53,21 +52,24 @@ export interface ExecutionLeaseLimits {
   readonly workspaceTool: number;
 }
 
-export interface AcquiredExecutionLease extends AcquireLeaseResult {
-  readonly scopeKeys: readonly string[];
-}
+export type ExecutionLeaseRequest = LeaseRequest;
+export type ExecutionLease = LeaseHandle;
+
+export type AcquireExecutionLeaseResult =
+  | {
+    readonly ok: true;
+    readonly lease: ExecutionLease;
+    readonly reused: boolean;
+  }
+  | (Extract<AcquireLeaseResult, { readonly ok: false }> & {
+    readonly scopeKeys: readonly string[];
+  });
 
 /**
- * Domain interface over Redis, per "Capacity coordinator": "Expose a
- * domain interface rather than Redis keys." Callers (the worker's job
- * dispatcher) never see key names or Lua; they pass tool/workspace/pool
- * identifiers and limits sourced from `relay.capacity_pools` /
- * `relay.capacity_policies`.
- *
- * Scope: unweighted concurrency (each lease occupies exactly one slot
- * per scope). `relay.execution_capacity_leases.units` for weighted/
- * variable-cost concurrency is not implemented yet -- every acquisition
- * here costs 1 unit regardless of the job's actual estimated cost.
+ * Domain interface over Redis. Execution leases are weighted and fenced by the
+ * durable job identity (`jobId`, `leaseEpoch`) plus the worker `ownerId` and an
+ * unguessable lease ID. Renew/release therefore cannot be performed by a stale
+ * owner, and a newer epoch atomically supersedes an older active lease.
  */
 export class CapacityCoordinator {
   private readonly leaseClient: LeaseClient;
@@ -78,6 +80,13 @@ export class CapacityCoordinator {
     connection: Redis,
     private readonly config: CapacityCoordinatorConfig,
   ) {
+    if (config.env.length === 0) throw new Error("env must not be empty");
+    if (
+      !Number.isSafeInteger(config.leaseDurationMs) ||
+      config.leaseDurationMs <= 0
+    ) {
+      throw new Error("leaseDurationMs must be a positive safe integer");
+    }
     this.leaseClient = defineLeaseCommands(connection);
     this.rateClient = defineRateLimitCommands(connection);
     this.cooldownClient = defineCooldownCommands(connection);
@@ -95,49 +104,63 @@ export class CapacityCoordinator {
   async acquireExecutionLease(
     scope: ExecutionLeaseScope,
     limits: ExecutionLeaseLimits,
-  ): Promise<AcquiredExecutionLease> {
+    request: ExecutionLeaseRequest,
+  ): Promise<AcquireExecutionLeaseResult> {
     const scopeKeys = this.executionScopeKeys(scope);
-    const scopeLimits = [
-      limits.globalTool,
-      limits.pool,
-      limits.workspaceTotal,
-      limits.workspaceTool,
-    ];
+    const jobKey = executionLeaseJobKey(this.config.env, request.jobId);
     const result = await acquireLease(
       this.leaseClient,
+      jobKey,
       scopeKeys,
-      scopeLimits,
+      [
+        limits.globalTool,
+        limits.pool,
+        limits.workspaceTotal,
+        limits.workspaceTool,
+      ],
       this.config.leaseDurationMs,
+      request,
     );
-    return { ...result, scopeKeys };
+
+    if (!result.ok) return { ...result, scopeKeys };
+    return {
+      ok: true,
+      reused: result.reused,
+      lease: {
+        ...request,
+        leaseId: result.leaseId,
+        expiresAt: result.expiresAt,
+        jobKey,
+        scopeKeys,
+      },
+    };
   }
 
   async renewExecutionLease(
-    scopeKeys: readonly string[],
-    leaseId: string,
-  ): Promise<{ ok: boolean; expiresAt?: number; blockedScopeIndex?: number }> {
-    return await renewLease(
+    lease: ExecutionLease,
+  ): Promise<
+    { readonly ok: true; readonly lease: ExecutionLease } | {
+      readonly ok: false;
+      readonly missingScopeIndex?: number;
+    }
+  > {
+    const result = await renewLease(
       this.leaseClient,
-      scopeKeys,
-      leaseId,
+      lease,
       this.config.leaseDurationMs,
     );
+    if (!result.ok) return result;
+    return { ok: true, lease: { ...lease, expiresAt: result.expiresAt } };
   }
 
-  async releaseExecutionLease(
-    scopeKeys: readonly string[],
-    leaseId: string,
-  ): Promise<void> {
-    await releaseLease(this.leaseClient, scopeKeys, leaseId);
+  /** Returns false when the caller's owner/job/epoch/lease fence is stale. */
+  async releaseExecutionLease(lease: ExecutionLease): Promise<boolean> {
+    return await releaseLease(this.leaseClient, lease);
   }
 
   /**
-   * "Submission permit checks": global tool start rate, provider/model
-   * request rate, provider cooldown, weighted cost/token limits when
-   * applicable. `checks` supplies the GCRA-limited rate keys (tool/
-   * provider/token-weighted, as the caller's policy requires); this
-   * coordinator always folds in the pool's cooldown key so a caller
-   * cannot forget to check it.
+   * GCRA checks and the provider cooldown are one all-or-none script. Callers
+   * supply only server-resolved rate policy; Redis `TIME` supplies the clock.
    */
   async acquireSubmissionPermit(
     poolId: string,
@@ -150,49 +173,23 @@ export class CapacityCoordinator {
     );
   }
 
+  /** Extend the pool cooldown by a relative duration measured from Redis time. */
   async setProviderCooldown(
     poolId: string,
-    expiresAtMs: number,
+    durationMs: number,
   ): Promise<boolean> {
     return await setProviderCooldown(
       this.cooldownClient,
       cooldownKey(this.config.env, poolId),
-      expiresAtMs,
+      durationMs,
     );
   }
 
-  /**
-   * Read-only snapshot of current occupancy across the given scope keys,
-   * purging expired entries first for accuracy. Not a single atomic Lua
-   * script like the others above (it spans a variable, caller-chosen set
-   * of scope keys purely for reporting), so it fetches Redis's own `TIME`
-   * as a distinct round trip rather than trusting a caller-supplied clock
-   * -- same reasoning as `ACQUIRE_SCRIPT` in leases.ts, just not
-   * script-internal here.
-   */
+  /** Atomic, Redis-time-based weighted occupancy after expired-lease cleanup. */
   async inspectCapacity(
     scopeKeys: readonly string[],
   ): Promise<Readonly<Record<string, number>>> {
-    const [seconds, microseconds] = await this.leaseClient.time();
-    const nowMs = Number(seconds) * 1000 +
-      Math.floor(Number(microseconds) / 1000);
-    const pipeline = this.leaseClient.pipeline();
-    for (const key of scopeKeys) {
-      pipeline.zremrangebyscore(key, "-inf", nowMs);
-      pipeline.zcard(key);
-    }
-    const results = await pipeline.exec();
-    if (results === null) {
-      throw new Error("inspectCapacity pipeline returned no results");
-    }
-
-    const counts: Record<string, number> = {};
-    scopeKeys.forEach((key, index) => {
-      const [error, count] = results[index * 2 + 1];
-      if (error) throw error;
-      counts[key] = Number(count);
-    });
-    return counts;
+    return await inspectLeaseUnits(this.leaseClient, scopeKeys);
   }
 
   rateKeys = {

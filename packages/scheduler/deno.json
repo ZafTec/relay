@@ -1,0 +1,10 @@
+{
+  "name": "@relay/scheduler",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "imports": {
+    "@std/assert": "jsr:@std/assert@^1.0.19",
+    "ioredis": "npm:ioredis@5.11.1"
+  }
+}
