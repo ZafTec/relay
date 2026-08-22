@@ -111,6 +111,72 @@ Deno.test({
 });
 
 Deno.test({
+  name: "admitToolRun refuses to route through a disabled provider",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(pool);
+      await pool.query(
+        "update relay.providers set lifecycle = 'disabled' where id = $1",
+        [f.providerId],
+      );
+
+      const result = await admitToolRun(pool, baseInput(f));
+      assertEquals(result.kind, "no_provider_binding");
+    } finally {
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "admitToolRun refuses to route through a disabled provider model",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(pool);
+      await pool.query(
+        "update relay.provider_models set lifecycle = 'retired' where id = $1",
+        [f.providerModelId],
+      );
+
+      const result = await admitToolRun(pool, baseInput(f));
+      assertEquals(result.kind, "no_provider_binding");
+    } finally {
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "admitToolRun refuses to route through a disabled capacity pool",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(pool);
+      await pool.query(
+        "update relay.capacity_pools set enabled = false where id = $1",
+        [f.capacityPoolId],
+      );
+
+      const result = await admitToolRun(pool, baseInput(f));
+      assertEquals(result.kind, "no_provider_binding");
+    } finally {
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
   name:
     "admitToolRun creates a run, job, counters, and an outbox job.ready event",
   ignore: !hasDatabase,
