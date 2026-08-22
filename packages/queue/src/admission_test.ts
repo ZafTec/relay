@@ -22,6 +22,29 @@ function testPool(): DatabasePool {
   );
 }
 
+/**
+ * Matches production's admission pool (`poolMax: 1`, per
+ * docs/implementation-handoff/04-queue-capacity-scheduling.md). A
+ * membership check that reached back into the pool instead of using the
+ * transaction's own connection would starve here: the transaction holds
+ * the pool's one connection, so a second `pool.query()` would wait for a
+ * connection that can never free up until the transaction finishes -- and
+ * the transaction can't finish until that query returns. `connectTimeoutMs`
+ * below turns that deadlock into a clear timeout error instead of hanging
+ * the test suite forever if this regresses.
+ */
+function singleConnectionPool(): DatabasePool {
+  return createDatabasePool(
+    {
+      url: new URL(databaseUrl!),
+      poolMax: 1,
+      connectTimeoutMs: 5_000,
+      statementTimeoutMs: 30_000,
+    },
+    "relay-api",
+  );
+}
+
 function unique(label: string): string {
   return `${label}-${crypto.randomUUID()}`;
 }
@@ -283,6 +306,81 @@ Deno.test({
     } finally {
       if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "admitToolRun completes on a poolMax: 1 pool without deadlocking",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const fixturePool = testPool();
+    const admissionPool = singleConnectionPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(fixturePool);
+      const result = await admitToolRun(admissionPool, baseInput(f));
+      assertEquals(result.kind, "admitted");
+    } finally {
+      if (f) await cleanupAdmissibleFixture(fixturePool, f);
+      await fixturePool.end();
+      await admissionPool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "two concurrent admissions with the same idempotency key never throw and converge on one run",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const poolA = testPool();
+    const poolB = testPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(poolA);
+      const input = baseInput(f);
+
+      // Two separate pools/connections racing the same idempotency key --
+      // both see no existing idempotency_records row (their SELECTs run
+      // before either commits), so both attempt the run/job/counter
+      // writes. Before the ON CONFLICT DO NOTHING fix, the loser's final
+      // INSERT into idempotency_records would throw a raw unique-violation
+      // error instead of resolving to "replayed".
+      const [resultA, resultB] = await Promise.all([
+        admitToolRun(poolA, input),
+        admitToolRun(poolB, input),
+      ]);
+
+      const kinds = [resultA.kind, resultB.kind].sort();
+      assertEquals(kinds, ["admitted", "replayed"]);
+
+      const winner = resultA.kind === "admitted" ? resultA : resultB;
+      const loser = resultA.kind === "replayed" ? resultA : resultB;
+      if (winner.kind !== "admitted" || loser.kind !== "replayed") {
+        throw new Error("unreachable");
+      }
+      assertEquals(loser.runId, winner.runId);
+
+      const runs = await poolA.query(
+        "select id from relay.tool_runs where workspace_id = $1",
+        [f.workspaceId],
+      );
+      assertEquals(runs.rows.length, 1, "the race must not create two runs");
+
+      const counters = await poolA.query<{ queued_count: number }>(
+        "select queued_count from relay.tool_queue_counters where tool_id = $1",
+        [f.toolId],
+      );
+      assertEquals(
+        counters.rows[0].queued_count,
+        1,
+        "the losing attempt's counter increment must be rolled back",
+      );
+    } finally {
+      if (f) await cleanupAdmissibleFixture(poolA, f);
+      await poolA.end();
+      await poolB.end();
     }
   },
 });

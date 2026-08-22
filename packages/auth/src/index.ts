@@ -5,7 +5,7 @@ export { ensurePersonalWorkspace } from "./workspaces.ts";
 export type { BetterAuthAdapter } from "./workspaces.ts";
 
 export { canRemoveMember, getMembership } from "./authorization.ts";
-export type { WorkspaceRole } from "./authorization.ts";
+export type { Queryable, WorkspaceRole } from "./authorization.ts";
 
 export {
   grantSuperadmin,

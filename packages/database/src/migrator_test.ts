@@ -8,17 +8,53 @@ import type { Migration } from "./migrations/types.ts";
 
 /**
  * These are live-PostgreSQL integration tests. They run only when
- * DATABASE_URL is set (see compose.dev.yaml) and connect as `relay_migrator`
- * so `SET ROLE relay_owner` succeeds, matching production connection
- * identity for the migrate command. They are skipped, not failed, when no
- * database is configured so `deno task check` stays runnable without
- * live infrastructure.
+ * MIGRATOR_TEST_DATABASE_URL is set (see compose.dev.yaml and
+ * scripts/dev/postgres-init/002-test-database.sql) and connect as
+ * `relay_migrator` so `SET ROLE relay_owner` succeeds, matching production
+ * connection identity for the migrate command. They are skipped, not
+ * failed, when no database is configured so `deno task check` stays
+ * runnable without live infrastructure.
+ *
+ * This file's tests are unlike every other package's live-database tests:
+ * they don't just write scoped, generated-ID rows into real tables, they
+ * drop and recreate `relay.schema_migrations` itself and replay the
+ * migration manifest against fixture migrations -- exercising the migrator
+ * against ledger state, not application data. Pointed at whatever a
+ * generic DATABASE_URL happens to resolve to, that drops the real
+ * migration ledger; it has actually happened in this repo's history. A
+ * dedicated env var plus `assertDisposableTestDatabase` below is the
+ * guard: this suite refuses to run rather than silently operate on the
+ * wrong database.
  */
-const databaseUrl = Deno.env.get("DATABASE_URL");
+const databaseUrl = Deno.env.get("MIGRATOR_TEST_DATABASE_URL");
 const hasDatabase = databaseUrl !== undefined;
 
 const APP_VERSION = "test";
 const APP_REVISION = "test-revision";
+
+/**
+ * Refuses to proceed unless the connection string's database name ends in
+ * `_test` -- e.g. the disposable `relay_test` database created by
+ * scripts/dev/postgres-init/002-test-database.sql, never `relay` itself.
+ * Called before every destructive operation in this file, not just once at
+ * module load, so a misconfigured env var fails loudly at the point of
+ * damage rather than depending on every test remembering to check.
+ */
+function assertDisposableTestDatabase(url: string): void {
+  const name = new URL(url).pathname.replace(/^\//, "");
+  if (!name.endsWith("_test")) {
+    throw new Error(
+      `refusing to run destructive migrator tests against database "${name}" ` +
+        `(from MIGRATOR_TEST_DATABASE_URL) -- its name must end in "_test", ` +
+        `e.g. "relay_test", so these tests can never target the real ` +
+        `migration ledger`,
+    );
+  }
+}
+
+if (hasDatabase) {
+  assertDisposableTestDatabase(databaseUrl!);
+}
 
 function appUrlFrom(migratorUrl: string): string {
   const url = new URL(migratorUrl);
@@ -28,6 +64,7 @@ function appUrlFrom(migratorUrl: string): string {
 }
 
 async function resetDatabase(): Promise<void> {
+  assertDisposableTestDatabase(databaseUrl!);
   const client = new pg.Client({ connectionString: databaseUrl });
   await client.connect();
   try {
@@ -318,6 +355,81 @@ Deno.test({
       );
     } finally {
       await appPool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "relay_app cannot insert, update, or delete relay.schema_migrations directly",
+  ignore: !hasDatabase,
+  fn: async () => {
+    await resetDatabase();
+
+    // Run a real migration as relay_migrator first so the ledger table
+    // exists (and has the row this test tries to tamper with) exactly as
+    // it would in production -- ensureLedgerTable() is what applies the
+    // revoke, so this also proves the revoke actually ran, not just that
+    // the grants were never present.
+    const migratorPool = createDatabasePool(
+      {
+        url: new URL(databaseUrl!),
+        poolMax: 2,
+        connectTimeoutMs: 5_000,
+        statementTimeoutMs: 30_000,
+      },
+      "relay-migrate",
+    );
+    try {
+      const migrations = [await fixtureMigration("0001_probe_a", "probe_a")];
+      await migrateUp(migratorPool, migrations, APP_VERSION, APP_REVISION);
+    } finally {
+      await migratorPool.end();
+    }
+
+    const appClient = new pg.Client({
+      connectionString: appUrlFrom(databaseUrl!),
+    });
+    await appClient.connect();
+    try {
+      await assertRejects(
+        () =>
+          appClient.query(
+            "update relay.schema_migrations set app_version = 'hacked' where id = $1",
+            ["0001_probe_a"],
+          ),
+        Error,
+        "permission denied",
+      );
+      await assertRejects(
+        () =>
+          appClient.query(
+            "delete from relay.schema_migrations where id = $1",
+            ["0001_probe_a"],
+          ),
+        Error,
+        "permission denied",
+      );
+      await assertRejects(
+        () =>
+          appClient.query(
+            `insert into relay.schema_migrations
+               (id, checksum_sha256, duration_ms, app_version, app_revision)
+             values ('forged', repeat('0', 64), 0, 'x', 'x')`,
+          ),
+        Error,
+        "permission denied",
+      );
+
+      // SELECT must still work -- readiness checks and status reporting
+      // read this table as relay_app.
+      const { rows } = await appClient.query<{ id: string }>(
+        "select id from relay.schema_migrations where id = $1",
+        ["0001_probe_a"],
+      );
+      assertEquals(rows.length, 1);
+    } finally {
+      await appClient.end();
     }
   },
 });
