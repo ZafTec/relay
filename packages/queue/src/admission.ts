@@ -311,8 +311,16 @@ export async function admitToolRun(
       // disabled pool, simply drops out of eligible routing order here --
       // if a lower-priority binding is still fully eligible, admission
       // falls through to it rather than rejecting outright.
-      const bindingRows = await client.query<{ capacity_pool_id: number }>(
-        `select tpb.capacity_pool_id
+      const bindingRows = await client.query<
+        {
+          binding_id: number;
+          capacity_pool_id: number;
+          provider_id: number;
+          provider_model_id: number;
+        }
+      >(
+        `select tpb.id as binding_id, tpb.capacity_pool_id,
+                p.id as provider_id, pm.id as provider_model_id
          from relay.tool_provider_bindings tpb
          join relay.provider_models pm on pm.id = tpb.provider_model_id
          join relay.providers p on p.id = pm.provider_id
@@ -327,7 +335,12 @@ export async function admitToolRun(
         [input.toolVersionId],
       );
       if (bindingRows.rows.length === 0) return { kind: "no_provider_binding" };
-      const capacityPoolId = bindingRows.rows[0].capacity_pool_id;
+      const {
+        capacity_pool_id: capacityPoolId,
+        binding_id: selectedBindingId,
+        provider_id: providerId,
+        provider_model_id: providerModelId,
+      } = bindingRows.rows[0];
 
       const limits = await resolveQueueLimits(client, toolId);
 
@@ -368,6 +381,20 @@ export async function admitToolRun(
           JSON.stringify(input.input),
           input.createdBy,
         ],
+      );
+
+      // "Every run references an immutable routing-decision record"
+      // (0017_routing_decisions.ts) -- admission is exactly where that
+      // selection is actually made (the binding-eligibility query above),
+      // so it's recorded here rather than left for a routing subsystem
+      // that doesn't exist yet. No policy/fallback machinery exists yet
+      // either (routing_policy_id stays null, fallback_used stays false)
+      // -- only the binding this admission actually selected.
+      await client.query(
+        `insert into relay.routing_decisions
+           (tool_run_id, selected_binding_id, provider_id, provider_model_id)
+         values ($1, $2, $3, $4)`,
+        [runId, selectedBindingId, providerId, providerModelId],
       );
 
       const admissionDeadlineAt = new Date(

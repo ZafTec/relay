@@ -231,6 +231,24 @@ Deno.test({
       );
       assertEquals(outbox.rows.length, 1);
       assertEquals(outbox.rows[0].event_type, "job.ready");
+
+      const routingDecision = await pool.query<
+        {
+          provider_id: number;
+          provider_model_id: number;
+          fallback_used: boolean;
+        }
+      >(
+        "select provider_id, provider_model_id, fallback_used from relay.routing_decisions where tool_run_id = $1",
+        [result.runId],
+      );
+      assertEquals(routingDecision.rows.length, 1);
+      assertEquals(Number(routingDecision.rows[0].provider_id), f.providerId);
+      assertEquals(
+        Number(routingDecision.rows[0].provider_model_id),
+        f.providerModelId,
+      );
+      assertEquals(routingDecision.rows[0].fallback_used, false);
     } finally {
       if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();

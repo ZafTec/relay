@@ -8,6 +8,36 @@ import {
   setToolLifecycle,
 } from "@relay/catalog";
 
+const FOREIGN_KEY_VIOLATION = "23503";
+
+/**
+ * `relay.routing_decisions` being insert-only for `relay_app`
+ * (0018_tool_version_and_routing_immutability.ts) means any row that
+ * references one -- directly (tool_runs) or transitively
+ * (tool_provider_bindings via selected_binding_id, then providers/
+ * provider_models/capacity_pools via that binding) -- can't actually be
+ * deleted once a fixture has successfully admitted at least once. Rather
+ * than precisely re-deriving which of those chains are still blocked for
+ * every caller, this tolerates exactly a foreign-key violation (Postgres
+ * 23503) as "still referenced, leave it" and re-throws anything else --
+ * the same harmless-residue reasoning `cleanupAdmissibleFixture` already
+ * applies explicitly to tool_versions/tool_runs below.
+ */
+async function tryDelete(
+  pool: DatabasePool,
+  sqlText: string,
+  params: readonly unknown[],
+): Promise<void> {
+  try {
+    await pool.query(sqlText, params as unknown[]);
+  } catch (error) {
+    if ((error as { code?: string } | null)?.code === FOREIGN_KEY_VIOLATION) {
+      return;
+    }
+    throw error;
+  }
+}
+
 /**
  * Shared fixture for admission_test.ts/dispatch_test.ts/pipeline_test.ts:
  * everything `admitToolRun` now requires since it authorizes against
@@ -218,7 +248,10 @@ export async function cleanupAdmissibleFixture(
     "delete from relay.idempotency_records where workspace_id = $1",
     [fixture.workspaceId],
   );
-  await pool.query("delete from relay.tool_runs where workspace_id = $1", [
+  // A successfully admitted run now always has a routing_decisions row
+  // (see admitToolRun), which relay_app can never delete -- see
+  // tryDelete's doc comment.
+  await tryDelete(pool, "delete from relay.tool_runs where workspace_id = $1", [
     fixture.workspaceId,
   ]);
   await pool.query(
@@ -237,7 +270,8 @@ export async function cleanupAdmissibleFixture(
     "delete from relay.capacity_policies where scope_type = 'tool' and scope_id = $1",
     [fixture.toolId],
   );
-  await pool.query(
+  await tryDelete(
+    pool,
     "delete from relay.tool_provider_bindings where tool_version_id = $1",
     [fixture.toolVersionId],
   );
@@ -267,38 +301,49 @@ export async function cleanupAdmissibleFixture(
     [fixture.toolId],
   );
   if (remainingVersions.rows.length === 0) {
-    await pool.query("delete from relay.tools where id = $1", [
+    await tryDelete(pool, "delete from relay.tools where id = $1", [
       fixture.toolId,
     ]);
   }
-  await pool.query("delete from relay.provider_models where id = $1", [
-    fixture.providerModelId,
-  ]);
-  await pool.query("delete from relay.providers where id = $1", [
+  await tryDelete(
+    pool,
+    "delete from relay.provider_models where id = $1",
+    [fixture.providerModelId],
+  );
+  await tryDelete(pool, "delete from relay.providers where id = $1", [
     fixture.providerId,
   ]);
-  await pool.query("delete from relay.capacity_pools where id = $1", [
+  await tryDelete(pool, "delete from relay.capacity_pools where id = $1", [
     fixture.capacityPoolId,
   ]);
   await pool.query('delete from auth.member where "organizationId" = $1', [
     fixture.workspaceId,
   ]);
-  await pool.query("delete from auth.organization where id = $1", [
+  // A surviving tool_runs row (already attempted above, tolerated the
+  // same way) keeps its workspace_id and created_by referenced --
+  // blocking the organization delete below and, in the batched user
+  // delete further down, the whole statement (one DELETE affecting
+  // multiple rows is all-or-nothing).
+  await tryDelete(pool, "delete from auth.organization where id = $1", [
     fixture.workspaceId,
   ]);
-  const userIds = [fixture.createdBy, ...fixture.catalogActorIds];
-  // system_role_assignments.user_id cascades on delete, but granted_by/
-  // revoked_by don't -- and the operator/actor pair reference each other
-  // through this table, so deleting both users in one statement can hit
-  // the granted_by FK before the cascade on the other row has cleared it
-  // (Postgres's per-row RI trigger order isn't the "all cascades, then
-  // all restricts" order this needs). Deleting the grant rows explicitly
-  // first sidesteps that ordering question entirely.
-  await pool.query(
-    "delete from relay.system_role_assignments where user_id = any($1::text[]) or granted_by = any($1::text[]) or revoked_by = any($1::text[])",
-    [userIds],
-  );
-  await pool.query('delete from auth."user" where id = any($1::text[])', [
-    userIds,
+  // relay_app has no DELETE on relay.system_role_assignments at all
+  // (0023_system_role_assignment_immutability.ts) -- only a cascade from
+  // deleting the grant's own user_id can remove it; granted_by/
+  // revoked_by never cascade. `catalogActorIds[0]` is always the grantee
+  // (see createAdmissibleFixture's `grantSuperadmin(pool, actorUserId,
+  // operatorId)` below), so deleting it first cascades its grant row
+  // away, clearing the granted_by/revoked_by reference that would
+  // otherwise block deleting the operator afterward in the same
+  // statement.
+  await tryDelete(pool, 'delete from auth."user" where id = $1', [
+    fixture.catalogActorIds[0],
+  ]);
+  const remainingUserIds = [
+    fixture.createdBy,
+    ...fixture.catalogActorIds.slice(1),
+  ];
+  await tryDelete(pool, 'delete from auth."user" where id = any($1::text[])', [
+    remainingUserIds,
   ]);
 }
