@@ -68,12 +68,27 @@ async function cleanupCatalogFixture(
       "update relay.tools set active_version_id = null where id = $1",
       [fixture.toolId],
     );
-    await pool.query("delete from relay.tool_versions where tool_id = $1", [
-      fixture.toolId,
-    ]);
-    await pool.query("delete from relay.tools where id = $1", [
-      fixture.toolId,
-    ]);
+    // Published tool_versions rows are immutable against deletion too
+    // (0022_tool_version_delete_and_routing_policy_immutability.ts), so
+    // only unpublished ones can actually be cleaned up here. A fixture
+    // that published a version deliberately leaves that version (and,
+    // since tool_versions.tool_id still references it, its parent tools
+    // row) behind -- harmless residue scoped by this file's unique()
+    // tool keys, not a real leak, and exactly the real-world consequence
+    // of the immutability guarantee under test elsewhere in this file.
+    await pool.query(
+      "delete from relay.tool_versions where tool_id = $1 and published_at is null",
+      [fixture.toolId],
+    );
+    const remaining = await pool.query(
+      "select 1 from relay.tool_versions where tool_id = $1 limit 1",
+      [fixture.toolId],
+    );
+    if (remaining.rows.length === 0) {
+      await pool.query("delete from relay.tools where id = $1", [
+        fixture.toolId,
+      ]);
+    }
   }
   await pool.query(
     "delete from relay.system_role_assignments where user_id = any($1::text[]) or granted_by = any($1::text[]) or revoked_by = any($1::text[])",
@@ -415,6 +430,19 @@ Deno.test({
         [created.value.toolVersionId],
       );
       assertEquals(deprecated.rows[0].deprecated_at !== null, true);
+
+      // Immutable must also mean "cannot be deleted," not just
+      // "cannot be updated" -- deleting a published version would erase
+      // the exact pinned record the update trigger exists to protect.
+      await assertRejects(
+        () =>
+          pool.query(
+            "delete from relay.tool_versions where id = $1",
+            [created.value.toolVersionId],
+          ),
+        Error,
+        "immutable",
+      );
     } finally {
       await cleanupCatalogFixture(pool, {
         toolId,

@@ -248,10 +248,29 @@ export async function cleanupAdmissibleFixture(
     "update relay.tools set active_version_id = null where id = $1",
     [fixture.toolId],
   );
-  await pool.query("delete from relay.tool_versions where tool_id = $1", [
-    fixture.toolId,
-  ]);
-  await pool.query("delete from relay.tools where id = $1", [fixture.toolId]);
+  // createAdmissibleFixture always publishes its tool version, and a
+  // published tool_versions row is now immutable against deletion too
+  // (0022_tool_version_delete_and_routing_policy_immutability.ts), so it
+  // -- and, since tool_versions.tool_id still references it, its parent
+  // tools row -- are deliberately left behind here. Harmless residue
+  // scoped by this fixture's unique() tool/workspace IDs, and exactly
+  // the real-world consequence of the immutability guarantee under test
+  // elsewhere in the suite; only an unpublished tool_versions row (never
+  // the case for this fixture, but kept general) could ever actually be
+  // deleted here.
+  await pool.query(
+    "delete from relay.tool_versions where tool_id = $1 and published_at is null",
+    [fixture.toolId],
+  );
+  const remainingVersions = await pool.query(
+    "select 1 from relay.tool_versions where tool_id = $1 limit 1",
+    [fixture.toolId],
+  );
+  if (remainingVersions.rows.length === 0) {
+    await pool.query("delete from relay.tools where id = $1", [
+      fixture.toolId,
+    ]);
+  }
   await pool.query("delete from relay.provider_models where id = $1", [
     fixture.providerModelId,
   ]);
