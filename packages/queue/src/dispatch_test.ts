@@ -3,6 +3,11 @@ import { createDatabasePool, type DatabasePool } from "@relay/database";
 import { type AdmitRunInput, admitToolRun } from "./admission.ts";
 import { claimJobForDispatch, deferJob, heartbeatJob } from "./dispatch.ts";
 import type { ExecutionTicket } from "./tickets.ts";
+import {
+  type AdmissibleFixture,
+  cleanupAdmissibleFixture,
+  createAdmissibleFixture,
+} from "./test_support.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
 const hasDatabase = databaseUrl !== undefined;
@@ -23,60 +28,20 @@ function unique(label: string): string {
   return `${label}-${crypto.randomUUID()}`;
 }
 
-async function createUser(pool: DatabasePool): Promise<string> {
-  const { rows } = await pool.query<{ id: string }>(
-    `insert into auth."user" (id, name, email, "emailVerified")
-     values (gen_random_uuid()::text, 'Test', $1, true)
-     returning id`,
-    [`${unique("user")}@example.com`],
-  );
-  return rows[0].id;
+interface AdmittedJob {
+  readonly fixture: AdmissibleFixture;
+  readonly jobId: string;
+  readonly runId: string;
 }
 
-async function createOrganization(pool: DatabasePool): Promise<string> {
-  const { rows } = await pool.query<{ id: string }>(
-    `insert into auth.organization (id, name, slug, "createdAt")
-     values (gen_random_uuid()::text, 'Test Org', $1, now())
-     returning id`,
-    [unique("org")],
-  );
-  return rows[0].id;
-}
-
-async function createCapacityPool(pool: DatabasePool): Promise<number> {
-  const { rows } = await pool.query<{ id: string }>(
-    `insert into relay.capacity_pools (key, execution_class)
-     values ($1, 'standard')
-     returning id`,
-    [unique("pool")],
-  );
-  return Number(rows[0].id);
-}
-
-interface AdmittedFixture {
-  jobId: string;
-  runId: string;
-  workspaceId: string;
-  createdBy: string;
-  capacityPoolId: number;
-  toolId: string;
-}
-
-async function admitJob(pool: DatabasePool): Promise<AdmittedFixture> {
-  const [workspaceId, createdBy, capacityPoolId] = await Promise.all([
-    createOrganization(pool),
-    createUser(pool),
-    createCapacityPool(pool),
-  ]);
-  const toolId = unique("tool");
+async function admitJob(pool: DatabasePool): Promise<AdmittedJob> {
+  const fixture = await createAdmissibleFixture(pool);
   const input: AdmitRunInput = {
-    workspaceId,
-    toolId,
-    toolVersionId: unique("tool-version"),
-    createdBy,
+    workspaceId: fixture.workspaceId,
+    toolVersionId: fixture.toolVersionId,
+    createdBy: fixture.createdBy,
     input: { prompt: "a cat" },
     idempotencyKey: unique("idem"),
-    capacityPoolId,
     schedulingClass: "standard",
     schedulingPolicyVersion: 1,
     estimatedCostUnits: 1,
@@ -86,59 +51,11 @@ async function admitJob(pool: DatabasePool): Promise<AdmittedFixture> {
   };
   const result = await admitToolRun(pool, input);
   if (result.kind !== "admitted") throw new Error("fixture admission failed");
-  return {
-    jobId: result.jobId,
-    runId: result.runId,
-    workspaceId,
-    createdBy,
-    capacityPoolId,
-    toolId,
-  };
+  return { fixture, jobId: result.jobId, runId: result.runId };
 }
 
 function ticketFor(jobId: string, dispatchGeneration = 0): ExecutionTicket {
   return { domainJobId: jobId, dispatchGeneration, policyVersion: 1 };
-}
-
-/** See the matching comment in admission_test.ts's `cleanupFixture` -- same reasoning, same dependency order. */
-async function cleanupFixture(
-  pool: DatabasePool,
-  f: AdmittedFixture,
-): Promise<void> {
-  await pool.query("delete from relay.outbox_events where aggregate_id = $1", [
-    f.jobId,
-  ]);
-  await pool.query("delete from relay.job_attempts where job_id = $1", [
-    f.jobId,
-  ]);
-  await pool.query("delete from relay.execution_jobs where id = $1", [
-    f.jobId,
-  ]);
-  await pool.query(
-    "delete from relay.idempotency_records where workspace_id = $1",
-    [
-      f.workspaceId,
-    ],
-  );
-  await pool.query("delete from relay.tool_runs where id = $1", [f.runId]);
-  await pool.query(
-    "delete from relay.workspace_tool_queue_counters where workspace_id = $1",
-    [f.workspaceId],
-  );
-  await pool.query(
-    "delete from relay.workspace_queue_counters where workspace_id = $1",
-    [f.workspaceId],
-  );
-  await pool.query("delete from relay.tool_queue_counters where tool_id = $1", [
-    f.toolId,
-  ]);
-  await pool.query("delete from relay.capacity_pools where id = $1", [
-    f.capacityPoolId,
-  ]);
-  await pool.query("delete from auth.organization where id = $1", [
-    f.workspaceId,
-  ]);
-  await pool.query('delete from auth."user" where id = $1', [f.createdBy]);
 }
 
 Deno.test({
@@ -147,10 +64,10 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
-    let f: AdmittedFixture | undefined;
+    let admitted: AdmittedJob | undefined;
     try {
-      f = await admitJob(pool);
-      const jobId = f.jobId;
+      admitted = await admitJob(pool);
+      const jobId = admitted.jobId;
 
       const result = await claimJobForDispatch(
         pool,
@@ -181,7 +98,7 @@ Deno.test({
       assertEquals(attempts.rows[0].attempt_number, 1);
       assertEquals(Number(attempts.rows[0].lease_epoch), 1);
     } finally {
-      if (f) await cleanupFixture(pool, f);
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();
     }
   },
@@ -192,10 +109,10 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
-    let f: AdmittedFixture | undefined;
+    let admitted: AdmittedJob | undefined;
     try {
-      f = await admitJob(pool);
-      const jobId = f.jobId;
+      admitted = await admitJob(pool);
+      const jobId = admitted.jobId;
       const ticket = ticketFor(jobId);
 
       const first = await claimJobForDispatch(pool, ticket, "worker-a", 30_000);
@@ -219,7 +136,7 @@ Deno.test({
         "a redelivered ticket must not create a second attempt",
       );
     } finally {
-      if (f) await cleanupFixture(pool, f);
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();
     }
   },
@@ -231,10 +148,10 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
-    let f: AdmittedFixture | undefined;
+    let admitted: AdmittedJob | undefined;
     try {
-      f = await admitJob(pool);
-      const { jobId, runId } = f;
+      admitted = await admitJob(pool);
+      const { jobId, runId } = admitted;
       const staleTicket = ticketFor(jobId, 0);
 
       const claim = await claimJobForDispatch(
@@ -276,7 +193,7 @@ Deno.test({
       );
       assertEquals(freshClaim.kind, "claimed");
     } finally {
-      if (f) await cleanupFixture(pool, f);
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();
     }
   },
@@ -287,10 +204,10 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
-    let f: AdmittedFixture | undefined;
+    let admitted: AdmittedJob | undefined;
     try {
-      f = await admitJob(pool);
-      const jobId = f.jobId;
+      admitted = await admitJob(pool);
+      const jobId = admitted.jobId;
       const claim = await claimJobForDispatch(
         pool,
         ticketFor(jobId),
@@ -326,7 +243,7 @@ Deno.test({
       );
       assertEquals(wrongEpoch, false);
     } finally {
-      if (f) await cleanupFixture(pool, f);
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();
     }
   },
@@ -338,10 +255,10 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
-    let f: AdmittedFixture | undefined;
+    let admitted: AdmittedJob | undefined;
     try {
-      f = await admitJob(pool);
-      const { jobId, runId } = f;
+      admitted = await admitJob(pool);
+      const { jobId, runId } = admitted;
       const claim = await claimJobForDispatch(
         pool,
         ticketFor(jobId),
@@ -391,7 +308,7 @@ Deno.test({
         ["job.ready", "job.deferred"],
       );
     } finally {
-      if (f) await cleanupFixture(pool, f);
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();
     }
   },
@@ -403,10 +320,10 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
-    let f: AdmittedFixture | undefined;
+    let admitted: AdmittedJob | undefined;
     try {
-      f = await admitJob(pool);
-      const { jobId, runId } = f;
+      admitted = await admitJob(pool);
+      const { jobId, runId } = admitted;
       const claim = await claimJobForDispatch(
         pool,
         ticketFor(jobId),
@@ -436,7 +353,7 @@ Deno.test({
         "a fenced-out deferral must not change job state",
       );
     } finally {
-      if (f) await cleanupFixture(pool, f);
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();
     }
   },

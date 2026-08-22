@@ -39,11 +39,49 @@ async function createUser(pool: DatabasePool): Promise<string> {
   return rows[0].id;
 }
 
-async function createSuperadmin(pool: DatabasePool): Promise<string> {
-  const userId = await createUser(pool);
+async function createSuperadmin(
+  pool: DatabasePool,
+): Promise<{ actorUserId: string; operatorId: string }> {
+  const actorUserId = await createUser(pool);
   const operatorId = await createUser(pool);
-  await grantSuperadmin(pool, userId, operatorId);
-  return userId;
+  await grantSuperadmin(pool, actorUserId, operatorId);
+  return { actorUserId, operatorId };
+}
+
+/**
+ * `tools.active_version_id`/`tool_versions.tool_id` are mutually
+ * referential (see 0013_tool_registry.ts), and `system_role_assignments
+ * .granted_by`/`revoked_by` don't cascade -- deleting the operator/actor
+ * pair in the same statement without clearing their grant row first can
+ * hit the FK before the other row's cascade clears it (Postgres's per-
+ * row RI trigger order isn't "all cascades, then all restricts"). Same
+ * reasoning as packages/queue/src/test_support.ts's fixture cleanup;
+ * left behind, any of this breaks packages/auth's tests, which do a
+ * full-table `auth.user` reset assuming exclusive ownership.
+ */
+async function cleanupCatalogFixture(
+  pool: DatabasePool,
+  fixture: { toolId?: string; userIds: readonly string[] },
+): Promise<void> {
+  if (fixture.toolId) {
+    await pool.query(
+      "update relay.tools set active_version_id = null where id = $1",
+      [fixture.toolId],
+    );
+    await pool.query("delete from relay.tool_versions where tool_id = $1", [
+      fixture.toolId,
+    ]);
+    await pool.query("delete from relay.tools where id = $1", [
+      fixture.toolId,
+    ]);
+  }
+  await pool.query(
+    "delete from relay.system_role_assignments where user_id = any($1::text[]) or granted_by = any($1::text[]) or revoked_by = any($1::text[])",
+    [fixture.userIds],
+  );
+  await pool.query('delete from auth."user" where id = any($1::text[])', [
+    fixture.userIds,
+  ]);
 }
 
 function versionInput(toolId: string, overrides: Record<string, unknown> = {}) {
@@ -63,8 +101,8 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    const userId = await createUser(pool);
     try {
-      const userId = await createUser(pool);
       const key = unique("tool");
       const result = await registerTool(pool, userId, {
         key,
@@ -81,6 +119,7 @@ Deno.test({
       );
       assertEquals(rows.rows.length, 0);
     } finally {
+      await cleanupCatalogFixture(pool, { userIds: [userId] });
       await pool.end();
     }
   },
@@ -91,8 +130,9 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    const { actorUserId, operatorId } = await createSuperadmin(pool);
+    let toolId: string | undefined;
     try {
-      const actorUserId = await createSuperadmin(pool);
       const key = unique("tool");
 
       const result = await registerTool(pool, actorUserId, {
@@ -104,6 +144,7 @@ Deno.test({
       });
       assertEquals(result.kind, "ok");
       if (result.kind !== "ok") throw new Error("unreachable");
+      toolId = result.value.toolId;
 
       const tool = await pool.query<{ lifecycle: string; key: string }>(
         "select lifecycle, key from relay.tools where id = $1",
@@ -123,6 +164,10 @@ Deno.test({
         true,
       );
     } finally {
+      await cleanupCatalogFixture(pool, {
+        toolId,
+        userIds: [actorUserId, operatorId],
+      });
       await pool.end();
     }
   },
@@ -133,15 +178,16 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    const { actorUserId, operatorId } = await createSuperadmin(pool);
+    let toolId: string | undefined;
     try {
-      const actorUserId = await createSuperadmin(pool);
       const registered = await registerTool(pool, actorUserId, {
         key: unique("tool"),
         name: "Image Generate",
         visibility: "public",
       });
       if (registered.kind !== "ok") throw new Error("unreachable");
-      const toolId = registered.value.toolId;
+      toolId = registered.value.toolId;
 
       const first = await createToolVersion(
         pool,
@@ -160,6 +206,10 @@ Deno.test({
       assertEquals(first.value.version, 1);
       assertEquals(second.value.version, 2);
     } finally {
+      await cleanupCatalogFixture(pool, {
+        toolId,
+        userIds: [actorUserId, operatorId],
+      });
       await pool.end();
     }
   },
@@ -170,18 +220,20 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    const { actorUserId, operatorId } = await createSuperadmin(pool);
+    let toolId: string | undefined;
     try {
-      const actorUserId = await createSuperadmin(pool);
       const registered = await registerTool(pool, actorUserId, {
         key: unique("tool"),
         name: "Image Generate",
         visibility: "public",
       });
       if (registered.kind !== "ok") throw new Error("unreachable");
+      toolId = registered.value.toolId;
       const created = await createToolVersion(
         pool,
         actorUserId,
-        versionInput(registered.value.toolId, { handlerKey: "does.not.exist" }),
+        versionInput(toolId, { handlerKey: "does.not.exist" }),
       );
       if (created.kind !== "ok") throw new Error("unreachable");
 
@@ -200,11 +252,15 @@ Deno.test({
         { lifecycle: string; active_version_id: string | null }
       >(
         "select lifecycle, active_version_id from relay.tools where id = $1",
-        [registered.value.toolId],
+        [toolId],
       );
       assertEquals(tool.rows[0].lifecycle, "draft");
       assertEquals(tool.rows[0].active_version_id, null);
     } finally {
+      await cleanupCatalogFixture(pool, {
+        toolId,
+        userIds: [actorUserId, operatorId],
+      });
       await pool.end();
     }
   },
@@ -216,24 +272,21 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    const { actorUserId, operatorId } = await createSuperadmin(pool);
+    let toolId: string | undefined;
     try {
-      const actorUserId = await createSuperadmin(pool);
       const registered = await registerTool(pool, actorUserId, {
         key: unique("tool"),
         name: "Image Generate",
         visibility: "public",
       });
       if (registered.kind !== "ok") throw new Error("unreachable");
-      await setToolLifecycle(
-        pool,
-        actorUserId,
-        registered.value.toolId,
-        "internal",
-      );
+      toolId = registered.value.toolId;
+      await setToolLifecycle(pool, actorUserId, toolId, "internal");
       const created = await createToolVersion(
         pool,
         actorUserId,
-        versionInput(registered.value.toolId),
+        versionInput(toolId),
       );
       if (created.kind !== "ok") throw new Error("unreachable");
 
@@ -250,7 +303,7 @@ Deno.test({
         { lifecycle: string; active_version_id: string | null }
       >(
         "select lifecycle, active_version_id from relay.tools where id = $1",
-        [registered.value.toolId],
+        [toolId],
       );
       assertEquals(tool.rows[0].lifecycle, "published");
       assertEquals(tool.rows[0].active_version_id, created.value.toolVersionId);
@@ -270,6 +323,10 @@ Deno.test({
       );
       assertEquals(republished.kind, "already_published");
     } finally {
+      await cleanupCatalogFixture(pool, {
+        toolId,
+        userIds: [actorUserId, operatorId],
+      });
       await pool.end();
     }
   },
@@ -281,15 +338,16 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    const { actorUserId, operatorId } = await createSuperadmin(pool);
+    let toolId: string | undefined;
     try {
-      const actorUserId = await createSuperadmin(pool);
       const registered = await registerTool(pool, actorUserId, {
         key: unique("tool"),
         name: "Image Generate",
         visibility: "public",
       });
       if (registered.kind !== "ok") throw new Error("unreachable");
-      const toolId = registered.value.toolId;
+      toolId = registered.value.toolId;
 
       // draft -> retired directly is not allowed.
       const skip = await setToolLifecycle(pool, actorUserId, toolId, "retired");
@@ -352,6 +410,10 @@ Deno.test({
       );
       assertEquals(afterRetired.kind, "invalid_transition");
     } finally {
+      await cleanupCatalogFixture(pool, {
+        toolId,
+        userIds: [actorUserId, operatorId],
+      });
       await pool.end();
     }
   },
@@ -362,15 +424,16 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    const { actorUserId, operatorId } = await createSuperadmin(pool);
+    let toolId: string | undefined;
     try {
-      const actorUserId = await createSuperadmin(pool);
       const registered = await registerTool(pool, actorUserId, {
         key: unique("tool"),
         name: "Image Generate",
         visibility: "public",
       });
       if (registered.kind !== "ok") throw new Error("unreachable");
-      const toolId = registered.value.toolId;
+      toolId = registered.value.toolId;
       await setToolLifecycle(pool, actorUserId, toolId, "internal");
       const created = await createToolVersion(
         pool,
@@ -408,6 +471,10 @@ Deno.test({
       );
       assertEquals(tool.rows[0].lifecycle, "published");
     } finally {
+      await cleanupCatalogFixture(pool, {
+        toolId,
+        userIds: [actorUserId, operatorId],
+      });
       await pool.end();
     }
   },
@@ -419,25 +486,22 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    const { actorUserId, operatorId } = await createSuperadmin(pool);
+    let toolId: string | undefined;
     try {
-      const actorUserId = await createSuperadmin(pool);
       const registered = await registerTool(pool, actorUserId, {
         key: unique("tool"),
         name: "Image Generate",
         visibility: "public",
       });
       if (registered.kind !== "ok") throw new Error("unreachable");
-      await setToolLifecycle(
-        pool,
-        actorUserId,
-        registered.value.toolId,
-        "internal",
-      );
+      toolId = registered.value.toolId;
+      await setToolLifecycle(pool, actorUserId, toolId, "internal");
       const handlerKey = unique("handler");
       const created = await createToolVersion(
         pool,
         actorUserId,
-        versionInput(registered.value.toolId, { handlerKey }),
+        versionInput(toolId, { handlerKey }),
       );
       if (created.kind !== "ok") throw new Error("unreachable");
 
@@ -472,6 +536,10 @@ Deno.test({
         false,
       );
     } finally {
+      await cleanupCatalogFixture(pool, {
+        toolId,
+        userIds: [actorUserId, operatorId],
+      });
       await pool.end();
     }
   },

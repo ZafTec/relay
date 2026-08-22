@@ -6,13 +6,18 @@ import { relayOutboxBatch } from "./outbox-relay.ts";
 import { createExecutionQueue, createExecutionWorker } from "./bullmq.ts";
 import { ticketId } from "./tickets.ts";
 import type { ExecutionTicket } from "./tickets.ts";
+import {
+  cleanupAdmissibleFixture,
+  createAdmissibleFixture,
+} from "./test_support.ts";
 
 /**
  * The full write path in one test: an admission creates a durable
- * run/job/outbox row (admission.ts), the outbox relay claims and
- * publishes it (outbox-relay.ts) as a real BullMQ ticket (bullmq.ts),
- * and a worker receives that exact ticket. Each stage already has its
- * own unit tests; this proves they compose.
+ * run/job/outbox row (admission.ts, now also authorizing against a real
+ * workspace membership and a real published catalog tool version), the
+ * outbox relay claims and publishes it (outbox-relay.ts) as a real
+ * BullMQ ticket (bullmq.ts), and a worker receives that exact ticket.
+ * Each stage already has its own unit tests; this proves they compose.
  */
 const databaseUrl = Deno.env.get("DATABASE_URL");
 const redisUrl = Deno.env.get("REDIS_URL");
@@ -34,108 +39,20 @@ function unique(label: string): string {
   return `${label}-${crypto.randomUUID()}`;
 }
 
-async function createUser(pool: DatabasePool): Promise<string> {
-  const { rows } = await pool.query<{ id: string }>(
-    `insert into auth."user" (id, name, email, "emailVerified")
-     values (gen_random_uuid()::text, 'Test', $1, true)
-     returning id`,
-    [`${unique("user")}@example.com`],
-  );
-  return rows[0].id;
-}
-
-async function createOrganization(pool: DatabasePool): Promise<string> {
-  const { rows } = await pool.query<{ id: string }>(
-    `insert into auth.organization (id, name, slug, "createdAt")
-     values (gen_random_uuid()::text, 'Test Org', $1, now())
-     returning id`,
-    [unique("org")],
-  );
-  return rows[0].id;
-}
-
-async function createCapacityPool(pool: DatabasePool): Promise<number> {
-  const { rows } = await pool.query<{ id: string }>(
-    `insert into relay.capacity_pools (key, execution_class)
-     values ($1, 'standard')
-     returning id`,
-    [unique("pool")],
-  );
-  return Number(rows[0].id);
-}
-
-/**
- * See the matching comment in admission_test.ts's `cleanupFixture`:
- * `packages/auth`'s tests do a full `delete from auth."user"` reset
- * assuming exclusive ownership of that table, which a leftover
- * `relay.tool_runs.created_by` FK reference breaks.
- */
-async function cleanupFixture(
-  pool: DatabasePool,
-  ids: {
-    jobId: string;
-    runId: string;
-    workspaceId: string;
-    createdBy: string;
-    capacityPoolId: number;
-    toolId: string;
-  },
-): Promise<void> {
-  await pool.query("delete from relay.outbox_events where aggregate_id = $1", [
-    ids.jobId,
-  ]);
-  await pool.query("delete from relay.job_attempts where job_id = $1", [
-    ids.jobId,
-  ]);
-  await pool.query("delete from relay.execution_jobs where id = $1", [
-    ids.jobId,
-  ]);
-  await pool.query(
-    "delete from relay.idempotency_records where workspace_id = $1",
-    [ids.workspaceId],
-  );
-  await pool.query("delete from relay.tool_runs where id = $1", [ids.runId]);
-  await pool.query(
-    "delete from relay.workspace_tool_queue_counters where workspace_id = $1",
-    [ids.workspaceId],
-  );
-  await pool.query(
-    "delete from relay.workspace_queue_counters where workspace_id = $1",
-    [ids.workspaceId],
-  );
-  await pool.query("delete from relay.tool_queue_counters where tool_id = $1", [
-    ids.toolId,
-  ]);
-  await pool.query("delete from relay.capacity_pools where id = $1", [
-    ids.capacityPoolId,
-  ]);
-  await pool.query("delete from auth.organization where id = $1", [
-    ids.workspaceId,
-  ]);
-  await pool.query('delete from auth."user" where id = $1', [ids.createdBy]);
-}
-
 Deno.test({
   name:
     "admission -> outbox relay -> BullMQ ticket -> worker delivery, end to end",
   ignore: !hasInfra,
   fn: async () => {
     const pool = testPool();
-    const [workspaceId, createdBy, capacityPoolId] = await Promise.all([
-      createOrganization(pool),
-      createUser(pool),
-      createCapacityPool(pool),
-    ]);
-    const toolId = unique("tool");
+    const fixture = await createAdmissibleFixture(pool);
 
     const input: AdmitRunInput = {
-      workspaceId,
-      toolId,
-      toolVersionId: unique("tool-version"),
-      createdBy,
+      workspaceId: fixture.workspaceId,
+      toolVersionId: fixture.toolVersionId,
+      createdBy: fixture.createdBy,
       input: { prompt: "a cat wearing a hat" },
       idempotencyKey: unique("idem"),
-      capacityPoolId,
       schedulingClass: "standard",
       schedulingPolicyVersion: 1,
       estimatedCostUnits: 1,
@@ -215,16 +132,7 @@ Deno.test({
       await queue.close();
       await connection.quit();
       await workerConnection.quit();
-      if (admitted?.kind === "admitted") {
-        await cleanupFixture(pool, {
-          jobId: admitted.jobId,
-          runId: admitted.runId,
-          workspaceId,
-          createdBy,
-          capacityPoolId,
-          toolId,
-        });
-      }
+      await cleanupAdmissibleFixture(pool, fixture);
       await pool.end();
     }
   },
