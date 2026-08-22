@@ -21,6 +21,7 @@
     "compile": "deno compile --allow-env --allow-net --output dist/relay src/main.ts",
     "test": "deno test --allow-env --allow-net",
     "check": "deno fmt --check apps packages src && deno lint apps packages src && deno check src/main.ts && deno test --allow-env --allow-net",
+    "check:live": "deno run --allow-env --allow-run --allow-read scripts/dev/check-live.ts",
     "fmt": "deno fmt apps packages src",
     "lint": "deno lint apps packages src"
   },
