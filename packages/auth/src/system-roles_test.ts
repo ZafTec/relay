@@ -195,3 +195,63 @@ Deno.test({
     }
   },
 });
+
+Deno.test({
+  name:
+    "system_role_assignments only allows a one-time revoke, never a delete or un-revoke",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let userId: string | undefined;
+    let operatorId: string | undefined;
+    try {
+      userId = await createUser(pool, "grant-immutable");
+      operatorId = await createUser(pool, "operator");
+      await grantSuperadmin(pool, userId, operatorId);
+      await revokeSuperadmin(pool, userId, operatorId);
+
+      // Un-revoke: nulling revoked_at/revoked_by back out.
+      await assertRejects(
+        () =>
+          pool.query(
+            `update relay.system_role_assignments
+             set revoked_at = null, revoked_by = null
+             where user_id = $1`,
+            [userId],
+          ),
+        Error,
+      );
+
+      // Backdating/rewriting who granted it.
+      await assertRejects(
+        () =>
+          pool.query(
+            `update relay.system_role_assignments
+             set granted_by = $1
+             where user_id = $1`,
+            [userId],
+          ),
+        Error,
+      );
+
+      // Deleting grant history outright.
+      await assertRejects(
+        () =>
+          pool.query(
+            "delete from relay.system_role_assignments where user_id = $1",
+            [userId],
+          ),
+        Error,
+      );
+
+      // The revoke itself must still have actually taken effect.
+      assertEquals(await isSuperadmin(pool, userId), false);
+    } finally {
+      await cleanup(
+        pool,
+        [userId, operatorId].filter((id): id is string => id !== undefined),
+      );
+      await pool.end();
+    }
+  },
+});
