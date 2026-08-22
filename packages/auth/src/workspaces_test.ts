@@ -160,6 +160,47 @@ Deno.test({
 
 Deno.test({
   name:
+    "concurrent ensurePersonalWorkspace calls for the same user create exactly one membership row",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let userId: string | undefined;
+    try {
+      userId = await createUser(pool);
+      const adapter = fakeAdapter(pool);
+
+      const results = await Promise.all(
+        Array.from(
+          { length: 5 },
+          () => ensurePersonalWorkspace(adapter, pool, userId!),
+        ),
+      );
+
+      const organizationIds = new Set(results);
+      assertEquals(
+        organizationIds.size,
+        1,
+        "every concurrent call must converge on one organization",
+      );
+
+      const members = await pool.query(
+        `select id from auth.member where "organizationId" = $1 and "userId" = $2`,
+        [results[0], userId],
+      );
+      assertEquals(
+        members.rows.length,
+        1,
+        "concurrent calls must not create duplicate membership rows",
+      );
+    } finally {
+      if (userId) await cleanup(pool, userId);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
     "ensurePersonalWorkspace heals a personal workspace mapping that lost its membership row",
   ignore: !hasDatabase,
   fn: async () => {
