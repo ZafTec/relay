@@ -247,6 +247,107 @@ Deno.test({
 });
 
 Deno.test({
+  name:
+    "the same idempotency key and payload from a different actor is a conflict, not a replay",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    let secondActorId: string | undefined;
+    try {
+      f = await createAdmissibleFixture(pool);
+      const key = unique("idem");
+      const payload = { prompt: "a cat" };
+
+      const first = await admitToolRun(
+        pool,
+        baseInput(f, { idempotencyKey: key, input: payload }),
+      );
+      assertEquals(first.kind, "admitted");
+
+      const { rows } = await pool.query<{ id: string }>(
+        `insert into auth."user" (id, name, email, "emailVerified")
+         values (gen_random_uuid()::text, 'Second Actor', $1, true)
+         returning id`,
+        [`${unique("second-actor")}@example.com`],
+      );
+      secondActorId = rows[0].id;
+      await pool.query(
+        `insert into auth.member (id, "organizationId", "userId", role, "createdAt")
+         values (gen_random_uuid()::text, $1, $2, 'member', now())`,
+        [f.workspaceId, secondActorId],
+      );
+
+      // Same workspace, same idempotency key, same payload -- but a
+      // different actor. The durable idempotency scope must include the
+      // actor, or this second actor would silently receive the first
+      // actor's run.
+      const second = await admitToolRun(
+        pool,
+        baseInput(f, {
+          idempotencyKey: key,
+          input: payload,
+          createdBy: secondActorId,
+        }),
+      );
+      assertEquals(second.kind, "idempotency_conflict");
+    } finally {
+      if (secondActorId) {
+        await pool.query('delete from auth.member where "userId" = $1', [
+          secondActorId,
+        ]);
+        await pool.query('delete from auth."user" where id = $1', [
+          secondActorId,
+        ]);
+      }
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "the same idempotency key and payload for a different tool version is a conflict, not a replay",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    let g: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(pool);
+      g = await createAdmissibleFixture(pool);
+      const key = unique("idem");
+      const payload = { prompt: "a cat" };
+
+      const first = await admitToolRun(
+        pool,
+        baseInput(f, { idempotencyKey: key, input: payload }),
+      );
+      assertEquals(first.kind, "admitted");
+
+      // Same workspace, actor, idempotency key, and payload -- but a
+      // different tool version. The durable idempotency scope must
+      // include the tool version, or this request would silently be
+      // treated as a replay of a run against an entirely different tool.
+      const second = await admitToolRun(
+        pool,
+        baseInput(f, {
+          idempotencyKey: key,
+          input: payload,
+          toolVersionId: g.toolVersionId,
+        }),
+      );
+      assertEquals(second.kind, "idempotency_conflict");
+    } finally {
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      if (g) await cleanupAdmissibleFixture(pool, g);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
   name: "a full global-tool queue is rejected without mutating any counter",
   ignore: !hasDatabase,
   fn: async () => {
@@ -384,6 +485,56 @@ Deno.test({
         1,
         "the losing attempt's counter increment must be rolled back",
       );
+    } finally {
+      if (f) await cleanupAdmissibleFixture(poolA, f);
+      await poolA.end();
+      await poolB.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "a duplicate request racing at a full queue boundary is replayed, not queue_full",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const poolA = testPool();
+    const poolB = testPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(poolA);
+      // Tight enough that the second (duplicate) request would see the
+      // queue as genuinely full if it ever reached the counter check --
+      // without the advisory lock serializing same-key admissions before
+      // that check, that's exactly what used to happen: the loser's own
+      // idempotency-record lookup ran before the winner committed, so it
+      // never discovered the duplicate and fell through to a real
+      // (but wrong) queue_full instead of replaying the winner's run.
+      await setQueueLimits(poolA, f.toolId, {
+        globalTool: 1,
+        workspaceTotal: 1,
+        workspaceTool: 1,
+      });
+      const input = baseInput(f);
+
+      const [resultA, resultB] = await Promise.all([
+        admitToolRun(poolA, input),
+        admitToolRun(poolB, input),
+      ]);
+
+      const kinds = [resultA.kind, resultB.kind].sort();
+      assertEquals(
+        kinds,
+        ["admitted", "replayed"],
+        "a duplicate of an admitted request must never come back queue_full",
+      );
+
+      const winner = resultA.kind === "admitted" ? resultA : resultB;
+      const loser = resultA.kind === "replayed" ? resultA : resultB;
+      if (winner.kind !== "admitted" || loser.kind !== "replayed") {
+        throw new Error("unreachable");
+      }
+      assertEquals(loser.runId, winner.runId);
     } finally {
       if (f) await cleanupAdmissibleFixture(poolA, f);
       await poolA.end();
