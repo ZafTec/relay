@@ -298,10 +298,31 @@ export async function admitToolRun(
         return { kind: "tool_version_unavailable" };
       }
 
+      // A binding row being `enabled` only says the *routing entry*
+      // itself hasn't been turned off -- it says nothing about whether
+      // the provider, provider model, or capacity pool it points at are
+      // themselves usable. Without these joins, a disabled provider/model
+      // or a disabled capacity pool could still admit runs onto a route
+      // nothing should be dispatching through. Excluding
+      // disabled/retired here (not requiring exactly 'published') matches
+      // the tool-lifecycle check just above: 'draft'/'internal'/
+      // 'deprecated' provider state is a soft warning elsewhere, not a
+      // hard admission block. A disabled/retired provider or model, or a
+      // disabled pool, simply drops out of eligible routing order here --
+      // if a lower-priority binding is still fully eligible, admission
+      // falls through to it rather than rejecting outright.
       const bindingRows = await client.query<{ capacity_pool_id: number }>(
-        `select capacity_pool_id from relay.tool_provider_bindings
-         where tool_version_id = $1 and enabled = true
-         order by routing_order asc
+        `select tpb.capacity_pool_id
+         from relay.tool_provider_bindings tpb
+         join relay.provider_models pm on pm.id = tpb.provider_model_id
+         join relay.providers p on p.id = pm.provider_id
+         join relay.capacity_pools cp on cp.id = tpb.capacity_pool_id
+         where tpb.tool_version_id = $1
+           and tpb.enabled = true
+           and cp.enabled = true
+           and pm.lifecycle not in ('disabled', 'retired')
+           and p.lifecycle not in ('disabled', 'retired')
+         order by tpb.routing_order asc
          limit 1`,
         [input.toolVersionId],
       );
