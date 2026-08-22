@@ -11,12 +11,15 @@ import type { Redis } from "@relay/queue";
  * "all relevant checks are all-or-none; a denied later constraint must
  * not consume an earlier token."
  *
- * ARGV layout: [now, numGcraKeys, (emissionIntervalMs, burstMs, cost) *
- * numGcraKeys]. KEYS layout: [...gcraKeys, ...cooldownKeys].
+ * ARGV layout: [numGcraKeys, (emissionIntervalMs, burstMs, cost) *
+ * numGcraKeys]. KEYS layout: [...gcraKeys, ...cooldownKeys]. `now` comes
+ * from Redis's own `TIME` command, not a caller-supplied timestamp -- see
+ * the comment on `ACQUIRE_SCRIPT` in leases.ts for why.
  */
 const PERMIT_SCRIPT = `
-local now = tonumber(ARGV[1])
-local num_gcra = tonumber(ARGV[2])
+local time = redis.call('TIME')
+local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+local num_gcra = tonumber(ARGV[1])
 local total = #KEYS
 local num_cooldown = total - num_gcra
 
@@ -30,7 +33,7 @@ end
 
 local new_tats = {}
 for i = 1, num_gcra do
-  local base = 2 + (i - 1) * 3
+  local base = 1 + (i - 1) * 3
   local emission_interval = tonumber(ARGV[base + 1])
   local burst = tonumber(ARGV[base + 2])
   local cost = tonumber(ARGV[base + 3])
@@ -53,7 +56,7 @@ for i = 1, num_gcra do
 end
 
 for i = 1, num_gcra do
-  local base = 2 + (i - 1) * 3
+  local base = 1 + (i - 1) * 3
   local burst = tonumber(ARGV[base + 2])
   local ttl_ms = math.ceil(new_tats[i] - now + burst) + 1000
   redis.call('SET', KEYS[i], new_tats[i], 'PX', ttl_ms)
@@ -99,7 +102,6 @@ export async function acquireSubmissionPermit(
   client: RateLimitClient,
   checks: readonly RateLimitCheck[],
   cooldownKeys: readonly string[],
-  nowMs: number,
 ): Promise<AcquirePermitResult> {
   const gcraArgs = checks.flatMap((check) => [
     check.emissionIntervalMs,
@@ -111,7 +113,6 @@ export async function acquireSubmissionPermit(
   const result = await client.relayAcquirePermit(
     keys.length,
     ...keys,
-    nowMs,
     checks.length,
     ...gcraArgs,
   );

@@ -5,12 +5,17 @@ import type { Redis } from "@relay/queue";
  * (out-of-order) provider response setting a shorter cooldown than one
  * already in effect must not shrink it. Extend-only, computed from the
  * key's current TTL rather than trusting a caller-supplied "current
- * expiry" that could itself be stale.
+ * expiry" that could itself be stale. `new_expires_at` is a genuine
+ * external input -- the caller's target expiry, typically derived from a
+ * provider-reported retry-after -- but the `now` baseline it's compared
+ * and converted to a TTL against comes from Redis's own `TIME`, not the
+ * caller, for the same reason as `ACQUIRE_SCRIPT` in leases.ts.
  */
 const SET_COOLDOWN_SCRIPT = `
 local key = KEYS[1]
 local new_expires_at = tonumber(ARGV[1])
-local now = tonumber(ARGV[2])
+local time = redis.call('TIME')
+local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
 local current_ttl = redis.call('PTTL', key)
 local current_expires_at = now - 1
 if current_ttl and current_ttl > 0 then
@@ -47,8 +52,7 @@ export async function setProviderCooldown(
   client: CooldownClient,
   key: string,
   expiresAtMs: number,
-  nowMs: number,
 ): Promise<boolean> {
-  const result = await client.relaySetCooldown(key, expiresAtMs, nowMs);
+  const result = await client.relaySetCooldown(key, expiresAtMs);
   return result === 1;
 }
