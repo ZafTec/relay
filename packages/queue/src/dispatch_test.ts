@@ -47,7 +47,6 @@ async function admitJob(pool: DatabasePool): Promise<AdmittedJob> {
     estimatedCostUnits: 1,
     admissionDeadlineMs: 60_000,
     runDeadlineMs: 300_000,
-    limits: { globalTool: 100, workspaceTotal: 100, workspaceTool: 100 },
   };
   const result = await admitToolRun(pool, input);
   if (result.kind !== "admitted") throw new Error("fixture admission failed");

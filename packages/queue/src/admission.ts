@@ -15,7 +15,11 @@ import { getMembership } from "@relay/auth";
  * still deferred, since `relay.workspace_scheduling_profiles` (the
  * weighted-fair-scheduler's, not yet built) doesn't exist. Step 6
  * ("Reserve usage") is also still deferred to metering, which doesn't
- * exist yet.
+ * exist yet. Queue depth limits are resolved server-side from
+ * `relay.capacity_policies` (see `resolveQueueLimits` below), never
+ * accepted from the caller -- an admission caller choosing its own
+ * limits could admit past whatever depth every other admission control
+ * assumes is real.
  */
 export interface AdmitRunInput {
   readonly workspaceId: string;
@@ -28,11 +32,6 @@ export interface AdmitRunInput {
   readonly estimatedCostUnits: number | null;
   readonly admissionDeadlineMs: number;
   readonly runDeadlineMs: number | null;
-  readonly limits: {
-    readonly globalTool: number;
-    readonly workspaceTotal: number;
-    readonly workspaceTool: number;
-  };
 }
 
 export type AdmitRunResult =
@@ -73,6 +72,62 @@ function canonicalStringify(value: unknown): string {
     }}`;
   }
   return JSON.stringify(value);
+}
+
+interface QueueLimits {
+  readonly globalTool: number;
+  readonly workspaceTotal: number;
+  readonly workspaceTool: number;
+}
+
+/**
+ * Used until a tool has its own `relay.capacity_policies` row -- there is
+ * no admin UI yet to create one (Wave 5's weighted-fair-scheduler
+ * territory), so a tool with no configured policy must still get *some*
+ * limit rather than fail closed entirely. Deliberately conservative: a
+ * misconfigured or forgotten policy should throttle a tool hard, not
+ * silently admit an unbounded queue.
+ */
+const DEFAULT_QUEUE_LIMITS: QueueLimits = {
+  globalTool: 50,
+  workspaceTotal: 20,
+  workspaceTool: 5,
+};
+
+function isQueueLimits(value: unknown): value is QueueLimits {
+  if (value === null || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.globalTool === "number" &&
+    typeof v.workspaceTotal === "number" &&
+    typeof v.workspaceTool === "number";
+}
+
+/**
+ * Resolves queue-depth admission limits from `relay.capacity_policies`
+ * (`scope_type = 'tool'`, `scope_id = toolId`), never from the caller --
+ * see the module doc comment. Picks the highest-revision row that is
+ * currently effective (`effective_at <= now()` and, if set,
+ * `expires_at > now()`); falls back to `DEFAULT_QUEUE_LIMITS` when no
+ * such row exists yet, or its `configuration` doesn't have the shape
+ * this admission logic actually reads (better to fall back to a safe
+ * default than to silently admit under a policy nobody meant to write).
+ */
+async function resolveQueueLimits(
+  client: pg.PoolClient,
+  toolId: string,
+): Promise<QueueLimits> {
+  const { rows } = await client.query<{ configuration: unknown }>(
+    `select configuration from relay.capacity_policies
+     where scope_type = 'tool' and scope_id = $1
+       and effective_at <= now()
+       and (expires_at is null or expires_at > now())
+     order by revision desc
+     limit 1`,
+    [toolId],
+  );
+  if (rows.length === 0) return DEFAULT_QUEUE_LIMITS;
+  const configuration = rows[0].configuration;
+  return isQueueLimits(configuration) ? configuration : DEFAULT_QUEUE_LIMITS;
 }
 
 interface CounterRow {
@@ -218,11 +273,13 @@ export async function admitToolRun(
       if (bindingRows.rows.length === 0) return { kind: "no_provider_binding" };
       const capacityPoolId = bindingRows.rows[0].capacity_pool_id;
 
+      const limits = await resolveQueueLimits(client, toolId);
+
       // Deterministic lock order -- global-tool, then workspace-total, then
       // workspace-tool -- per step 4, so two concurrent admissions can
       // never deadlock against each other.
       const globalToolCount = await lockToolCounter(client, toolId);
-      if (globalToolCount >= input.limits.globalTool) {
+      if (globalToolCount >= limits.globalTool) {
         return { kind: "queue_full", scope: "global_tool" };
       }
 
@@ -230,7 +287,7 @@ export async function admitToolRun(
         client,
         input.workspaceId,
       );
-      if (workspaceTotalCount >= input.limits.workspaceTotal) {
+      if (workspaceTotalCount >= limits.workspaceTotal) {
         return { kind: "queue_full", scope: "workspace_total" };
       }
 
@@ -239,7 +296,7 @@ export async function admitToolRun(
         input.workspaceId,
         toolId,
       );
-      if (workspaceToolCount >= input.limits.workspaceTool) {
+      if (workspaceToolCount >= limits.workspaceTool) {
         return { kind: "queue_full", scope: "workspace_tool" };
       }
 

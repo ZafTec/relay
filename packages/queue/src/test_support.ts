@@ -97,6 +97,29 @@ async function createProviderModel(
   };
 }
 
+/**
+ * Seeds a `relay.capacity_policies` row for a tool's queue-depth limits --
+ * `admitToolRun` resolves these itself (see `resolveQueueLimits` in
+ * admission.ts) rather than trusting a caller-supplied value, so tests
+ * that need to exercise a specific limit configure it here the same way
+ * an operator would.
+ */
+export async function setQueueLimits(
+  pool: DatabasePool,
+  toolId: string,
+  limits: {
+    readonly globalTool: number;
+    readonly workspaceTotal: number;
+    readonly workspaceTool: number;
+  },
+): Promise<void> {
+  await pool.query(
+    `insert into relay.capacity_policies (scope_type, scope_id, revision, configuration)
+     values ('tool', $1, 1, $2)`,
+    [toolId, JSON.stringify(limits)],
+  );
+}
+
 export async function createAdmissibleFixture(
   pool: DatabasePool,
 ): Promise<AdmissibleFixture> {
@@ -208,6 +231,10 @@ export async function cleanupAdmissibleFixture(
   );
   await pool.query(
     "delete from relay.tool_queue_counters where tool_id = $1",
+    [fixture.toolId],
+  );
+  await pool.query(
+    "delete from relay.capacity_policies where scope_type = 'tool' and scope_id = $1",
     [fixture.toolId],
   );
   await pool.query(

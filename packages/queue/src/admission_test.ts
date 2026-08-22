@@ -5,6 +5,7 @@ import {
   type AdmissibleFixture,
   cleanupAdmissibleFixture,
   createAdmissibleFixture,
+  setQueueLimits,
 } from "./test_support.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
@@ -64,7 +65,6 @@ function baseInput(
     estimatedCostUnits: 1,
     admissionDeadlineMs: 60_000,
     runDeadlineMs: 300_000,
-    limits: { globalTool: 100, workspaceTotal: 100, workspaceTool: 100 },
     ...overrides,
   };
 }
@@ -254,9 +254,12 @@ Deno.test({
     let f: AdmissibleFixture | undefined;
     try {
       f = await createAdmissibleFixture(pool);
-      const input = baseInput(f, {
-        limits: { globalTool: 0, workspaceTotal: 100, workspaceTool: 100 },
+      await setQueueLimits(pool, f.toolId, {
+        globalTool: 0,
+        workspaceTotal: 100,
+        workspaceTool: 100,
       });
+      const input = baseInput(f);
 
       const result = await admitToolRun(pool, input);
       assertEquals(result.kind, "queue_full");
@@ -294,12 +297,16 @@ Deno.test({
     let f: AdmissibleFixture | undefined;
     try {
       f = await createAdmissibleFixture(pool);
-      const limits = { globalTool: 100, workspaceTotal: 100, workspaceTool: 1 };
+      await setQueueLimits(pool, f.toolId, {
+        globalTool: 100,
+        workspaceTotal: 100,
+        workspaceTool: 1,
+      });
 
-      const first = await admitToolRun(pool, baseInput(f, { limits }));
+      const first = await admitToolRun(pool, baseInput(f));
       assertEquals(first.kind, "admitted");
 
-      const second = await admitToolRun(pool, baseInput(f, { limits }));
+      const second = await admitToolRun(pool, baseInput(f));
       assertEquals(second.kind, "queue_full");
       if (second.kind !== "queue_full") throw new Error("unreachable");
       assertEquals(second.scope, "workspace_tool");
