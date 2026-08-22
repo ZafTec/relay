@@ -21,18 +21,39 @@ function testPool(): DatabasePool {
   );
 }
 
-async function createUser(pool: DatabasePool, email: string): Promise<string> {
+function unique(label: string): string {
+  return `${label}-${crypto.randomUUID()}`;
+}
+
+async function createUser(pool: DatabasePool, label: string): Promise<string> {
   const result = await pool.query<{ id: string }>(
     `insert into auth."user" (id, name, email, "emailVerified")
      values (gen_random_uuid()::text, 'Test', $1, true)
      returning id`,
-    [email],
+    [`${unique(label)}@example.com`],
   );
   return result.rows[0].id;
 }
 
-async function reset(pool: DatabasePool): Promise<void> {
-  await pool.query('delete from auth."user"');
+/**
+ * Deletes only the users this test created -- not a blanket
+ * `delete from auth."user"`. See authorization_test.ts's `cleanup` for
+ * why: this package's live tests share one database with
+ * packages/catalog's and packages/queue's, and a full-table wipe here
+ * really did delete rows a concurrently running test elsewhere still
+ * depended on once `deno task check:live` started running everything
+ * together. `relay.audit_events.actor_user_id` is `on delete set null`
+ * (the audit trail outlives the account, per
+ * 0005_audit_events.ts), so deleting these users never touches the
+ * audit rows the tests below assert against.
+ */
+async function cleanup(
+  pool: DatabasePool,
+  userIds: readonly string[],
+): Promise<void> {
+  for (const userId of userIds) {
+    await pool.query('delete from auth."user" where id = $1', [userId]);
+  }
 }
 
 Deno.test({
@@ -40,11 +61,12 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let userId: string | undefined;
     try {
-      await reset(pool);
-      const userId = await createUser(pool, "nobody@example.com");
+      userId = await createUser(pool, "nobody");
       assertEquals(await isSuperadmin(pool, userId), false);
     } finally {
+      await cleanup(pool, userId ? [userId] : []);
       await pool.end();
     }
   },
@@ -55,14 +77,19 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let userId: string | undefined;
+    let operatorId: string | undefined;
     try {
-      await reset(pool);
-      const userId = await createUser(pool, "grantee@example.com");
-      const operatorId = await createUser(pool, "operator@example.com");
+      userId = await createUser(pool, "grantee");
+      operatorId = await createUser(pool, "operator");
 
       await grantSuperadmin(pool, userId, operatorId);
       assertEquals(await isSuperadmin(pool, userId), true);
     } finally {
+      await cleanup(
+        pool,
+        [userId, operatorId].filter((id): id is string => id !== undefined),
+      );
       await pool.end();
     }
   },
@@ -74,10 +101,11 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let userId: string | undefined;
+    let operatorId: string | undefined;
     try {
-      await reset(pool);
-      const userId = await createUser(pool, "revokee@example.com");
-      const operatorId = await createUser(pool, "operator2@example.com");
+      userId = await createUser(pool, "revokee");
+      operatorId = await createUser(pool, "operator");
 
       await grantSuperadmin(pool, userId, operatorId);
       assertEquals(await isSuperadmin(pool, userId), true);
@@ -85,6 +113,10 @@ Deno.test({
       await revokeSuperadmin(pool, userId, operatorId);
       assertEquals(await isSuperadmin(pool, userId), false);
     } finally {
+      await cleanup(
+        pool,
+        [userId, operatorId].filter((id): id is string => id !== undefined),
+      );
       await pool.end();
     }
   },
@@ -95,10 +127,11 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let userId: string | undefined;
+    let operatorId: string | undefined;
     try {
-      await reset(pool);
-      const userId = await createUser(pool, "audited@example.com");
-      const operatorId = await createUser(pool, "operator3@example.com");
+      userId = await createUser(pool, "audited");
+      operatorId = await createUser(pool, "operator");
 
       await grantSuperadmin(pool, userId, operatorId);
       await revokeSuperadmin(pool, userId, operatorId);
@@ -116,6 +149,10 @@ Deno.test({
       assertEquals(events.rows[1].action, "system_role.superadmin.revoke");
       assertEquals(events.rows[0].actor_user_id, operatorId);
     } finally {
+      await cleanup(
+        pool,
+        [userId, operatorId].filter((id): id is string => id !== undefined),
+      );
       await pool.end();
     }
   },
@@ -126,10 +163,11 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let userId: string | undefined;
+    let operatorId: string | undefined;
     try {
-      await reset(pool);
-      const userId = await createUser(pool, "immutable@example.com");
-      const operatorId = await createUser(pool, "operator4@example.com");
+      userId = await createUser(pool, "immutable");
+      operatorId = await createUser(pool, "operator");
       await grantSuperadmin(pool, userId, operatorId);
 
       await assertRejects(
@@ -149,6 +187,10 @@ Deno.test({
         Error,
       );
     } finally {
+      await cleanup(
+        pool,
+        [userId, operatorId].filter((id): id is string => id !== undefined),
+      );
       await pool.end();
     }
   },

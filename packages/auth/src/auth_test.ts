@@ -48,10 +48,8 @@ function testPool(): DatabasePool {
   );
 }
 
-/** Cascades (auth.user/organization -> session/account/member/personal_workspaces) do the rest. */
-async function resetAuthState(pool: DatabasePool): Promise<void> {
-  await pool.query('delete from auth."user"');
-  await pool.query("delete from auth.organization");
+function unique(label: string): string {
+  return `${label}-${crypto.randomUUID()}`;
 }
 
 async function createTestUser(
@@ -63,6 +61,34 @@ async function createTestUser(
     model: "user",
     data: { email, name: "Test User", emailVerified: true },
   });
+}
+
+/**
+ * Deletes only the one user (and, if the session-create hook ran, their
+ * personal organization) this test created -- not a blanket
+ * `delete from auth."user"`/`auth.organization`. This whole package's
+ * live tests share one database (see `.env.example`'s
+ * MIGRATOR_TEST_DATABASE_URL comment for the analogous reasoning on the
+ * migrator's own tests); wiping entire tables at test start is only safe
+ * if nothing else touches them at the same time, which stopped being
+ * true once `deno task check:live` runs this file alongside
+ * packages/catalog's and packages/queue's own live tests -- a blanket
+ * reset here really did delete rows a concurrently-running catalog test's
+ * fixture still depended on. Cascades handle session/account/member;
+ * `relay.personal_workspaces` only cascades from the user side, not the
+ * organization's, so the organization is deleted explicitly.
+ */
+async function cleanupUser(pool: DatabasePool, userId: string): Promise<void> {
+  const { rows } = await pool.query<{ organization_id: string }>(
+    "select organization_id from relay.personal_workspaces where user_id = $1",
+    [userId],
+  );
+  await pool.query('delete from auth."user" where id = $1', [userId]);
+  if (rows[0]) {
+    await pool.query("delete from auth.organization where id = $1", [
+      rows[0].organization_id,
+    ]);
+  }
 }
 
 Deno.test({
@@ -119,10 +145,11 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let userId: string | undefined;
     try {
-      await resetAuthState(pool);
       const auth = createAuth(pool, testAuthConfig());
-      const user = await createTestUser(auth, "owner@example.com");
+      const user = await createTestUser(auth, `${unique("owner")}@example.com`);
+      userId = user.id;
 
       const ctx = await auth.$context;
       const session = await ctx.internalAdapter.createSession(
@@ -155,6 +182,7 @@ Deno.test({
       assertEquals(members.rows.length, 1);
       assertEquals(members.rows[0].role, "owner");
     } finally {
+      if (userId) await cleanupUser(pool, userId);
       await pool.end();
     }
   },
@@ -165,10 +193,14 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let userId: string | undefined;
     try {
-      await resetAuthState(pool);
       const auth = createAuth(pool, testAuthConfig());
-      const user = await createTestUser(auth, "repeat@example.com");
+      const user = await createTestUser(
+        auth,
+        `${unique("repeat")}@example.com`,
+      );
+      userId = user.id;
       const ctx = await auth.$context;
 
       const first = await ctx.internalAdapter.createSession(
@@ -194,6 +226,7 @@ Deno.test({
       );
       assertEquals(workspaces.rowCount, 1);
     } finally {
+      if (userId) await cleanupUser(pool, userId);
       await pool.end();
     }
   },
@@ -205,10 +238,14 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let userId: string | undefined;
     try {
-      await resetAuthState(pool);
       const auth = createAuth(pool, testAuthConfig());
-      const user = await createTestUser(auth, "concurrent@example.com");
+      const user = await createTestUser(
+        auth,
+        `${unique("concurrent")}@example.com`,
+      );
+      userId = user.id;
       const ctx = await auth.$context;
 
       const sessions = await Promise.all(
@@ -242,6 +279,7 @@ Deno.test({
       );
       assertEquals(members.rowCount, 1);
     } finally {
+      if (userId) await cleanupUser(pool, userId);
       await pool.end();
     }
   },

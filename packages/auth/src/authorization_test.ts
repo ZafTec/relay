@@ -17,30 +17,29 @@ function testPool(): DatabasePool {
   );
 }
 
-async function reset(pool: DatabasePool): Promise<void> {
-  await pool.query('delete from auth."user"');
-  await pool.query("delete from auth.organization");
+function unique(label: string): string {
+  return `${label}-${crypto.randomUUID()}`;
 }
 
-async function createUser(pool: DatabasePool, email: string): Promise<string> {
+async function createUser(pool: DatabasePool, label: string): Promise<string> {
   const result = await pool.query<{ id: string }>(
     `insert into auth."user" (id, name, email, "emailVerified")
      values (gen_random_uuid()::text, 'Test', $1, true)
      returning id`,
-    [email],
+    [`${unique(label)}@example.com`],
   );
   return result.rows[0].id;
 }
 
 async function createOrganization(
   pool: DatabasePool,
-  slug: string,
+  label: string,
 ): Promise<string> {
   const result = await pool.query<{ id: string }>(
     `insert into auth.organization (id, name, slug, "createdAt")
      values (gen_random_uuid()::text, 'Test Org', $1, now())
      returning id`,
-    [slug],
+    [unique(label)],
   );
   return result.rows[0].id;
 }
@@ -58,19 +57,50 @@ async function addMember(
   );
 }
 
+/**
+ * Deletes only the rows this test created -- not a blanket
+ * `delete from auth."user"`/`auth.organization`. This package's live
+ * tests share one database with packages/catalog's and packages/queue's;
+ * a full-table wipe at test start really did delete rows a concurrently
+ * running test elsewhere still depended on once `deno task check:live`
+ * started running everything together. Organization deletion cascades
+ * to `auth.member`; user deletion cascades to `auth.member` and
+ * `relay.personal_workspaces` too, but nothing here creates the latter
+ * (these tests insert membership rows directly, not through
+ * `ensurePersonalWorkspace`).
+ */
+async function cleanup(
+  pool: DatabasePool,
+  ids: { userIds?: readonly string[]; organizationIds?: readonly string[] },
+): Promise<void> {
+  for (const organizationId of ids.organizationIds ?? []) {
+    await pool.query("delete from auth.organization where id = $1", [
+      organizationId,
+    ]);
+  }
+  for (const userId of ids.userIds ?? []) {
+    await pool.query('delete from auth."user" where id = $1', [userId]);
+  }
+}
+
 Deno.test({
   name:
     "getMembership returns null for a client-supplied workspace the user does not belong to",
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let userId: string | undefined;
+    let organizationId: string | undefined;
     try {
-      await reset(pool);
-      const userId = await createUser(pool, "outsider@example.com");
-      const organizationId = await createOrganization(pool, "someone-elses");
+      userId = await createUser(pool, "outsider");
+      organizationId = await createOrganization(pool, "someone-elses");
 
       assertEquals(await getMembership(pool, organizationId, userId), null);
     } finally {
+      await cleanup(pool, {
+        userIds: userId ? [userId] : [],
+        organizationIds: organizationId ? [organizationId] : [],
+      });
       await pool.end();
     }
   },
@@ -81,10 +111,11 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let userId: string | undefined;
+    let organizationId: string | undefined;
     try {
-      await reset(pool);
-      const userId = await createUser(pool, "member@example.com");
-      const organizationId = await createOrganization(pool, "real-org");
+      userId = await createUser(pool, "member");
+      organizationId = await createOrganization(pool, "real-org");
       await addMember(pool, organizationId, userId, "admin");
 
       assertEquals(
@@ -92,6 +123,10 @@ Deno.test({
         "admin",
       );
     } finally {
+      await cleanup(pool, {
+        userIds: userId ? [userId] : [],
+        organizationIds: organizationId ? [organizationId] : [],
+      });
       await pool.end();
     }
   },
@@ -102,12 +137,15 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let organizationId: string | undefined;
     try {
-      await reset(pool);
-      const organizationId = await createOrganization(pool, "org-a");
+      organizationId = await createOrganization(pool, "org-a");
       assertEquals(await canRemoveMember(pool, organizationId, "member"), true);
       assertEquals(await canRemoveMember(pool, organizationId, "admin"), true);
     } finally {
+      await cleanup(pool, {
+        organizationIds: organizationId ? [organizationId] : [],
+      });
       await pool.end();
     }
   },
@@ -118,17 +156,22 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let userId: string | undefined;
+    let organizationId: string | undefined;
     try {
-      await reset(pool);
-      const owner = await createUser(pool, "sole-owner@example.com");
-      const organizationId = await createOrganization(pool, "org-b");
-      await addMember(pool, organizationId, owner, "owner");
+      userId = await createUser(pool, "sole-owner");
+      organizationId = await createOrganization(pool, "org-b");
+      await addMember(pool, organizationId, userId, "owner");
 
       assertEquals(
         await canRemoveMember(pool, organizationId, "owner"),
         false,
       );
     } finally {
+      await cleanup(pool, {
+        userIds: userId ? [userId] : [],
+        organizationIds: organizationId ? [organizationId] : [],
+      });
       await pool.end();
     }
   },
@@ -139,11 +182,13 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
+    let ownerA: string | undefined;
+    let ownerB: string | undefined;
+    let organizationId: string | undefined;
     try {
-      await reset(pool);
-      const ownerA = await createUser(pool, "owner-a@example.com");
-      const ownerB = await createUser(pool, "owner-b@example.com");
-      const organizationId = await createOrganization(pool, "org-c");
+      ownerA = await createUser(pool, "owner-a");
+      ownerB = await createUser(pool, "owner-b");
+      organizationId = await createOrganization(pool, "org-c");
       await addMember(pool, organizationId, ownerA, "owner");
       await addMember(pool, organizationId, ownerB, "owner");
 
@@ -152,6 +197,12 @@ Deno.test({
         true,
       );
     } finally {
+      await cleanup(pool, {
+        userIds: [ownerA, ownerB].filter((id): id is string =>
+          id !== undefined
+        ),
+        organizationIds: organizationId ? [organizationId] : [],
+      });
       await pool.end();
     }
   },
