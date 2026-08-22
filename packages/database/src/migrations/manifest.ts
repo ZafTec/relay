@@ -17,6 +17,7 @@ import { migration as routingPolicies } from "./0015_routing_policies.ts";
 import { migration as toolProviderBindings } from "./0016_tool_provider_bindings.ts";
 import { migration as routingDecisions } from "./0017_routing_decisions.ts";
 import { migration as toolVersionAndRoutingImmutability } from "./0018_tool_version_and_routing_immutability.ts";
+import { migration as wave3ForeignKeys } from "./0019_wave3_foreign_keys.ts";
 
 /**
  * Immutable, statically imported migration history, in application order.
@@ -48,4 +49,5 @@ export const MIGRATIONS: readonly Migration[] = [
   toolProviderBindings,
   routingDecisions,
   toolVersionAndRoutingImmutability,
+  wave3ForeignKeys,
 ];
