@@ -216,6 +216,73 @@ Deno.test({
 });
 
 Deno.test({
+  name:
+    "concurrent createToolVersion calls for the same tool never throw and number sequentially",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    const { actorUserId, operatorId } = await createSuperadmin(pool);
+    let toolId: string | undefined;
+    try {
+      const registered = await registerTool(pool, actorUserId, {
+        key: unique("tool"),
+        name: "Image Generate",
+        visibility: "public",
+      });
+      if (registered.kind !== "ok") throw new Error("unreachable");
+      toolId = registered.value.toolId;
+
+      // Both read the same max(version) before either commits unless the
+      // tool row is locked for the duration of the transaction -- without
+      // that lock, both compute the same next_version and the second's
+      // insert throws a raw unique-violation against tool_versions'
+      // (tool_id, version) constraint instead of being handled.
+      const [first, second] = await Promise.all([
+        createToolVersion(pool, actorUserId, versionInput(toolId)),
+        createToolVersion(pool, actorUserId, versionInput(toolId)),
+      ]);
+
+      if (first.kind !== "ok" || second.kind !== "ok") {
+        throw new Error(
+          `expected both to succeed, got ${first.kind} and ${second.kind}`,
+        );
+      }
+      const versions = [first.value.version, second.value.version].sort();
+      assertEquals(versions, [1, 2]);
+    } finally {
+      await cleanupCatalogFixture(pool, {
+        toolId,
+        userIds: [actorUserId, operatorId],
+      });
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "createToolVersion reports not_found for a nonexistent tool",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    const { actorUserId, operatorId } = await createSuperadmin(pool);
+    try {
+      const result = await createToolVersion(
+        pool,
+        actorUserId,
+        versionInput(unique("tool_nonexistent")),
+      );
+      assertEquals(result.kind, "not_found");
+    } finally {
+      await cleanupCatalogFixture(pool, {
+        toolId: undefined,
+        userIds: [actorUserId, operatorId],
+      });
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
   name: "publishToolVersion refuses an unregistered handler",
   ignore: !hasDatabase,
   fn: async () => {
