@@ -1,12 +1,13 @@
 import { assertEquals, assertRejects } from "@std/assert";
+import pg from "pg";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
-import { grantSuperadmin } from "@relay/auth";
 import { createHandlerRegistry } from "./handlers.ts";
 import {
   createToolVersion,
   publishToolVersion,
   registerTool,
   setToolLifecycle,
+  setToolReadinessCritical,
 } from "./tools.ts";
 import { validateCatalogHandlers } from "./validation.ts";
 
@@ -44,7 +45,31 @@ async function createSuperadmin(
 ): Promise<{ actorUserId: string; operatorId: string }> {
   const actorUserId = await createUser(pool);
   const operatorId = await createUser(pool);
-  await grantSuperadmin(pool, actorUserId, operatorId);
+
+  // A fresh database has no superadmin who can authorize the first grant.
+  // Bootstrap only this test fixture through the local migrator role, mirroring
+  // the deployment-time operator provisioning boundary rather than adding a
+  // production backdoor to the auth service.
+  const ownerUrl = new URL(databaseUrl!);
+  ownerUrl.username = "relay_migrator";
+  ownerUrl.password = "relay_dev_only";
+  const client = new pg.Client({ connectionString: ownerUrl.toString() });
+  await client.connect();
+  try {
+    await client.query("begin");
+    await client.query("set local role relay_owner");
+    await client.query(
+      `insert into relay.system_role_assignments (user_id, role, granted_by)
+       values ($1, 'superadmin', $2)`,
+      [actorUserId, operatorId],
+    );
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    await client.end();
+  }
   return { actorUserId, operatorId };
 }
 
@@ -87,7 +112,9 @@ async function cleanupCatalogFixture(
 ): Promise<void> {
   if (fixture.toolId) {
     await pool.query(
-      "update relay.tools set active_version_id = null where id = $1",
+      `update relay.tools
+          set lifecycle = 'retired', active_version_id = null
+        where id = $1`,
       [fixture.toolId],
     );
     // Published tool_versions rows are immutable against deletion too
@@ -110,6 +137,27 @@ async function cleanupCatalogFixture(
       await pool.query("delete from relay.tools where id = $1", [
         fixture.toolId,
       ]);
+    }
+  }
+  if (fixture.userIds.length > 0) {
+    const ownerUrl = new URL(databaseUrl!);
+    ownerUrl.username = "relay_migrator";
+    ownerUrl.password = "relay_dev_only";
+    const owner = new pg.Client({ connectionString: ownerUrl.toString() });
+    await owner.connect();
+    try {
+      await owner.query("begin");
+      await owner.query("set local role relay_owner");
+      await owner.query(
+        "delete from relay.system_role_assignments where user_id = any($1::text[])",
+        [[...fixture.userIds]],
+      );
+      await owner.query("commit");
+    } catch (error) {
+      await owner.query("rollback");
+      throw error;
+    } finally {
+      await owner.end();
     }
   }
   for (const userId of fixture.userIds) {
@@ -174,17 +222,33 @@ Deno.test({
         category: "image",
         summary: "Generates an image from a prompt",
         visibility: "public",
+        readinessCritical: true,
       });
       assertEquals(result.kind, "ok");
       if (result.kind !== "ok") throw new Error("unreachable");
       toolId = result.value.toolId;
 
-      const tool = await pool.query<{ lifecycle: string; key: string }>(
-        "select lifecycle, key from relay.tools where id = $1",
+      const tool = await pool.query<{
+        lifecycle: string;
+        key: string;
+        readiness_critical: boolean;
+      }>(
+        "select lifecycle, key, readiness_critical from relay.tools where id = $1",
         [result.value.toolId],
       );
       assertEquals(tool.rows[0].lifecycle, "draft");
       assertEquals(tool.rows[0].key, key);
+      assertEquals(tool.rows[0].readiness_critical, true);
+
+      assertEquals(
+        await setToolReadinessCritical(pool, actorUserId, toolId, false),
+        { kind: "ok" },
+      );
+      const readiness = await pool.query<{ readiness_critical: boolean }>(
+        "select readiness_critical from relay.tools where id = $1",
+        [toolId],
+      );
+      assertEquals(readiness.rows[0].readiness_critical, false);
 
       const audit = await pool.query<{ action: string }>(
         "select action from relay.audit_events where target_id = $1",
@@ -263,25 +327,116 @@ Deno.test({
         visibility: "public",
       });
       if (registered.kind !== "ok") throw new Error("unreachable");
+      const registeredToolId = registered.value.toolId;
+      toolId = registeredToolId;
+
+      // Every caller initially races for the same max(version). The parent
+      // tool-row lock must serialize all of them, not merely make a
+      // two-request race unlikely.
+      const results = await Promise.all(
+        Array.from(
+          { length: 5 },
+          () =>
+            createToolVersion(
+              pool,
+              actorUserId,
+              versionInput(registeredToolId),
+            ),
+        ),
+      );
+
+      assertEquals(results.every((result) => result.kind === "ok"), true);
+      const versions = results.map((result) => {
+        if (result.kind !== "ok") {
+          throw new Error(`expected success, got ${result.kind}`);
+        }
+        return result.value.version;
+      }).sort((a, b) => a - b);
+      assertEquals(versions, [1, 2, 3, 4, 5]);
+    } finally {
+      await cleanupCatalogFixture(pool, {
+        toolId,
+        userIds: [actorUserId, operatorId],
+      });
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "tool-version hashes cover and validate the complete contract",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    const { actorUserId, operatorId } = await createSuperadmin(pool);
+    let toolId: string | undefined;
+    try {
+      const registered = await registerTool(pool, actorUserId, {
+        key: unique("tool"),
+        name: "Image Generate",
+        visibility: "public",
+      });
+      if (registered.kind !== "ok") throw new Error("unreachable");
       toolId = registered.value.toolId;
 
-      // Both read the same max(version) before either commits unless the
-      // tool row is locked for the duration of the transaction -- without
-      // that lock, both compute the same next_version and the second's
-      // insert throws a raw unique-violation against tool_versions'
-      // (tool_id, version) constraint instead of being handled.
-      const [first, second] = await Promise.all([
-        createToolVersion(pool, actorUserId, versionInput(toolId)),
-        createToolVersion(pool, actorUserId, versionInput(toolId)),
-      ]);
+      const created = await createToolVersion(
+        pool,
+        actorUserId,
+        versionInput(toolId, {
+          meterPolicyId: "meter.test",
+          entitlementKey: "entitlement.test",
+          inputSchemaVersion: 2,
+          handlerVersion: "2026.08",
+          compatibilityMetadata: { protocol: 2 },
+        }),
+      );
+      if (created.kind !== "ok") throw new Error("unreachable");
 
-      if (first.kind !== "ok" || second.kind !== "ok") {
-        throw new Error(
-          `expected both to succeed, got ${first.kind} and ${second.kind}`,
-        );
-      }
-      const versions = [first.value.version, second.value.version].sort();
-      assertEquals(versions, [1, 2]);
+      const { rows } = await pool.query<{
+        immutable_hash: string;
+        expected_hash: string;
+      }>(
+        `select immutable_hash,
+                relay.compute_tool_version_immutable_hash(
+                  id, tool_id, version, input_schema, output_schema,
+                  handler_key, input_schema_version, handler_version,
+                  execution_mode, max_duration_seconds, meter_policy_id,
+                  entitlement_key, compatibility_metadata
+                ) as expected_hash
+         from relay.tool_versions
+         where id = $1`,
+        [created.value.toolVersionId],
+      );
+      assertEquals(rows[0].immutable_hash, rows[0].expected_hash);
+      assertEquals(rows[0].immutable_hash.length, 64);
+
+      // Draft edits remain deploy-compatible with the previous writer: the
+      // database owns canonical hash maintenance until publication.
+      const originalHash = rows[0].immutable_hash;
+      await pool.query(
+        "update relay.tool_versions set meter_policy_id = 'meter.other' where id = $1",
+        [created.value.toolVersionId],
+      );
+      const updated = await pool.query<{
+        immutable_hash: string;
+        expected_hash: string;
+      }>(
+        `select immutable_hash,
+                relay.compute_tool_version_immutable_hash(
+                  id, tool_id, version, input_schema, output_schema,
+                  handler_key, input_schema_version, handler_version,
+                  execution_mode, max_duration_seconds, meter_policy_id,
+                  entitlement_key, compatibility_metadata
+                ) as expected_hash
+           from relay.tool_versions
+          where id = $1`,
+        [created.value.toolVersionId],
+      );
+      assertEquals(
+        updated.rows[0].immutable_hash,
+        updated.rows[0].expected_hash,
+      );
+      assertEquals(updated.rows[0].immutable_hash === originalHash, false);
     } finally {
       await cleanupCatalogFixture(pool, {
         toolId,
@@ -367,6 +522,57 @@ Deno.test({
 });
 
 Deno.test({
+  name: "publishToolVersion refuses incompatible handler metadata",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    const { actorUserId, operatorId } = await createSuperadmin(pool);
+    let toolId: string | undefined;
+    try {
+      const registered = await registerTool(pool, actorUserId, {
+        key: unique("tool"),
+        name: "Image Generate",
+        visibility: "public",
+      });
+      if (registered.kind !== "ok") throw new Error("unreachable");
+      toolId = registered.value.toolId;
+      const created = await createToolVersion(
+        pool,
+        actorUserId,
+        versionInput(toolId, {
+          inputSchemaVersion: 2,
+          handlerVersion: "2026.08",
+        }),
+      );
+      if (created.kind !== "ok") throw new Error("unreachable");
+
+      const result = await publishToolVersion(
+        pool,
+        actorUserId,
+        created.value.toolVersionId,
+        createHandlerRegistry([{
+          key: "image.generate.v1",
+          inputSchemaVersion: 1,
+          handlerVersion: "2026.07",
+        }]),
+      );
+      assertEquals(result, {
+        kind: "incompatible_handler",
+        handlerKey: "image.generate.v1",
+        expected: { inputSchemaVersion: 2, handlerVersion: "2026.08" },
+        registered: { inputSchemaVersion: 1, handlerVersion: "2026.07" },
+      });
+    } finally {
+      await cleanupCatalogFixture(pool, {
+        toolId,
+        userIds: [actorUserId, operatorId],
+      });
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
   name:
     "publishToolVersion activates the version and moves the tool to published",
   ignore: !hasDatabase,
@@ -437,17 +643,23 @@ Deno.test({
         "immutable",
       );
 
-      // Lifecycle metadata (deprecated_at/retired_at), unlike behavior
-      // columns, must still be settable after publish.
-      await pool.query(
-        "update relay.tool_versions set deprecated_at = now() where id = $1",
-        [created.value.toolVersionId],
-      );
-      const deprecated = await pool.query<{ deprecated_at: Date | null }>(
-        "select deprecated_at from relay.tool_versions where id = $1",
-        [created.value.toolVersionId],
-      );
-      assertEquals(deprecated.rows[0].deprecated_at !== null, true);
+      // Published means the complete version row is frozen. Lifecycle is
+      // represented by relay.tools; even the version's old lifecycle
+      // timestamp columns and created_at cannot be rewritten afterward.
+      for (
+        const statement of [
+          "update relay.tool_versions set deprecated_at = now() where id = $1",
+          "update relay.tool_versions set retired_at = now() where id = $1",
+          "update relay.tool_versions set created_at = now() where id = $1",
+          "update relay.tool_versions set published_at = now() where id = $1",
+        ]
+      ) {
+        await assertRejects(
+          () => pool.query(statement, [created.value.toolVersionId]),
+          Error,
+          "fully immutable",
+        );
+      }
 
       // Immutable must also mean "cannot be deleted," not just
       // "cannot be updated" -- deleting a published version would erase

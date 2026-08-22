@@ -1,38 +1,93 @@
-/**
- * "Handler registry" from
- * docs/implementation-handoff/05-domain-storage-metering.md: "Code
- * registers handlers by stable key ... Database `handler_key` selects
- * only a handler that exists in the deployed registry. Unknown handlers
- * make the tool version unavailable; database content never becomes
- * executable code."
- *
- * The full `ToolHandler<I, O>` shape from that doc (`validate`,
- * `prepare(context, input)`, `normalize(result)`) isn't implemented
- * here -- `prepare`/`normalize` are typed against a
- * `RestrictedToolContext`/`PreparedOperation`/`ProviderResult` that only
- * make sense once Wave 5 defines a real provider adapter to prepare
- * operations for and normalize results from. What's needed *now* is
- * exactly what "unknown handlers make the tool version unavailable"
- * requires: a registry of which handler keys exist, checked before a
- * tool version is allowed to publish.
- */
+export const DEFAULT_INPUT_SCHEMA_VERSION = 1;
+export const DEFAULT_HANDLER_VERSION = "1";
+
+export interface HandlerCompatibility {
+  readonly inputSchemaVersion: number;
+  readonly handlerVersion: string;
+}
+
+export interface HandlerRegistration extends HandlerCompatibility {
+  readonly key: string;
+}
+
+export type HandlerRegistrationInput = string | HandlerRegistration;
+
 export interface HandlerRegistry {
-  register(key: string): void;
+  register(registration: HandlerRegistrationInput): void;
+  unregister(key: string): boolean;
   has(key: string): boolean;
+  get(key: string): HandlerRegistration | undefined;
+  isCompatible(key: string, compatibility: HandlerCompatibility): boolean;
   readonly keys: ReadonlySet<string>;
 }
 
+function normalizeRegistration(
+  registration: HandlerRegistrationInput,
+): HandlerRegistration {
+  const value = typeof registration === "string"
+    ? {
+      key: registration,
+      inputSchemaVersion: DEFAULT_INPUT_SCHEMA_VERSION,
+      handlerVersion: DEFAULT_HANDLER_VERSION,
+    }
+    : registration;
+
+  if (value.key.trim() === "") {
+    throw new TypeError("handler key must not be empty");
+  }
+  if (
+    !Number.isSafeInteger(value.inputSchemaVersion) ||
+    value.inputSchemaVersion <= 0
+  ) {
+    throw new TypeError(
+      "handler inputSchemaVersion must be a positive integer",
+    );
+  }
+  if (value.handlerVersion.trim() === "") {
+    throw new TypeError("handler version must not be empty");
+  }
+
+  return Object.freeze({
+    key: value.key,
+    inputSchemaVersion: value.inputSchemaVersion,
+    handlerVersion: value.handlerVersion,
+  });
+}
+
 export function createHandlerRegistry(
-  initialKeys: readonly string[] = [],
+  initialRegistrations: readonly HandlerRegistrationInput[] = [],
 ): HandlerRegistry {
-  const keys = new Set<string>(initialKeys);
+  const registrations = new Map<string, HandlerRegistration>();
+  for (const registration of initialRegistrations) {
+    const normalized = normalizeRegistration(registration);
+    registrations.set(normalized.key, normalized);
+  }
+
   return {
-    register(key: string): void {
-      keys.add(key);
+    register(registration: HandlerRegistrationInput): void {
+      const normalized = normalizeRegistration(registration);
+      registrations.set(normalized.key, normalized);
+    },
+    unregister(key: string): boolean {
+      return registrations.delete(key);
     },
     has(key: string): boolean {
-      return keys.has(key);
+      return registrations.has(key);
     },
-    keys,
+    get(key: string): HandlerRegistration | undefined {
+      return registrations.get(key);
+    },
+    isCompatible(
+      key: string,
+      compatibility: HandlerCompatibility,
+    ): boolean {
+      const registration = registrations.get(key);
+      return registration !== undefined &&
+        registration.inputSchemaVersion === compatibility.inputSchemaVersion &&
+        registration.handlerVersion === compatibility.handlerVersion;
+    },
+    get keys(): ReadonlySet<string> {
+      return new Set(registrations.keys());
+    },
   };
 }

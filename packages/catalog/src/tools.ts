@@ -1,9 +1,14 @@
-import { sha256Hex, withTransaction } from "@relay/database";
+import { withTransaction } from "@relay/database";
 import type { DatabasePool } from "@relay/database";
 import { generatePublicId, ID_PREFIXES } from "@relay/contracts";
-import { isSuperadmin } from "@relay/auth";
 import { recordAuditEvent } from "@relay/audit";
-import type { HandlerRegistry } from "./handlers.ts";
+import { isSuperadmin } from "@relay/auth";
+import {
+  DEFAULT_HANDLER_VERSION,
+  DEFAULT_INPUT_SCHEMA_VERSION,
+  type HandlerCompatibility,
+  type HandlerRegistry,
+} from "./handlers.ts";
 
 /**
  * "Every publish/disable/deprecate/retire/routing change is
@@ -39,12 +44,22 @@ const ALLOWED_TRANSITIONS: Record<ToolLifecycle, readonly ToolLifecycle[]> = {
   retired: [],
 };
 
+type CatalogMutationExecutor = Pick<DatabasePool, "query">;
+
+async function hasSuperadminAuthorization(
+  queryable: CatalogMutationExecutor,
+  actorUserId: string,
+): Promise<boolean> {
+  return await isSuperadmin(queryable, actorUserId);
+}
+
 export interface RegisterToolInput {
   readonly key: string;
   readonly name: string;
   readonly category?: string | null;
   readonly summary?: string | null;
   readonly visibility: string;
+  readonly readinessCritical?: boolean;
 }
 
 export async function registerTool(
@@ -52,13 +67,17 @@ export async function registerTool(
   actorUserId: string,
   input: RegisterToolInput,
 ): Promise<CatalogMutationResult<{ toolId: string }>> {
-  if (!await isSuperadmin(pool, actorUserId)) return { kind: "denied" };
-
   return await withTransaction(pool, async (client) => {
+    if (!await hasSuperadminAuthorization(client, actorUserId)) {
+      return { kind: "denied" };
+    }
+
     const toolId = generatePublicId(ID_PREFIXES.tool);
     await client.query(
-      `insert into relay.tools (id, key, name, category, summary, lifecycle, visibility)
-       values ($1, $2, $3, $4, $5, 'draft', $6)`,
+      `insert into relay.tools
+         (id, key, name, category, summary, lifecycle, visibility,
+          readiness_critical)
+       values ($1, $2, $3, $4, $5, 'draft', $6, $7)`,
       [
         toolId,
         input.key,
@@ -66,6 +85,7 @@ export async function registerTool(
         input.category ?? null,
         input.summary ?? null,
         input.visibility,
+        input.readinessCritical ?? false,
       ],
     );
     await recordAuditEvent(client, {
@@ -85,6 +105,8 @@ export interface CreateToolVersionInput {
   readonly inputSchema: unknown;
   readonly outputSchema: unknown;
   readonly handlerKey: string;
+  readonly inputSchemaVersion?: number;
+  readonly handlerVersion?: string;
   readonly executionMode: string;
   readonly maxDurationSeconds: number;
   readonly meterPolicyId?: string | null;
@@ -92,28 +114,133 @@ export interface CreateToolVersionInput {
   readonly compatibilityMetadata?: unknown;
 }
 
-/**
- * `immutable_hash` covers everything that defines this version's
- * observable contract (schemas, handler, execution mode, duration) --
- * a later audit can confirm a published version's behavior-defining
- * fields never silently changed after publish, since publish never
- * updates this row again.
- */
-async function computeImmutableHash(
+export type ToolVersionContractField =
+  | "toolId"
+  | "inputSchema"
+  | "outputSchema"
+  | "handlerKey"
+  | "inputSchemaVersion"
+  | "handlerVersion"
+  | "executionMode"
+  | "maxDurationSeconds"
+  | "meterPolicyId"
+  | "entitlementKey"
+  | "compatibilityMetadata";
+
+interface SerializedToolVersionContract extends HandlerCompatibility {
+  readonly inputSchema: string;
+  readonly outputSchema: string;
+  readonly compatibilityMetadata: string | null;
+}
+
+type ContractSerializationResult =
+  | { readonly kind: "ok"; readonly value: SerializedToolVersionContract }
+  | {
+    readonly kind: "invalid";
+    readonly field: ToolVersionContractField;
+  };
+
+type JsonSerializationResult =
+  | { readonly kind: "ok"; readonly value: string }
+  | {
+    readonly kind: "invalid";
+    readonly field: ToolVersionContractField;
+  };
+
+function serializeJsonContractField(
+  value: unknown,
+  field: ToolVersionContractField,
+): JsonSerializationResult {
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized === undefined
+      ? { kind: "invalid", field }
+      : { kind: "ok", value: serialized };
+  } catch {
+    return { kind: "invalid", field };
+  }
+}
+
+function serializeToolVersionContract(
   input: CreateToolVersionInput,
-): Promise<string> {
-  return await sha256Hex(JSON.stringify({
-    inputSchema: input.inputSchema,
-    outputSchema: input.outputSchema,
-    handlerKey: input.handlerKey,
-    executionMode: input.executionMode,
-    maxDurationSeconds: input.maxDurationSeconds,
-  }));
+): ContractSerializationResult {
+  if (input.toolId.trim() === "") {
+    return { kind: "invalid", field: "toolId" };
+  }
+  if (input.handlerKey.trim() === "") {
+    return { kind: "invalid", field: "handlerKey" };
+  }
+  const inputSchemaVersion = input.inputSchemaVersion ??
+    DEFAULT_INPUT_SCHEMA_VERSION;
+  if (!Number.isSafeInteger(inputSchemaVersion) || inputSchemaVersion <= 0) {
+    return { kind: "invalid", field: "inputSchemaVersion" };
+  }
+  const handlerVersion = input.handlerVersion ?? DEFAULT_HANDLER_VERSION;
+  if (handlerVersion.trim() === "") {
+    return { kind: "invalid", field: "handlerVersion" };
+  }
+  if (input.executionMode.trim() === "") {
+    return { kind: "invalid", field: "executionMode" };
+  }
+  if (
+    !Number.isSafeInteger(input.maxDurationSeconds) ||
+    input.maxDurationSeconds <= 0
+  ) {
+    return { kind: "invalid", field: "maxDurationSeconds" };
+  }
+  if (
+    input.meterPolicyId !== undefined && input.meterPolicyId !== null &&
+    input.meterPolicyId.trim() === ""
+  ) {
+    return { kind: "invalid", field: "meterPolicyId" };
+  }
+  if (
+    input.entitlementKey !== undefined && input.entitlementKey !== null &&
+    input.entitlementKey.trim() === ""
+  ) {
+    return { kind: "invalid", field: "entitlementKey" };
+  }
+
+  const inputSchema = serializeJsonContractField(
+    input.inputSchema,
+    "inputSchema",
+  );
+  if (inputSchema.kind === "invalid") return inputSchema;
+  const outputSchema = serializeJsonContractField(
+    input.outputSchema,
+    "outputSchema",
+  );
+  if (outputSchema.kind === "invalid") return outputSchema;
+
+  let compatibilityMetadata: string | null = null;
+  if (input.compatibilityMetadata !== undefined) {
+    const serialized = serializeJsonContractField(
+      input.compatibilityMetadata,
+      "compatibilityMetadata",
+    );
+    if (serialized.kind === "invalid") return serialized;
+    compatibilityMetadata = serialized.value;
+  }
+
+  return {
+    kind: "ok",
+    value: {
+      inputSchema: inputSchema.value,
+      outputSchema: outputSchema.value,
+      inputSchemaVersion,
+      handlerVersion,
+      compatibilityMetadata,
+    },
+  };
 }
 
 export type CreateToolVersionResult =
   | { readonly kind: "denied" }
   | { readonly kind: "not_found" }
+  | {
+    readonly kind: "invalid_contract";
+    readonly field: ToolVersionContractField;
+  }
   | {
     readonly kind: "ok";
     readonly value: {
@@ -127,9 +254,16 @@ export async function createToolVersion(
   actorUserId: string,
   input: CreateToolVersionInput,
 ): Promise<CreateToolVersionResult> {
-  if (!await isSuperadmin(pool, actorUserId)) return { kind: "denied" };
-
   return await withTransaction(pool, async (client) => {
+    if (!await hasSuperadminAuthorization(client, actorUserId)) {
+      return { kind: "denied" };
+    }
+
+    const serialized = serializeToolVersionContract(input);
+    if (serialized.kind === "invalid") {
+      return { kind: "invalid_contract", field: serialized.field };
+    }
+
     // Locks the tool row for the rest of this transaction -- without it,
     // two concurrent createToolVersion calls for the same tool both read
     // the same `max(version)` before either commits, both compute the
@@ -152,29 +286,34 @@ export async function createToolVersion(
     );
     const version = rows[0].next_version;
     const toolVersionId = generatePublicId(ID_PREFIXES.toolVersion);
-    const immutableHash = await computeImmutableHash(input);
 
     await client.query(
       `insert into relay.tool_versions
          (id, tool_id, version, input_schema, output_schema, handler_key,
-          execution_mode, max_duration_seconds, meter_policy_id,
-          entitlement_key, compatibility_metadata, immutable_hash)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          input_schema_version, handler_version, execution_mode,
+          max_duration_seconds, meter_policy_id, entitlement_key,
+          compatibility_metadata, immutable_hash)
+       values (
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+         relay.compute_tool_version_immutable_hash(
+           $1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9, $10,
+           $11, $12, $13::jsonb
+         )
+       )`,
       [
         toolVersionId,
         input.toolId,
         version,
-        JSON.stringify(input.inputSchema),
-        JSON.stringify(input.outputSchema),
+        serialized.value.inputSchema,
+        serialized.value.outputSchema,
         input.handlerKey,
+        serialized.value.inputSchemaVersion,
+        serialized.value.handlerVersion,
         input.executionMode,
         input.maxDurationSeconds,
         input.meterPolicyId ?? null,
         input.entitlementKey ?? null,
-        input.compatibilityMetadata === undefined
-          ? null
-          : JSON.stringify(input.compatibilityMetadata),
-        immutableHash,
+        serialized.value.compatibilityMetadata,
       ],
     );
     await recordAuditEvent(client, {
@@ -192,6 +331,13 @@ export async function createToolVersion(
 export type PublishToolVersionResult =
   | { readonly kind: "denied" }
   | { readonly kind: "unknown_handler"; readonly handlerKey: string }
+  | {
+    readonly kind: "incompatible_handler";
+    readonly handlerKey: string;
+    readonly expected: HandlerCompatibility;
+    readonly registered: HandlerCompatibility;
+  }
+  | { readonly kind: "immutable_hash_mismatch" }
   | { readonly kind: "not_found" }
   | { readonly kind: "already_published" }
   | { readonly kind: "published" };
@@ -212,20 +358,56 @@ export async function publishToolVersion(
   toolVersionId: string,
   handlers: HandlerRegistry,
 ): Promise<PublishToolVersionResult> {
-  if (!await isSuperadmin(pool, actorUserId)) return { kind: "denied" };
-
   return await withTransaction(pool, async (client) => {
-    const versionRows = await client.query<
-      { tool_id: string; handler_key: string; published_at: Date | null }
-    >(
-      `select tool_id, handler_key, published_at from relay.tool_versions where id = $1 for update`,
+    if (!await hasSuperadminAuthorization(client, actorUserId)) {
+      return { kind: "denied" };
+    }
+
+    const versionRows = await client.query<{
+      tool_id: string;
+      handler_key: string;
+      input_schema_version: number;
+      handler_version: string;
+      published_at: Date | null;
+      immutable_hash_valid: boolean;
+    }>(
+      `select tool_id, handler_key, input_schema_version, handler_version,
+              published_at,
+              immutable_hash = relay.compute_tool_version_immutable_hash(
+                id, tool_id, version, input_schema, output_schema, handler_key,
+                input_schema_version, handler_version, execution_mode,
+                max_duration_seconds, meter_policy_id, entitlement_key,
+                compatibility_metadata
+              ) as immutable_hash_valid
+       from relay.tool_versions
+       where id = $1
+       for update`,
       [toolVersionId],
     );
     if (versionRows.rows.length === 0) return { kind: "not_found" };
     const version = versionRows.rows[0];
     if (version.published_at !== null) return { kind: "already_published" };
-    if (!handlers.has(version.handler_key)) {
+    if (!version.immutable_hash_valid) {
+      return { kind: "immutable_hash_mismatch" };
+    }
+    const registeredHandler = handlers.get(version.handler_key);
+    if (registeredHandler === undefined) {
       return { kind: "unknown_handler", handlerKey: version.handler_key };
+    }
+    const expectedCompatibility: HandlerCompatibility = {
+      inputSchemaVersion: version.input_schema_version,
+      handlerVersion: version.handler_version,
+    };
+    if (!handlers.isCompatible(version.handler_key, expectedCompatibility)) {
+      return {
+        kind: "incompatible_handler",
+        handlerKey: version.handler_key,
+        expected: expectedCompatibility,
+        registered: {
+          inputSchemaVersion: registeredHandler.inputSchemaVersion,
+          handlerVersion: registeredHandler.handlerVersion,
+        },
+      };
     }
 
     const toolRows = await client.query<{ lifecycle: ToolLifecycle }>(
@@ -269,6 +451,55 @@ export type SetToolLifecycleResult =
   | { readonly kind: "invalid_transition"; readonly from: ToolLifecycle }
   | { readonly kind: "ok" };
 
+export type SetToolReadinessCriticalResult =
+  | { readonly kind: "denied" }
+  | { readonly kind: "not_found" }
+  | { readonly kind: "ok" };
+
+/** Marks whether this tool's active published version gates process readiness. */
+export async function setToolReadinessCritical(
+  pool: DatabasePool,
+  actorUserId: string,
+  toolId: string,
+  readinessCritical: boolean,
+): Promise<SetToolReadinessCriticalResult> {
+  return await withTransaction(pool, async (client) => {
+    if (!await hasSuperadminAuthorization(client, actorUserId)) {
+      return { kind: "denied" };
+    }
+
+    const { rows } = await client.query<{ readiness_critical: boolean }>(
+      `select readiness_critical
+         from relay.tools
+        where id = $1
+        for update`,
+      [toolId],
+    );
+    if (rows.length === 0) return { kind: "not_found" };
+    if (rows[0].readiness_critical === readinessCritical) {
+      return { kind: "ok" };
+    }
+
+    await client.query(
+      `update relay.tools
+          set readiness_critical = $2, updated_at = now()
+        where id = $1`,
+      [toolId, readinessCritical],
+    );
+    await recordAuditEvent(client, {
+      actorType: "user",
+      actorUserId,
+      action: "tool.readiness_critical.set",
+      targetType: "tool",
+      targetId: toolId,
+      outcome: "success",
+      beforeSnapshot: { readinessCritical: rows[0].readiness_critical },
+      afterSnapshot: { readinessCritical },
+    });
+    return { kind: "ok" };
+  });
+}
+
 /**
  * Every lifecycle move that isn't "publish a specific version" --
  * `draft -> internal`, `published/deprecated -> disabled`, `disabled ->`
@@ -282,9 +513,11 @@ export async function setToolLifecycle(
   toolId: string,
   target: ToolLifecycle,
 ): Promise<SetToolLifecycleResult> {
-  if (!await isSuperadmin(pool, actorUserId)) return { kind: "denied" };
-
   return await withTransaction(pool, async (client) => {
+    if (!await hasSuperadminAuthorization(client, actorUserId)) {
+      return { kind: "denied" };
+    }
+
     const rows = await client.query<
       { lifecycle: ToolLifecycle; active_version_id: string | null }
     >(
