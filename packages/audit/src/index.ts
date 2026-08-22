@@ -1,4 +1,9 @@
-export { recordAuditEvent } from "./audit.ts";
+export {
+  AUDIT_REDACTION_LIMITS,
+  AuditIdempotencyConflictError,
+  recordAuditEvent,
+  redactAuditValue,
+} from "./audit.ts";
 export type {
   AuditActorType,
   AuditEventInput,

@@ -35,6 +35,18 @@ if (missing.length > 0) {
   Deno.exit(1);
 }
 
+// Privileged auth migration tests use the migrator identity against the same
+// database as the runtime suite. Deriving this URL keeps one authoritative
+// application database while preserving the separate destructive migrator
+// database used by packages/database/src/migrator_test.ts.
+if (Deno.env.get("AUTH_SECURITY_TEST_DATABASE_URL") === undefined) {
+  const runtimeUrl = new URL(Deno.env.get("DATABASE_URL")!);
+  const migratorUrl = new URL(Deno.env.get("MIGRATOR_TEST_DATABASE_URL")!);
+  runtimeUrl.username = migratorUrl.username;
+  runtimeUrl.password = migratorUrl.password;
+  Deno.env.set("AUTH_SECURITY_TEST_DATABASE_URL", runtimeUrl.toString());
+}
+
 async function run(cmd: string, args: string[]): Promise<void> {
   const command = new Deno.Command(cmd, {
     args,

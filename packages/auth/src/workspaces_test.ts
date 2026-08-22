@@ -1,8 +1,8 @@
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import {
-  type BetterAuthAdapter,
   ensurePersonalWorkspace,
+  personalWorkspaceSlug,
 } from "./workspaces.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
@@ -34,67 +34,28 @@ async function createUser(pool: DatabasePool): Promise<string> {
   return rows[0].id;
 }
 
-/**
- * A real BetterAuthAdapter over the same tables Better Auth's own adapter
- * would write to -- `ensurePersonalWorkspace` doesn't know or care that
- * this isn't the real thing, so this exercises its actual SQL against
- * real `auth.organization`/`auth.member` rows and their real constraints
- * (unique slug, FKs), not a mock that just records calls.
- */
-function fakeAdapter(pool: DatabasePool): BetterAuthAdapter {
-  return {
-    create: async <T>(
-      args: { model: string; data: Record<string, unknown> },
-    ): Promise<T> => {
-      if (args.model === "organization") {
-        const { rows } = await pool.query<{ id: string }>(
-          `insert into auth.organization (id, name, slug, "createdAt", metadata)
-           values (gen_random_uuid()::text, $1, $2, $3, $4)
-           returning id`,
-          [
-            args.data.name,
-            args.data.slug,
-            args.data.createdAt,
-            args.data.metadata,
-          ],
-        );
-        return rows[0] as T;
-      }
-      if (args.model === "member") {
-        const { rows } = await pool.query<{ id: string }>(
-          `insert into auth.member (id, "organizationId", "userId", role, "createdAt")
-           values (gen_random_uuid()::text, $1, $2, $3, $4)
-           returning id`,
-          [
-            args.data.organizationId,
-            args.data.userId,
-            args.data.role,
-            args.data.createdAt,
-          ],
-        );
-        return rows[0] as T;
-      }
-      throw new Error(`fakeAdapter: unsupported model "${args.model}"`);
-    },
-  };
-}
-
 async function cleanup(pool: DatabasePool, userId: string): Promise<void> {
   const { rows } = await pool.query<{ organization_id: string | null }>(
     "select organization_id from relay.personal_workspaces where user_id = $1",
     [userId],
   );
-  await pool.query("delete from relay.personal_workspaces where user_id = $1", [
-    userId,
-  ]);
-  await pool.query('delete from auth.member where "userId" = $1', [userId]);
+  await pool.query('delete from auth."user" where id = $1', [userId]);
   if (rows[0]?.organization_id) {
     await pool.query("delete from auth.organization where id = $1", [
       rows[0].organization_id,
     ]);
   }
-  await pool.query('delete from auth."user" where id = $1', [userId]);
 }
+
+Deno.test("personal workspace slugs are stable and opaque", async () => {
+  const userId = "user-with-sensitive@example.com";
+  const first = await personalWorkspaceSlug(userId);
+  const second = await personalWorkspaceSlug(userId);
+
+  assertEquals(first, second);
+  assertEquals(first.includes(userId), false);
+  assertEquals(/^personal-[0-9a-f]{32}$/.test(first), true);
+});
 
 Deno.test({
   name:
@@ -105,13 +66,7 @@ Deno.test({
     let userId: string | undefined;
     try {
       userId = await createUser(pool);
-      const adapter = fakeAdapter(pool);
-
-      const organizationId = await ensurePersonalWorkspace(
-        adapter,
-        pool,
-        userId,
-      );
+      const organizationId = await ensurePersonalWorkspace(pool, userId);
       assertExists(organizationId);
 
       const membership = await pool.query<{ role: string }>(
@@ -136,10 +91,9 @@ Deno.test({
     let userId: string | undefined;
     try {
       userId = await createUser(pool);
-      const adapter = fakeAdapter(pool);
 
-      const first = await ensurePersonalWorkspace(adapter, pool, userId);
-      const second = await ensurePersonalWorkspace(adapter, pool, userId);
+      const first = await ensurePersonalWorkspace(pool, userId);
+      const second = await ensurePersonalWorkspace(pool, userId);
       assertEquals(second, first);
 
       const members = await pool.query(
@@ -160,19 +114,18 @@ Deno.test({
 
 Deno.test({
   name:
-    "concurrent ensurePersonalWorkspace calls for the same user create exactly one membership row",
+    "concurrent ensurePersonalWorkspace calls create one organization and membership",
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
     let userId: string | undefined;
     try {
       userId = await createUser(pool);
-      const adapter = fakeAdapter(pool);
 
       const results = await Promise.all(
         Array.from(
           { length: 5 },
-          () => ensurePersonalWorkspace(adapter, pool, userId!),
+          () => ensurePersonalWorkspace(pool, userId!),
         ),
       );
 
@@ -187,10 +140,16 @@ Deno.test({
         `select id from auth.member where "organizationId" = $1 and "userId" = $2`,
         [results[0], userId],
       );
+      assertEquals(members.rows.length, 1);
+
+      const organizations = await pool.query(
+        "select id from auth.organization where slug = $1",
+        [await personalWorkspaceSlug(userId)],
+      );
       assertEquals(
-        members.rows.length,
+        organizations.rows.length,
         1,
-        "concurrent calls must not create duplicate membership rows",
+        "a losing concurrent caller must not leave an orphan organization",
       );
     } finally {
       if (userId) await cleanup(pool, userId);
@@ -200,68 +159,80 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "ensurePersonalWorkspace heals a personal workspace mapping that lost its membership row",
+  name: "ensurePersonalWorkspace heals a missing personal-workspace membership",
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
     let userId: string | undefined;
     try {
       userId = await createUser(pool);
-      const adapter = fakeAdapter(pool);
-
-      // Simulate the exact gap this function used to leave open: a
-      // personal_workspaces mapping exists (as if the process crashed, or
-      // an older version of this function ran, right after claiming the
-      // mapping but before creating the membership row) with no
-      // corresponding auth.member row.
-      const organization = await adapter.create<{ id: string }>({
-        model: "organization",
-        data: {
-          name: "Personal",
-          slug: unique("personal"),
-          createdAt: new Date(),
-          metadata: null,
-        },
-      });
+      const organizationId = await ensurePersonalWorkspace(pool, userId);
       await pool.query(
-        `insert into relay.personal_workspaces (user_id, organization_id) values ($1, $2)`,
-        [userId, organization.id],
+        `delete from auth.member where "organizationId" = $1 and "userId" = $2`,
+        [organizationId, userId],
       );
 
-      const before = await pool.query(
-        `select id from auth.member where "organizationId" = $1 and "userId" = $2`,
-        [organization.id, userId],
-      );
-      assertEquals(
-        before.rows.length,
-        0,
-        "fixture must start with no membership",
-      );
+      assertEquals(await ensurePersonalWorkspace(pool, userId), organizationId);
 
-      const organizationId = await ensurePersonalWorkspace(
-        adapter,
-        pool,
-        userId,
-      );
-      assertEquals(
-        organizationId,
-        organization.id,
-        "healing must not create a second organization",
-      );
-
-      const after = await pool.query<{ role: string }>(
+      const membership = await pool.query<{ role: string }>(
         `select role from auth.member where "organizationId" = $1 and "userId" = $2`,
-        [organization.id, userId],
+        [organizationId, userId],
       );
-      assertEquals(
-        after.rows.length,
-        1,
-        "the missing membership row must be healed",
-      );
-      assertEquals(after.rows[0].role, "owner");
+      assertEquals(membership.rows, [{ role: "owner" }]);
     } finally {
       if (userId) await cleanup(pool, userId);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "ensurePersonalWorkspace heals a downgraded personal-workspace owner",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let userId: string | undefined;
+    try {
+      userId = await createUser(pool);
+      const organizationId = await ensurePersonalWorkspace(pool, userId);
+      await pool.query(
+        `update auth.member set role = 'member'
+         where "organizationId" = $1 and "userId" = $2`,
+        [organizationId, userId],
+      );
+
+      assertEquals(await ensurePersonalWorkspace(pool, userId), organizationId);
+
+      const membership = await pool.query<{ role: string }>(
+        `select role from auth.member where "organizationId" = $1 and "userId" = $2`,
+        [organizationId, userId],
+      );
+      assertEquals(membership.rows, [{ role: "owner" }]);
+    } finally {
+      if (userId) await cleanup(pool, userId);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "failed provisioning rolls the organization back instead of orphaning it",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    const missingUserId = unique("missing-user");
+    const slug = await personalWorkspaceSlug(missingUserId);
+    try {
+      await assertRejects(() => ensurePersonalWorkspace(pool, missingUserId));
+
+      const organizations = await pool.query(
+        "select 1 from auth.organization where slug = $1",
+        [slug],
+      );
+      assertEquals(organizations.rowCount, 0);
+    } finally {
+      await pool.query("delete from auth.organization where slug = $1", [slug]);
       await pool.end();
     }
   },

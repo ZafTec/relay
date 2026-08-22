@@ -2,6 +2,7 @@ import { Hono } from "@hono/hono";
 import type { RuntimeConfig } from "@relay/config";
 import { loadRuntimeConfig } from "@relay/config";
 import type { ReadinessCheck } from "@relay/contracts";
+import { parseTrustedProxyCidrs } from "@relay/auth";
 import type { Auth } from "@relay/auth";
 
 export interface AppDependencies {
@@ -9,6 +10,18 @@ export interface AppDependencies {
   readonly checkReadiness?: () => Promise<readonly ReadinessCheck[]>;
   /** Omitted in tests that don't need auth; mounts /api/auth/* when present. */
   readonly auth?: Auth;
+  /** Overrides AUTH_TRUSTED_PROXY_CIDRS, primarily for focused tests. */
+  readonly trustedProxyCidrs?: readonly string[];
+}
+
+function remoteAddressFromEnvironment(
+  environment: unknown,
+): string | undefined {
+  if (typeof environment !== "object" || environment === null) return undefined;
+  const remoteAddr = (environment as { remoteAddr?: unknown }).remoteAddr;
+  if (typeof remoteAddr !== "object" || remoteAddr === null) return undefined;
+  const hostname = (remoteAddr as { hostname?: unknown }).hostname;
+  return typeof hostname === "string" ? hostname : undefined;
 }
 
 export function createApp(
@@ -25,7 +38,13 @@ export function createApp(
   // this can't shadow a legitimate non-auth route under /api/auth/*.
   if (dependencies.auth) {
     const auth = dependencies.auth;
-    app.all("/api/auth/*", (context) => auth.handler(context.req.raw));
+    const trustedProxyCidrs = dependencies.trustedProxyCidrs ??
+      parseTrustedProxyCidrs(Deno.env.get("AUTH_TRUSTED_PROXY_CIDRS"));
+    app.all("/api/auth/*", (context) =>
+      auth.handler(context.req.raw, {
+        remoteAddress: remoteAddressFromEnvironment(context.env),
+        trustedProxyCidrs,
+      }));
   }
 
   app.get("/health/live", (context) => {
