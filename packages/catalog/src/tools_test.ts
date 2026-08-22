@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import { grantSuperadmin } from "@relay/auth";
 import { createHandlerRegistry } from "./handlers.ts";
@@ -322,6 +322,32 @@ Deno.test({
         registry,
       );
       assertEquals(republished.kind, "already_published");
+
+      // The database itself, not just publishToolVersion's own guard,
+      // must refuse to let a behavior-defining column change once
+      // published_at is set -- a compromised or buggy relay_app write
+      // must not be able to silently redefine what a pinned version does.
+      await assertRejects(
+        () =>
+          pool.query(
+            "update relay.tool_versions set handler_key = 'evil.handler' where id = $1",
+            [created.value.toolVersionId],
+          ),
+        Error,
+        "immutable",
+      );
+
+      // Lifecycle metadata (deprecated_at/retired_at), unlike behavior
+      // columns, must still be settable after publish.
+      await pool.query(
+        "update relay.tool_versions set deprecated_at = now() where id = $1",
+        [created.value.toolVersionId],
+      );
+      const deprecated = await pool.query<{ deprecated_at: Date | null }>(
+        "select deprecated_at from relay.tool_versions where id = $1",
+        [created.value.toolVersionId],
+      );
+      assertEquals(deprecated.rows[0].deprecated_at !== null, true);
     } finally {
       await cleanupCatalogFixture(pool, {
         toolId,
