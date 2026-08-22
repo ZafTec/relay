@@ -11,6 +11,11 @@ import { migration as executionJobsAndAttempts } from "./0009_execution_jobs_and
 import { migration as queueCounters } from "./0010_queue_counters.ts";
 import { migration as executionCapacityLeases } from "./0011_execution_capacity_leases.ts";
 import { migration as outboxEvents } from "./0012_outbox_events.ts";
+import { migration as toolRegistry } from "./0013_tool_registry.ts";
+import { migration as providerRegistry } from "./0014_provider_registry.ts";
+import { migration as routingPolicies } from "./0015_routing_policies.ts";
+import { migration as toolProviderBindings } from "./0016_tool_provider_bindings.ts";
+import { migration as routingDecisions } from "./0017_routing_decisions.ts";
 
 /**
  * Immutable, statically imported migration history, in application order.
@@ -36,4 +41,9 @@ export const MIGRATIONS: readonly Migration[] = [
   queueCounters,
   executionCapacityLeases,
   outboxEvents,
+  toolRegistry,
+  providerRegistry,
+  routingPolicies,
+  toolProviderBindings,
+  routingDecisions,
 ];

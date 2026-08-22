@@ -5,6 +5,7 @@
     "./packages/audit",
     "./packages/auth",
     "./packages/capacity",
+    "./packages/catalog",
     "./packages/config",
     "./packages/contracts",
     "./packages/database",

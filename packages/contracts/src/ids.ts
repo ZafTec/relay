@@ -21,6 +21,8 @@ export const ID_PREFIXES = {
   outputSet: "out",
   shareLink: "shr",
   capacityPool: "pool",
+  tool: "tool",
+  toolVersion: "tver",
 } as const;
 
 export type IdPrefix = typeof ID_PREFIXES[keyof typeof ID_PREFIXES];
