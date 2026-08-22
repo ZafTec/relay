@@ -13,11 +13,24 @@ import type { Redis } from "@relay/queue";
  * on keys 1-2. `leaseId` itself is the caller's proof of ownership for
  * renew/release -- nothing else authenticates those calls, so it must be
  * an unguessable random token, not a sequential ID.
+ *
+ * `now` comes from Redis's own `TIME` command, never a caller-supplied
+ * timestamp ("Capacity coordinator": "Use atomic Redis Lua scripts and
+ * Redis TIME"). A worker's wall clock can drift from the Redis server's;
+ * expiring leases and computing their expiry against the wrong clock is
+ * exactly the kind of skew that either purges an active lease early or
+ * lets an expired one hold its slot. Calling `TIME` inside a script is
+ * safe and deterministic under Redis's default effects-based replication
+ * (the script's resulting writes are replicated, not the `TIME` call
+ * itself), unlike relying on `TIME` for anything a replica would need to
+ * reproduce independently.
  */
 const ACQUIRE_SCRIPT = `
-local now = tonumber(ARGV[1])
-local lease_id = ARGV[2]
-local expires_at = tonumber(ARGV[3])
+local time = redis.call('TIME')
+local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+local lease_id = ARGV[1]
+local lease_duration_ms = tonumber(ARGV[2])
+local expires_at = now + lease_duration_ms
 local n = #KEYS
 
 for i = 1, n do
@@ -25,7 +38,7 @@ for i = 1, n do
 end
 
 for i = 1, n do
-  local limit = tonumber(ARGV[3 + i])
+  local limit = tonumber(ARGV[2 + i])
   local count = redis.call('ZCARD', KEYS[i])
   if count >= limit then
     return {0, i, count, limit}
@@ -40,9 +53,10 @@ return {1, lease_id, expires_at}
 `.trim();
 
 const RENEW_SCRIPT = `
-local now = tonumber(ARGV[1])
-local lease_id = ARGV[2]
-local new_expires_at = tonumber(ARGV[3])
+local time = redis.call('TIME')
+local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+local lease_id = ARGV[1]
+local new_expires_at = now + tonumber(ARGV[2])
 local n = #KEYS
 
 for i = 1, n do
@@ -125,7 +139,6 @@ export async function acquireLease(
   client: LeaseClient,
   scopeKeys: readonly string[],
   scopeLimits: readonly number[],
-  nowMs: number,
   leaseDurationMs: number,
 ): Promise<AcquireLeaseResult> {
   if (scopeKeys.length !== scopeLimits.length) {
@@ -133,13 +146,11 @@ export async function acquireLease(
   }
 
   const leaseId = crypto.randomUUID();
-  const expiresAt = nowMs + leaseDurationMs;
   const result = await client.relayAcquireLease(
     scopeKeys.length,
     ...scopeKeys,
-    nowMs,
     leaseId,
-    expiresAt,
+    leaseDurationMs,
     ...scopeLimits,
   );
 
@@ -153,16 +164,13 @@ export async function renewLease(
   client: LeaseClient,
   scopeKeys: readonly string[],
   leaseId: string,
-  nowMs: number,
   leaseDurationMs: number,
 ): Promise<{ ok: boolean; expiresAt?: number; blockedScopeIndex?: number }> {
-  const newExpiresAt = nowMs + leaseDurationMs;
   const result = await client.relayRenewLease(
     scopeKeys.length,
     ...scopeKeys,
-    nowMs,
     leaseId,
-    newExpiresAt,
+    leaseDurationMs,
   );
 
   if (result[0] === 0) {

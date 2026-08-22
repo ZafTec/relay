@@ -95,7 +95,6 @@ export class CapacityCoordinator {
   async acquireExecutionLease(
     scope: ExecutionLeaseScope,
     limits: ExecutionLeaseLimits,
-    nowMs: number = Date.now(),
   ): Promise<AcquiredExecutionLease> {
     const scopeKeys = this.executionScopeKeys(scope);
     const scopeLimits = [
@@ -108,7 +107,6 @@ export class CapacityCoordinator {
       this.leaseClient,
       scopeKeys,
       scopeLimits,
-      nowMs,
       this.config.leaseDurationMs,
     );
     return { ...result, scopeKeys };
@@ -117,13 +115,11 @@ export class CapacityCoordinator {
   async renewExecutionLease(
     scopeKeys: readonly string[],
     leaseId: string,
-    nowMs: number = Date.now(),
   ): Promise<{ ok: boolean; expiresAt?: number; blockedScopeIndex?: number }> {
     return await renewLease(
       this.leaseClient,
       scopeKeys,
       leaseId,
-      nowMs,
       this.config.leaseDurationMs,
     );
   }
@@ -146,34 +142,40 @@ export class CapacityCoordinator {
   async acquireSubmissionPermit(
     poolId: string,
     checks: readonly RateLimitCheck[],
-    nowMs: number = Date.now(),
   ): Promise<AcquirePermitResult> {
     return await acquireSubmissionPermit(
       this.rateClient,
       checks,
       [cooldownKey(this.config.env, poolId)],
-      nowMs,
     );
   }
 
   async setProviderCooldown(
     poolId: string,
     expiresAtMs: number,
-    nowMs: number = Date.now(),
   ): Promise<boolean> {
     return await setProviderCooldown(
       this.cooldownClient,
       cooldownKey(this.config.env, poolId),
       expiresAtMs,
-      nowMs,
     );
   }
 
-  /** Read-only snapshot of current occupancy across the given scope keys, purging expired entries first for accuracy. */
+  /**
+   * Read-only snapshot of current occupancy across the given scope keys,
+   * purging expired entries first for accuracy. Not a single atomic Lua
+   * script like the others above (it spans a variable, caller-chosen set
+   * of scope keys purely for reporting), so it fetches Redis's own `TIME`
+   * as a distinct round trip rather than trusting a caller-supplied clock
+   * -- same reasoning as `ACQUIRE_SCRIPT` in leases.ts, just not
+   * script-internal here.
+   */
   async inspectCapacity(
     scopeKeys: readonly string[],
-    nowMs: number = Date.now(),
   ): Promise<Readonly<Record<string, number>>> {
+    const [seconds, microseconds] = await this.leaseClient.time();
+    const nowMs = Number(seconds) * 1000 +
+      Math.floor(Number(microseconds) / 1000);
     const pipeline = this.leaseClient.pipeline();
     for (const key of scopeKeys) {
       pipeline.zremrangebyscore(key, "-inf", nowMs);

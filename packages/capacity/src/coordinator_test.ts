@@ -5,8 +5,20 @@ import { CapacityCoordinator } from "./coordinator.ts";
 /**
  * Live-Redis tests, gated behind REDIS_URL like the rest of the repo
  * gates behind DATABASE_URL -- skipped, not failed, when it's absent.
+ *
+ * These use real `sleep`s to observe expiry/rate-limit/cooldown behavior
+ * rather than passing a simulated `nowMs` into the coordinator: the
+ * scripts under test source "now" from Redis's own `TIME` command
+ * internally (see leases.ts/rate-limit.ts/cooldown.ts), not from a
+ * caller-supplied timestamp, precisely so worker clock skew can't affect
+ * capacity accounting -- so there is no longer a way to simulate time
+ * passing without actually waiting.
  */
 const REDIS_URL = Deno.env.get("REDIS_URL");
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function withRedis(
   name: string,
@@ -49,18 +61,17 @@ withRedis(
       workspaceTotal: 10,
       workspaceTool: 10,
     };
-    const now = Date.now();
 
-    const first = await coordinator.acquireExecutionLease(scope, limits, now);
-    const second = await coordinator.acquireExecutionLease(scope, limits, now);
-    const third = await coordinator.acquireExecutionLease(scope, limits, now);
+    const first = await coordinator.acquireExecutionLease(scope, limits);
+    const second = await coordinator.acquireExecutionLease(scope, limits);
+    const third = await coordinator.acquireExecutionLease(scope, limits);
 
     assertEquals(first.ok, true);
     assertEquals(second.ok, true);
     assertEquals(third.ok, false);
     assertEquals(third.blockedScopeIndex, 0); // globalTool is scope index 0
 
-    const counts = await coordinator.inspectCapacity(first.scopeKeys, now);
+    const counts = await coordinator.inspectCapacity(first.scopeKeys);
     assertEquals(counts[first.scopeKeys[0]], 2);
   },
 );
@@ -84,13 +95,12 @@ withRedis(
       workspaceTotal: 100,
       workspaceTool: 0,
     };
-    const now = Date.now();
 
-    const result = await coordinator.acquireExecutionLease(scope, limits, now);
+    const result = await coordinator.acquireExecutionLease(scope, limits);
     assertEquals(result.ok, false);
     assertEquals(result.blockedScopeIndex, 3);
 
-    const counts = await coordinator.inspectCapacity(result.scopeKeys, now);
+    const counts = await coordinator.inspectCapacity(result.scopeKeys);
     assertEquals(
       counts[result.scopeKeys[0]],
       0,
@@ -109,7 +119,7 @@ withRedis(
   async (redis, env) => {
     const coordinator = new CapacityCoordinator(redis, {
       env,
-      leaseDurationMs: 5_000,
+      leaseDurationMs: 300,
     });
     const scope = {
       toolKey: "image.generate",
@@ -122,30 +132,38 @@ withRedis(
       workspaceTotal: 1,
       workspaceTool: 1,
     };
-    const now = Date.now();
 
-    const lease = await coordinator.acquireExecutionLease(scope, limits, now);
+    const lease = await coordinator.acquireExecutionLease(scope, limits);
     assertEquals(lease.ok, true);
 
-    const blocked = await coordinator.acquireExecutionLease(
-      scope,
-      limits,
-      now + 1_000,
-    );
+    const blocked = await coordinator.acquireExecutionLease(scope, limits);
     assertEquals(blocked.ok, false, "slot is occupied until release/expiry");
 
+    // Renew before the 300ms lease expires -- proves renew actually
+    // extends it, since the slot is still occupied well past the
+    // original duration.
+    await sleep(200);
     const renewed = await coordinator.renewExecutionLease(
       lease.scopeKeys,
       lease.leaseId!,
-      now + 2_000,
     );
     assertEquals(renewed.ok, true);
+
+    await sleep(200);
+    const stillBlocked = await coordinator.acquireExecutionLease(
+      scope,
+      limits,
+    );
+    assertEquals(
+      stillBlocked.ok,
+      false,
+      "the renewed lease must still hold its slot past the original duration",
+    );
 
     await coordinator.releaseExecutionLease(lease.scopeKeys, lease.leaseId!);
     const afterRelease = await coordinator.acquireExecutionLease(
       scope,
       limits,
-      now + 3_000,
     );
     assertEquals(
       afterRelease.ok,
@@ -173,16 +191,15 @@ withRedis(
       workspaceTotal: 1,
       workspaceTool: 1,
     };
-    const now = Date.now();
 
-    const lease = await coordinator.acquireExecutionLease(scope, limits, now);
+    const lease = await coordinator.acquireExecutionLease(scope, limits);
     assertEquals(lease.ok, true);
 
-    // Simulate time passing well beyond the 100ms lease duration without a renew.
+    // Let the 100ms lease actually expire without a renew.
+    await sleep(200);
     const afterExpiry = await coordinator.acquireExecutionLease(
       scope,
       limits,
-      now + 5_000,
     );
     assertEquals(
       afterExpiry.ok,
@@ -202,32 +219,25 @@ withRedis(
     const poolId = "pool-a";
     const check = {
       key: coordinator.rateKeys.tool("image.generate"),
-      emissionIntervalMs: 1_000,
+      emissionIntervalMs: 300,
       burstMs: 0,
       cost: 1,
     };
-    const now = Date.now();
 
-    const first = await coordinator.acquireSubmissionPermit(
-      poolId,
-      [check],
-      now,
-    );
+    const first = await coordinator.acquireSubmissionPermit(poolId, [check]);
     assertEquals(first.ok, true);
 
-    const second = await coordinator.acquireSubmissionPermit(
-      poolId,
-      [check],
-      now + 100,
-    );
+    const second = await coordinator.acquireSubmissionPermit(poolId, [
+      check,
+    ]);
     assertEquals(second.ok, false);
     assertEquals(second.blockedReason, "rate");
     assertEquals(second.retryAfterMs! > 0, true);
 
+    await sleep(350);
     const thirdAfterInterval = await coordinator.acquireSubmissionPermit(
       poolId,
       [check],
-      now + 1_000,
     );
     assertEquals(thirdAfterInterval.ok, true);
   },
@@ -247,38 +257,44 @@ withRedis(
       burstMs: 1_000,
       cost: 1,
     };
-    const now = Date.now();
 
     const extended = await coordinator.setProviderCooldown(
       poolId,
-      now + 5_000,
-      now,
+      Date.now() + 400,
     );
     assertEquals(extended, true);
 
     const duringCooldown = await coordinator.acquireSubmissionPermit(poolId, [
       check,
-    ], now + 100);
+    ]);
     assertEquals(duringCooldown.ok, false);
     assertEquals(duringCooldown.blockedReason, "cooldown");
 
     // An older, shorter cooldown must not shrink the one already in effect.
     const shortened = await coordinator.setProviderCooldown(
       poolId,
-      now + 1_000,
-      now + 100,
+      Date.now() + 100,
     );
     assertEquals(shortened, false);
 
     const stillCoolingDown = await coordinator.acquireSubmissionPermit(
       poolId,
       [check],
-      now + 2_000,
     );
     assertEquals(
       stillCoolingDown.ok,
       false,
       "shortened cooldown must not have taken effect",
+    );
+
+    await sleep(500);
+    const afterCooldown = await coordinator.acquireSubmissionPermit(poolId, [
+      check,
+    ]);
+    assertEquals(
+      afterCooldown.ok,
+      true,
+      "cooldown must actually expire once its real extended duration elapses",
     );
   },
 );
