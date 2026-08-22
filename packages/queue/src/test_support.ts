@@ -1,14 +1,9 @@
 import type { DatabasePool } from "@relay/database";
-import { grantSuperadmin } from "@relay/auth";
-import {
-  createHandlerRegistry,
-  createToolVersion,
-  publishToolVersion,
-  registerTool,
-  setToolLifecycle,
-} from "@relay/catalog";
+import { generatePublicId, ID_PREFIXES } from "@relay/contracts";
 
 const FOREIGN_KEY_VIOLATION = "23503";
+const IMMUTABLE_ROW_VIOLATION = "55000";
+const INSUFFICIENT_PRIVILEGE = "42501";
 
 /**
  * `relay.routing_decisions` being insert-only for `relay_app`
@@ -18,8 +13,9 @@ const FOREIGN_KEY_VIOLATION = "23503";
  * provider_models/capacity_pools via that binding) -- can't actually be
  * deleted once a fixture has successfully admitted at least once. Rather
  * than precisely re-deriving which of those chains are still blocked for
- * every caller, this tolerates exactly a foreign-key violation (Postgres
- * 23503) as "still referenced, leave it" and re-throws anything else --
+ * every caller, this tolerates a foreign-key violation (23503), immutable
+ * history rejection (55000), or the specific active-superadmin guard (42501)
+ * as "still referenced, leave it" and re-throws anything else --
  * the same harmless-residue reasoning `cleanupAdmissibleFixture` already
  * applies explicitly to tool_versions/tool_runs below.
  */
@@ -31,7 +27,12 @@ async function tryDelete(
   try {
     await pool.query(sqlText, params as unknown[]);
   } catch (error) {
-    if ((error as { code?: string } | null)?.code === FOREIGN_KEY_VIOLATION) {
+    const code = (error as { code?: string } | null)?.code;
+    if (
+      code === FOREIGN_KEY_VIOLATION || code === IMMUTABLE_ROW_VIOLATION ||
+      (code === INSUFFICIENT_PRIVILEGE && error instanceof Error &&
+        error.message.includes("active superadmin must be revoked"))
+    ) {
       return;
     }
     throw error;
@@ -56,7 +57,7 @@ export interface AdmissibleFixture {
   readonly capacityPoolId: number;
   readonly providerId: number;
   readonly providerModelId: number;
-  /** The superadmin actor and operator used to register/publish the tool -- cleaned up alongside everything else. */
+  /** Additional users owned by the fixture (the first is a non-member outsider). */
   readonly catalogActorIds: readonly string[];
 }
 
@@ -155,67 +156,57 @@ export async function createAdmissibleFixture(
 ): Promise<AdmissibleFixture> {
   const workspaceId = await createOrganization(pool);
   const createdBy = await createUser(pool);
+  const outsiderId = await createUser(pool);
   await addMember(pool, workspaceId, createdBy);
-
-  const operatorId = await createUser(pool);
-  const actorUserId = await createUser(pool);
-  await grantSuperadmin(pool, actorUserId, operatorId);
 
   const capacityPoolId = await createCapacityPool(pool);
   const { providerId, providerModelId } = await createProviderModel(pool);
-
+  const toolId = generatePublicId(ID_PREFIXES.tool);
+  const toolVersionId = generatePublicId(ID_PREFIXES.toolVersion);
   const handlerKey = unique("handler");
-  const registered = await registerTool(pool, actorUserId, {
-    key: unique("tool"),
-    name: "Test Tool",
-    visibility: "public",
-  });
-  if (registered.kind !== "ok") throw new Error("fixture: registerTool failed");
-  await setToolLifecycle(
-    pool,
-    actorUserId,
-    registered.value.toolId,
-    "internal",
+
+  await pool.query(
+    `insert into relay.tools (id, key, name, lifecycle, visibility)
+     values ($1, $2, 'Test Tool', 'internal', 'public')`,
+    [toolId, unique("tool")],
   );
-
-  const created = await createToolVersion(pool, actorUserId, {
-    toolId: registered.value.toolId,
-    inputSchema: { type: "object" },
-    outputSchema: { type: "object" },
-    handlerKey,
-    executionMode: "async",
-    maxDurationSeconds: 120,
-  });
-  if (created.kind !== "ok") {
-    throw new Error("fixture: createToolVersion failed");
-  }
-
-  const published = await publishToolVersion(
-    pool,
-    actorUserId,
-    created.value.toolVersionId,
-    createHandlerRegistry([handlerKey]),
+  await pool.query(
+    `insert into relay.tool_versions
+       (id, tool_id, version, input_schema, output_schema, handler_key,
+        execution_mode, max_duration_seconds, immutable_hash)
+     values ($1, $2, 1, $3, $4, $5, 'async', 120, '')`,
+    [
+      toolVersionId,
+      toolId,
+      JSON.stringify({ type: "object" }),
+      JSON.stringify({ type: "object" }),
+      handlerKey,
+    ],
   );
-  if (published.kind !== "published") {
-    throw new Error("fixture: publishToolVersion failed");
-  }
-
+  await pool.query(
+    "update relay.tool_versions set published_at = now() where id = $1",
+    [toolVersionId],
+  );
+  await pool.query(
+    "update relay.tools set active_version_id = $2 where id = $1",
+    [toolId, toolVersionId],
+  );
   await pool.query(
     `insert into relay.tool_provider_bindings
        (tool_version_id, provider_model_id, capacity_pool_id, routing_order, enabled)
      values ($1, $2, $3, 1, true)`,
-    [created.value.toolVersionId, providerModelId, capacityPoolId],
+    [toolVersionId, providerModelId, capacityPoolId],
   );
 
   return {
     workspaceId,
     createdBy,
-    toolId: registered.value.toolId,
-    toolVersionId: created.value.toolVersionId,
+    toolId,
+    toolVersionId,
     capacityPoolId,
     providerId,
     providerModelId,
-    catalogActorIds: [actorUserId, operatorId],
+    catalogActorIds: [outsiderId],
   };
 }
 
@@ -239,6 +230,16 @@ export async function cleanupAdmissibleFixture(
   await pool.query(
     `delete from relay.job_attempts
      where job_id in (select id from relay.execution_jobs where workspace_id = $1)`,
+    [fixture.workspaceId],
+  );
+  await pool.query(
+    `update relay.execution_jobs set capacity_lease_id = null
+     where workspace_id = $1`,
+    [fixture.workspaceId],
+  );
+  await pool.query(
+    `delete from relay.execution_capacity_leases
+     where workspace_id = $1`,
     [fixture.workspaceId],
   );
   await pool.query("delete from relay.execution_jobs where workspace_id = $1", [
@@ -327,15 +328,7 @@ export async function cleanupAdmissibleFixture(
   await tryDelete(pool, "delete from auth.organization where id = $1", [
     fixture.workspaceId,
   ]);
-  // relay_app has no DELETE on relay.system_role_assignments at all
-  // (0023_system_role_assignment_immutability.ts) -- only a cascade from
-  // deleting the grant's own user_id can remove it; granted_by/
-  // revoked_by never cascade. `catalogActorIds[0]` is always the grantee
-  // (see createAdmissibleFixture's `grantSuperadmin(pool, actorUserId,
-  // operatorId)` below), so deleting it first cascades its grant row
-  // away, clearing the granted_by/revoked_by reference that would
-  // otherwise block deleting the operator afterward in the same
-  // statement.
+  // The first extra user is the non-member used by authorization tests.
   await tryDelete(pool, 'delete from auth."user" where id = $1', [
     fixture.catalogActorIds[0],
   ]);

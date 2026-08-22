@@ -640,7 +640,15 @@ Deno.test({
       if (result.kind !== "admitted") throw new Error("unreachable");
 
       const { rows } = await pool.query<
-        { payload: { domainJobId: string; runId: string } }
+        {
+          payload: {
+            domainJobId: string;
+            runId: string;
+            capacityPoolKey: string;
+            dispatchGeneration: number;
+            policyVersion: number | null;
+          };
+        }
       >(
         "select payload from relay.outbox_events where aggregate_id = $1",
         [result.jobId],
@@ -648,6 +656,13 @@ Deno.test({
       assertExists(rows[0]);
       assertEquals(rows[0].payload.domainJobId, result.jobId);
       assertEquals(rows[0].payload.runId, result.runId);
+      assertEquals(rows[0].payload.dispatchGeneration, 0);
+      assertEquals(rows[0].payload.policyVersion, 1);
+      const capacityPool = await pool.query<{ key: string }>(
+        "select key from relay.capacity_pools where id = $1",
+        [f.capacityPoolId],
+      );
+      assertEquals(rows[0].payload.capacityPoolKey, capacityPool.rows[0].key);
     } finally {
       if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();

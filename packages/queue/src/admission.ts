@@ -3,6 +3,8 @@ import { sha256Hex, withTransaction } from "@relay/database";
 import type { DatabasePool } from "@relay/database";
 import { generatePublicId, ID_PREFIXES } from "@relay/contracts";
 import { getMembership } from "@relay/auth";
+import { lockQueueCounterMutation } from "./counter-lock.ts";
+import { dispatchDeduplicationKey } from "./tickets.ts";
 
 /**
  * The "Acceptance transaction" from
@@ -231,6 +233,8 @@ export async function admitToolRun(
 
   try {
     return await withTransaction(pool, async (client) => {
+      await lockQueueCounterMutation(client);
+
       // Serializes every concurrent admitToolRun call sharing this exact
       // (workspace, idempotency key) pair before either one can decide
       // anything -- released automatically on commit or rollback
@@ -315,11 +319,13 @@ export async function admitToolRun(
         {
           binding_id: number;
           capacity_pool_id: number;
+          capacity_pool_key: string;
           provider_id: number;
           provider_model_id: number;
         }
       >(
         `select tpb.id as binding_id, tpb.capacity_pool_id,
+                cp.key as capacity_pool_key,
                 p.id as provider_id, pm.id as provider_model_id
          from relay.tool_provider_bindings tpb
          join relay.provider_models pm on pm.id = tpb.provider_model_id
@@ -337,6 +343,7 @@ export async function admitToolRun(
       if (bindingRows.rows.length === 0) return { kind: "no_provider_binding" };
       const {
         capacity_pool_id: capacityPoolId,
+        capacity_pool_key: capacityPoolKey,
         binding_id: selectedBindingId,
         provider_id: providerId,
         provider_model_id: providerModelId,
@@ -470,9 +477,20 @@ export async function admitToolRun(
 
       await client.query(
         `insert into relay.outbox_events
-           (aggregate_type, aggregate_id, aggregate_version, event_type, payload)
-         values ('execution_job', $1, 1, 'job.ready', $2)`,
-        [jobId, JSON.stringify({ domainJobId: jobId, runId })],
+           (aggregate_type, aggregate_id, aggregate_version, event_type, payload,
+            deduplication_key)
+         values ('execution_job', $1, 0, 'job.ready', $2, $3)`,
+        [
+          jobId,
+          JSON.stringify({
+            domainJobId: jobId,
+            runId,
+            capacityPoolKey,
+            dispatchGeneration: 0,
+            policyVersion: input.schedulingPolicyVersion,
+          }),
+          dispatchDeduplicationKey(jobId, 0),
+        ],
       );
 
       return { kind: "admitted", runId, jobId };

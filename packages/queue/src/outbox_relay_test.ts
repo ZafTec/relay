@@ -3,7 +3,8 @@ import { createDatabasePool, type DatabasePool } from "@relay/database";
 import { Redis } from "ioredis";
 import { claimOutboxBatch, relayOutboxBatch } from "./outbox-relay.ts";
 import { createExecutionQueue, createExecutionWorker } from "./bullmq.ts";
-import { ticketId } from "./tickets.ts";
+import { ticketFromOutboxPayload, ticketId } from "./tickets.ts";
+import { executionOutboxAction } from "./bullmq.ts";
 import type { ExecutionTicket } from "./tickets.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
@@ -30,12 +31,13 @@ async function insertOutboxEvent(
   pool: DatabasePool,
   aggregateId: string,
   payload: unknown,
+  eventType = "job.ready",
 ): Promise<void> {
   await pool.query(
     `insert into relay.outbox_events
        (aggregate_type, aggregate_id, aggregate_version, event_type, payload)
-     values ('execution_job', $1, 1, 'job.ready', $2)`,
-    [aggregateId, JSON.stringify(payload)],
+     values ('execution_job', $1, 1, $2, $3)`,
+    [aggregateId, eventType, JSON.stringify(payload)],
   );
 }
 
@@ -77,16 +79,20 @@ Deno.test({
       await ready;
 
       const aggregateId = unique("job");
-      await insertOutboxEvent(pool, aggregateId, { domainJobId: aggregateId });
+      await insertOutboxEvent(pool, aggregateId, {
+        domainJobId: aggregateId,
+        runId: unique("run"),
+        capacityPoolKey,
+        dispatchGeneration: 7,
+        policyVersion: 11,
+      });
 
       const result = await relayOutboxBatch(
         pool,
         async (event) => {
-          const ticket: ExecutionTicket = {
-            domainJobId: (event.payload as { domainJobId: string }).domainJobId,
-            dispatchGeneration: 1,
-            policyVersion: 1,
-          };
+          const action = executionOutboxAction(event);
+          if (action.kind !== "dispatch") throw new Error("unreachable");
+          const ticket = ticketFromOutboxPayload(action.payload);
           await queue.add("execute", ticket, { jobId: ticketId(ticket) });
         },
         { leaseOwner: "test-relay", leaseDurationMs: 30_000, batchSize: 10 },
@@ -171,6 +177,100 @@ Deno.test({
         [aggregateId],
       );
     } finally {
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "the final failed publication is marked exhausted in PostgreSQL",
+  ignore: !hasInfra,
+  fn: async () => {
+    const pool = testPool();
+    const aggregateId = unique("job-exhausted");
+    const eventType = unique("test.exhausted");
+    try {
+      await insertOutboxEvent(pool, aggregateId, {}, eventType);
+      await pool.query(
+        "update relay.outbox_events set attempt_count = 7 where aggregate_id = $1",
+        [aggregateId],
+      );
+
+      const result = await relayOutboxBatch(
+        pool,
+        () => Promise.reject(new Error("last publish failed")),
+        {
+          leaseOwner: "test-final-failure",
+          maxAttempts: 8,
+          eventTypes: [eventType],
+        },
+      );
+      assertEquals(result.exhausted, 1);
+
+      const { rows } = await pool.query<{
+        failed_at: Date | null;
+        attempt_count: number;
+      }>(
+        "select failed_at, attempt_count from relay.outbox_events where aggregate_id = $1",
+        [aggregateId],
+      );
+      assertEquals(rows[0].failed_at !== null, true);
+      assertEquals(rows[0].attempt_count, 8);
+    } finally {
+      await pool.query(
+        "delete from relay.outbox_events where aggregate_id = $1",
+        [aggregateId],
+      );
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "an expired final claim is terminalized before another claim pass",
+  ignore: !hasInfra,
+  fn: async () => {
+    const pool = testPool();
+    const aggregateId = unique("job-expired-final-claim");
+    const eventType = unique("test.expired-final-claim");
+    let publications = 0;
+    try {
+      await insertOutboxEvent(pool, aggregateId, {}, eventType);
+      await pool.query(
+        `update relay.outbox_events
+            set attempt_count = 8,
+                lease_owner = 'crashed-relay',
+                lease_expires_at = now() - interval '1 second'
+          where aggregate_id = $1`,
+        [aggregateId],
+      );
+
+      const result = await relayOutboxBatch(
+        pool,
+        () => {
+          publications += 1;
+          return Promise.resolve();
+        },
+        {
+          leaseOwner: "replacement-relay",
+          maxAttempts: 8,
+          eventTypes: [eventType],
+        },
+      );
+      assertEquals(result.exhausted, 1);
+      assertEquals(result.claimed, 0);
+      assertEquals(publications, 0);
+
+      const { rows } = await pool.query<{ failed_at: Date | null }>(
+        "select failed_at from relay.outbox_events where aggregate_id = $1",
+        [aggregateId],
+      );
+      assertEquals(rows[0].failed_at !== null, true);
+    } finally {
+      await pool.query(
+        "delete from relay.outbox_events where aggregate_id = $1",
+        [aggregateId],
+      );
       await pool.end();
     }
   },

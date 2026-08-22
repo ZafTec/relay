@@ -8,9 +8,97 @@
 export interface ExecutionTicket {
   readonly domainJobId: string;
   readonly dispatchGeneration: number;
-  readonly policyVersion: number;
+  /** Null means no versioned scheduling policy was attached at admission. */
+  readonly policyVersion: number | null;
   readonly traceparent?: string;
   readonly tracestate?: string;
+}
+
+/** Durable outbox metadata used to route a transport-only ticket. */
+export interface ExecutionOutboxPayload extends ExecutionTicket {
+  readonly runId: string;
+  readonly capacityPoolKey: string;
+}
+
+export function dispatchDeduplicationKey(
+  domainJobId: string,
+  dispatchGeneration: number,
+): string {
+  return `execution-job.${domainJobId}.dispatch.${dispatchGeneration}`;
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === "string";
+}
+
+export function parseExecutionTicket(value: unknown): ExecutionTicket {
+  if (value === null || typeof value !== "object") {
+    throw new Error("Execution ticket must be an object");
+  }
+  const payload = value as Record<string, unknown>;
+  const policyVersion = payload.policyVersion;
+  if (
+    typeof payload.domainJobId !== "string" ||
+    payload.domainJobId.length === 0 ||
+    !Number.isSafeInteger(payload.dispatchGeneration) ||
+    Number(payload.dispatchGeneration) < 0 ||
+    !(
+      policyVersion === null ||
+      (Number.isSafeInteger(policyVersion) && Number(policyVersion) >= 0)
+    ) ||
+    !isOptionalString(payload.traceparent) ||
+    !isOptionalString(payload.tracestate)
+  ) {
+    throw new Error("Execution ticket has invalid dispatch metadata");
+  }
+  return {
+    domainJobId: payload.domainJobId,
+    dispatchGeneration: Number(payload.dispatchGeneration),
+    policyVersion: policyVersion === null ? null : Number(policyVersion),
+    ...(payload.traceparent === undefined
+      ? {}
+      : { traceparent: payload.traceparent }),
+    ...(payload.tracestate === undefined
+      ? {}
+      : { tracestate: payload.tracestate }),
+  };
+}
+
+export function parseExecutionOutboxPayload(
+  value: unknown,
+): ExecutionOutboxPayload {
+  const ticket = parseExecutionTicket(value);
+  const payload = value as Record<string, unknown>;
+  if (
+    typeof payload.runId !== "string" ||
+    payload.runId.length === 0 ||
+    typeof payload.capacityPoolKey !== "string" ||
+    payload.capacityPoolKey.length === 0
+  ) {
+    throw new Error("Execution outbox payload has invalid routing metadata");
+  }
+
+  return {
+    ...ticket,
+    runId: payload.runId,
+    capacityPoolKey: payload.capacityPoolKey,
+  };
+}
+
+export function ticketFromOutboxPayload(
+  payload: ExecutionOutboxPayload,
+): ExecutionTicket {
+  return {
+    domainJobId: payload.domainJobId,
+    dispatchGeneration: payload.dispatchGeneration,
+    policyVersion: payload.policyVersion,
+    ...(payload.traceparent === undefined
+      ? {}
+      : { traceparent: payload.traceparent }),
+    ...(payload.tracestate === undefined
+      ? {}
+      : { tracestate: payload.tracestate }),
+  };
 }
 
 /**

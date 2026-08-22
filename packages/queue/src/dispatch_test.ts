@@ -1,7 +1,22 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import { type AdmitRunInput, admitToolRun } from "./admission.ts";
-import { claimJobForDispatch, deferJob, heartbeatJob } from "./dispatch.ts";
+import {
+  beginJobAttempt,
+  claimJobForDispatch,
+  completeJobCancellation,
+  completeJobSuccessfully,
+  deferJob,
+  expireQueuedJobs,
+  failJob,
+  heartbeatJob,
+  markAttemptSubmitting,
+  persistCapacityLease,
+  recoverExpiredJobLeases,
+  requestJobCancellation,
+  retryJob,
+} from "./dispatch.ts";
+import type { ClaimedJob, JobAttempt } from "./dispatch.ts";
 import type { ExecutionTicket } from "./tickets.ts";
 import {
   type AdmissibleFixture,
@@ -57,9 +72,66 @@ function ticketFor(jobId: string, dispatchGeneration = 0): ExecutionTicket {
   return { domainJobId: jobId, dispatchGeneration, policyVersion: 1 };
 }
 
+async function attachCapacityAndBeginAttempt(
+  pool: DatabasePool,
+  job: ClaimedJob,
+  owner: string,
+): Promise<JobAttempt> {
+  const leaseId = await persistCapacityLease(pool, job, owner, {
+    redisLeaseId: crypto.randomUUID(),
+    redisScopeKeys: [unique("scope")],
+    expiresAt: new Date(Date.now() + 30_000),
+    units: 1,
+  });
+  if (leaseId === null) throw new Error("fixture capacity attach failed");
+  const attempt = await beginJobAttempt(pool, job, owner);
+  if (attempt === null) throw new Error("fixture attempt start failed");
+  const submitting = await markAttemptSubmitting(
+    pool,
+    job.jobId,
+    attempt.attemptId,
+    job.leaseEpoch,
+    owner,
+  );
+  if (!submitting) throw new Error("fixture attempt submission failed");
+  return attempt;
+}
+
+async function assertAllCounters(
+  pool: DatabasePool,
+  fixture: AdmissibleFixture,
+  queued: number,
+  running: number,
+): Promise<void> {
+  const tool = await pool.query<
+    { queued_count: number; running_count: number }
+  >(
+    "select queued_count, running_count from relay.tool_queue_counters where tool_id = $1",
+    [fixture.toolId],
+  );
+  const workspace = await pool.query<{
+    queued_count: number;
+    running_count: number;
+  }>(
+    "select queued_count, running_count from relay.workspace_queue_counters where workspace_id = $1",
+    [fixture.workspaceId],
+  );
+  const workspaceTool = await pool.query<{
+    queued_count: number;
+    running_count: number;
+  }>(
+    "select queued_count, running_count from relay.workspace_tool_queue_counters where workspace_id = $1 and tool_id = $2",
+    [fixture.workspaceId, fixture.toolId],
+  );
+  for (const row of [tool.rows[0], workspace.rows[0], workspaceTool.rows[0]]) {
+    assertEquals(row.queued_count, queued);
+    assertEquals(row.running_count, running);
+  }
+}
+
 Deno.test({
   name:
-    "claimJobForDispatch claims a queued job, bumps lease_epoch, and records an attempt",
+    "claimJobForDispatch claims a queued job without opening an attempt before capacity",
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
@@ -78,7 +150,6 @@ Deno.test({
       if (result.kind !== "claimed") throw new Error("unreachable");
       assertEquals(result.job.jobId, jobId);
       assertEquals(result.job.leaseEpoch, 1);
-      assertEquals(result.job.attemptNumber, 1);
 
       const job = await pool.query<{ status: string; lease_owner: string }>(
         "select status, lease_owner from relay.execution_jobs where id = $1",
@@ -93,9 +164,11 @@ Deno.test({
         "select attempt_number, lease_epoch from relay.job_attempts where job_id = $1",
         [jobId],
       );
-      assertEquals(attempts.rows.length, 1);
-      assertEquals(attempts.rows[0].attempt_number, 1);
-      assertEquals(Number(attempts.rows[0].lease_epoch), 1);
+      assertEquals(
+        attempts.rows.length,
+        0,
+        "claim alone must not count capacity waiting as a provider attempt",
+      );
 
       const counters = await pool.query<
         { queued_count: number; running_count: number }
@@ -148,8 +221,8 @@ Deno.test({
       );
       assertEquals(
         attempts.rows.length,
-        1,
-        "a redelivered ticket must not create a second attempt",
+        0,
+        "claim and redelivery must not open a provider attempt before capacity",
       );
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
@@ -185,7 +258,7 @@ Deno.test({
         runId,
         claim.job.leaseEpoch,
         "worker-a",
-        new Date(Date.now() + 1_000),
+        new Date(0),
         "provider_rate_limit",
       );
       assertEquals(deferred, true);
@@ -394,6 +467,528 @@ Deno.test({
         "running",
         "a fenced-out deferral must not change job state",
       );
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "terminal success is fenced and decrements every running counter",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      const claim = await claimJobForDispatch(
+        pool,
+        ticketFor(admitted.jobId),
+        "worker-success",
+        30_000,
+      );
+      if (claim.kind !== "claimed") throw new Error("unreachable");
+      const attempt = await attachCapacityAndBeginAttempt(
+        pool,
+        claim.job,
+        "worker-success",
+      );
+
+      assertEquals(
+        await completeJobSuccessfully(
+          pool,
+          admitted.jobId,
+          attempt.attemptId,
+          claim.job.leaseEpoch,
+          "worker-success",
+        ),
+        true,
+      );
+      assertEquals(
+        await completeJobSuccessfully(
+          pool,
+          admitted.jobId,
+          attempt.attemptId,
+          claim.job.leaseEpoch,
+          "worker-success",
+        ),
+        false,
+        "redelivery cannot terminalize or decrement twice",
+      );
+
+      const job = await pool.query<{
+        status: string;
+        capacity_lease_id: string | null;
+      }>(
+        "select status, capacity_lease_id from relay.execution_jobs where id = $1",
+        [admitted.jobId],
+      );
+      const run = await pool.query<{ status: string }>(
+        "select status from relay.tool_runs where id = $1",
+        [admitted.runId],
+      );
+      const attemptRow = await pool.query<{
+        outcome: string;
+        submission_state: string;
+      }>(
+        "select outcome, submission_state from relay.job_attempts where id = $1",
+        [attempt.attemptId],
+      );
+      const lease = await pool.query<{ released_at: Date | null }>(
+        "select released_at from relay.execution_capacity_leases where job_id = $1",
+        [admitted.jobId],
+      );
+      assertEquals(job.rows[0], {
+        status: "succeeded",
+        capacity_lease_id: null,
+      });
+      assertEquals(run.rows[0].status, "succeeded");
+      assertEquals(attemptRow.rows[0], {
+        outcome: "succeeded",
+        submission_state: "completed",
+      });
+      assertEquals(lease.rows[0].released_at !== null, true);
+      await assertAllCounters(pool, admitted.fixture, 0, 0);
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "terminal failure is owner fenced and decrements running counters once",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      const claim = await claimJobForDispatch(
+        pool,
+        ticketFor(admitted.jobId),
+        "worker-failure",
+        30_000,
+      );
+      if (claim.kind !== "claimed") throw new Error("unreachable");
+      const attempt = await attachCapacityAndBeginAttempt(
+        pool,
+        claim.job,
+        "worker-failure",
+      );
+      assertEquals(
+        await failJob(
+          pool,
+          admitted.jobId,
+          attempt.attemptId,
+          claim.job.leaseEpoch,
+          "stale-worker",
+          "provider_transient",
+          "must not win",
+        ),
+        false,
+      );
+      assertEquals(
+        await failJob(
+          pool,
+          admitted.jobId,
+          attempt.attemptId,
+          claim.job.leaseEpoch,
+          "worker-failure",
+          "schema_or_policy_failure",
+          "Authorization: Bearer secret-value",
+        ),
+        true,
+      );
+      const attemptRow = await pool.query<{
+        sanitized_error: string;
+        retry_classification: string;
+      }>(
+        "select sanitized_error, retry_classification from relay.job_attempts where id = $1",
+        [attempt.attemptId],
+      );
+      assertEquals(
+        attemptRow.rows[0].retry_classification,
+        "schema_or_policy_failure",
+      );
+      assertEquals(
+        attemptRow.rows[0].sanitized_error.includes("secret-value"),
+        false,
+      );
+      await assertAllCounters(pool, admitted.fixture, 0, 0);
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "queued cancellation terminalizes without allowing a later ticket claim",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      assertEquals(
+        await requestJobCancellation(pool, admitted.jobId),
+        { kind: "requested", running: false },
+      );
+      assertEquals(
+        (await claimJobForDispatch(
+          pool,
+          ticketFor(admitted.jobId),
+          "worker-after-cancel",
+          30_000,
+        )).kind,
+        "no_op",
+      );
+      await assertAllCounters(pool, admitted.fixture, 0, 0);
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "running cancellation is completed by the fenced owner and releases capacity",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      const claim = await claimJobForDispatch(
+        pool,
+        ticketFor(admitted.jobId),
+        "worker-cancel",
+        30_000,
+      );
+      if (claim.kind !== "claimed") throw new Error("unreachable");
+      const attempt = await attachCapacityAndBeginAttempt(
+        pool,
+        claim.job,
+        "worker-cancel",
+      );
+      assertEquals(
+        await requestJobCancellation(pool, admitted.jobId),
+        { kind: "requested", running: true },
+      );
+      assertEquals(
+        await completeJobCancellation(
+          pool,
+          admitted.jobId,
+          attempt.attemptId,
+          claim.job.leaseEpoch,
+          "worker-cancel",
+        ),
+        true,
+      );
+      await assertAllCounters(pool, admitted.fixture, 0, 0);
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "stalled recovery fences the crashed owner and emits the next generation",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      const claim = await claimJobForDispatch(
+        pool,
+        ticketFor(admitted.jobId),
+        "worker-crashed",
+        30_000,
+      );
+      if (claim.kind !== "claimed") throw new Error("unreachable");
+      const attempt = await attachCapacityAndBeginAttempt(
+        pool,
+        claim.job,
+        "worker-crashed",
+      );
+      await pool.query(
+        "update relay.execution_jobs set lease_expires_at = now() - interval '1 second' where id = $1",
+        [admitted.jobId],
+      );
+
+      await recoverExpiredJobLeases(pool);
+      const staleSuccess = await completeJobSuccessfully(
+        pool,
+        admitted.jobId,
+        attempt.attemptId,
+        claim.job.leaseEpoch,
+        "worker-crashed",
+      );
+      assertEquals(staleSuccess, false);
+      const job = await pool.query<{
+        status: string;
+        dispatch_generation: number;
+        lease_epoch: string;
+      }>(
+        "select status, dispatch_generation, lease_epoch from relay.execution_jobs where id = $1",
+        [admitted.jobId],
+      );
+      assertEquals(job.rows[0].status, "queued");
+      assertEquals(job.rows[0].dispatch_generation, 1);
+      assertEquals(Number(job.rows[0].lease_epoch), claim.job.leaseEpoch + 1);
+      await assertAllCounters(pool, admitted.fixture, 1, 0);
+      const fresh = await claimJobForDispatch(
+        pool,
+        ticketFor(admitted.jobId, 1),
+        "worker-redelivery",
+        30_000,
+      );
+      assertEquals(fresh.kind, "claimed");
+      if (fresh.kind !== "claimed") throw new Error("unreachable");
+      assertEquals(
+        fresh.job.previousRetryClassification,
+        "submission_ambiguous",
+      );
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "beginJobAttempt is idempotent for one lease epoch",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      const claim = await claimJobForDispatch(
+        pool,
+        ticketFor(admitted.jobId),
+        "worker-idempotent-attempt",
+        30_000,
+      );
+      if (claim.kind !== "claimed") throw new Error("unreachable");
+      const leaseId = await persistCapacityLease(
+        pool,
+        claim.job,
+        "worker-idempotent-attempt",
+        {
+          redisLeaseId: crypto.randomUUID(),
+          redisScopeKeys: [unique("scope")],
+          expiresAt: new Date(Date.now() + 30_000),
+        },
+      );
+      if (leaseId === null) throw new Error("capacity attach failed");
+
+      const first = await beginJobAttempt(
+        pool,
+        claim.job,
+        "worker-idempotent-attempt",
+      );
+      const second = await beginJobAttempt(
+        pool,
+        claim.job,
+        "worker-idempotent-attempt",
+      );
+      assertEquals(second, first);
+
+      const job = await pool.query<{ attempt_count: number }>(
+        "select attempt_count from relay.execution_jobs where id = $1",
+        [admitted.jobId],
+      );
+      const attempts = await pool.query<{ id: string }>(
+        "select id from relay.job_attempts where job_id = $1",
+        [admitted.jobId],
+      );
+      assertEquals(job.rows[0].attempt_count, 1);
+      assertEquals(attempts.rows.length, 1);
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "retryJob finishes one attempt and queues a fresh generation",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      const claim = await claimJobForDispatch(
+        pool,
+        ticketFor(admitted.jobId),
+        "worker-retry",
+        30_000,
+      );
+      if (claim.kind !== "claimed") throw new Error("unreachable");
+      const attempt = await attachCapacityAndBeginAttempt(
+        pool,
+        claim.job,
+        "worker-retry",
+      );
+      const eligibleAt = new Date(Date.now() + 1_000);
+      const attemptDeadlineAt = new Date(Date.now() + 60_000);
+      assertEquals(
+        await retryJob(
+          pool,
+          admitted.jobId,
+          admitted.runId,
+          attempt.attemptId,
+          claim.job.leaseEpoch,
+          "worker-retry",
+          eligibleAt,
+          attemptDeadlineAt,
+          "provider_transient",
+          "retry me",
+        ),
+        true,
+      );
+
+      const job = await pool.query<{
+        status: string;
+        attempt_count: number;
+        deferral_count: number;
+        dispatch_generation: number;
+        attempt_deadline_at: Date;
+      }>(
+        `select status, attempt_count, deferral_count, dispatch_generation,
+                attempt_deadline_at
+           from relay.execution_jobs where id = $1`,
+        [admitted.jobId],
+      );
+      assertEquals(job.rows[0].status, "queued");
+      assertEquals(job.rows[0].attempt_count, 1);
+      assertEquals(job.rows[0].deferral_count, 0);
+      assertEquals(job.rows[0].dispatch_generation, 1);
+      assertEquals(
+        job.rows[0].attempt_deadline_at.getTime(),
+        attemptDeadlineAt.getTime(),
+      );
+      const attemptRow = await pool.query<{
+        outcome: string;
+        retry_classification: string;
+      }>(
+        "select outcome, retry_classification from relay.job_attempts where id = $1",
+        [attempt.attemptId],
+      );
+      assertEquals(attemptRow.rows[0], {
+        outcome: "retry_scheduled",
+        retry_classification: "provider_transient",
+      });
+      await assertAllCounters(pool, admitted.fixture, 1, 0);
+
+      await pool.query(
+        `update relay.execution_jobs
+            set attempt_deadline_at = now() - interval '1 second'
+          where id = $1`,
+        [admitted.jobId],
+      );
+      await expireQueuedJobs(pool);
+      const expired = await pool.query<{ status: string }>(
+        "select status from relay.execution_jobs where id = $1",
+        [admitted.jobId],
+      );
+      assertEquals(expired.rows[0].status, "failed");
+      await assertAllCounters(pool, admitted.fixture, 0, 0);
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "terminal transition rolls back when its attempt row is missing",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      const claim = await claimJobForDispatch(
+        pool,
+        ticketFor(admitted.jobId),
+        "worker-terminal-invariant",
+        30_000,
+      );
+      if (claim.kind !== "claimed") throw new Error("unreachable");
+      await attachCapacityAndBeginAttempt(
+        pool,
+        claim.job,
+        "worker-terminal-invariant",
+      );
+
+      await assertRejects(
+        () =>
+          completeJobSuccessfully(
+            pool,
+            admitted!.jobId,
+            "9223372036854775807",
+            claim.job.leaseEpoch,
+            "worker-terminal-invariant",
+          ),
+        Error,
+        "finish terminal job attempt affected 0 rows",
+      );
+      const job = await pool.query<{ status: string }>(
+        "select status from relay.execution_jobs where id = $1",
+        [admitted.jobId],
+      );
+      assertEquals(job.rows[0].status, "running");
+      await assertAllCounters(pool, admitted.fixture, 0, 1);
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "queued deadline expiry terminalizes the run and decrements counters",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      await pool.query(
+        `update relay.execution_jobs
+            set admission_deadline_at = now() - interval '1 second'
+          where id = $1`,
+        [admitted.jobId],
+      );
+      await expireQueuedJobs(pool);
+
+      const job = await pool.query<
+        { status: string; terminal_at: Date | null }
+      >(
+        "select status, terminal_at from relay.execution_jobs where id = $1",
+        [admitted.jobId],
+      );
+      const run = await pool.query<
+        { status: string; terminal_at: Date | null }
+      >(
+        "select status, terminal_at from relay.tool_runs where id = $1",
+        [admitted.runId],
+      );
+      assertEquals(job.rows[0].status, "failed");
+      assertEquals(job.rows[0].terminal_at !== null, true);
+      assertEquals(run.rows[0].status, "failed");
+      assertEquals(run.rows[0].terminal_at !== null, true);
+      await assertAllCounters(pool, admitted.fixture, 0, 0);
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();

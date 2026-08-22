@@ -3,9 +3,13 @@ import { createDatabasePool, type DatabasePool } from "@relay/database";
 import { Redis } from "ioredis";
 import { type AdmitRunInput, admitToolRun } from "./admission.ts";
 import { relayOutboxBatch } from "./outbox-relay.ts";
-import { createExecutionQueue, createExecutionWorker } from "./bullmq.ts";
-import { ticketId } from "./tickets.ts";
-import type { ExecutionTicket } from "./tickets.ts";
+import {
+  createExecutionQueue,
+  createExecutionWorker,
+  executionOutboxAction,
+} from "./bullmq.ts";
+import { ExecutionProcessor } from "./processor.ts";
+import { ticketFromOutboxPayload, ticketId } from "./tickets.ts";
 import {
   cleanupAdmissibleFixture,
   createAdmissibleFixture,
@@ -16,8 +20,8 @@ import {
  * run/job/outbox row (admission.ts, now also authorizing against a real
  * workspace membership and a real published catalog tool version), the
  * outbox relay claims and publishes it (outbox-relay.ts) as a real
- * BullMQ ticket (bullmq.ts), and a worker receives that exact ticket.
- * Each stage already has its own unit tests; this proves they compose.
+ * BullMQ ticket (bullmq.ts), and the real ExecutionProcessor claims capacity,
+ * opens one attempt, invokes the handler, and commits terminal state.
  */
 const databaseUrl = Deno.env.get("DATABASE_URL");
 const redisUrl = Deno.env.get("REDIS_URL");
@@ -41,7 +45,7 @@ function unique(label: string): string {
 
 Deno.test({
   name:
-    "admission -> outbox relay -> BullMQ ticket -> worker delivery, end to end",
+    "admission -> outbox -> BullMQ -> processor completes one attempt end to end",
   ignore: !hasInfra,
   fn: async () => {
     const pool = testPool();
@@ -61,11 +65,62 @@ Deno.test({
     };
 
     const connection = new Redis(redisUrl!, { maxRetriesPerRequest: null });
-    const capacityPoolKey = unique("bullmq-pool");
+    const capacityPool = await pool.query<{ key: string }>(
+      "select key from relay.capacity_pools where id = $1",
+      [fixture.capacityPoolId],
+    );
+    const capacityPoolKey = capacityPool.rows[0].key;
     const prefix = "relay:test-pipeline";
     const queue = createExecutionQueue(connection, capacityPoolKey, prefix);
 
-    const received: ExecutionTicket[] = [];
+    let handlerCalls = 0;
+    let releasedLeases = 0;
+    const executionProcessor = new ExecutionProcessor(
+      pool,
+      {
+        acquire: (job) =>
+          Promise.resolve({
+            kind: "acquired" as const,
+            lease: {
+              leaseId: crypto.randomUUID(),
+              scopeKeys: [unique("scope")],
+              expiresAt: new Date(Date.now() + 30_000),
+              ownerId: "pipeline-worker",
+              jobId: job.jobId,
+              leaseEpoch: job.leaseEpoch,
+              units: job.capacityUnits,
+              jobKey: `job-${job.jobId}`,
+            },
+          }),
+        acquireSubmissionPermit: () =>
+          Promise.resolve({ kind: "acquired" as const }),
+        setProviderCooldown: () => Promise.resolve(),
+        renew: () =>
+          Promise.resolve({
+            ok: true,
+            expiresAt: new Date(Date.now() + 30_000),
+          }),
+        release: () => {
+          releasedLeases += 1;
+          return Promise.resolve();
+        },
+      },
+      {
+        isReady: () => Promise.resolve(true),
+        readyToken: () => Promise.resolve("ready:pipeline"),
+      },
+      () => {
+        handlerCalls += 1;
+        return Promise.resolve({ kind: "succeeded" });
+      },
+      {
+        leaseOwner: "pipeline-worker",
+        leaseDurationMs: 30_000,
+        heartbeatIntervalMs: 10_000,
+        coordinationRetryMs: 100,
+        maxDeferralJitterMs: 0,
+      },
+    );
     const workerConnection = new Redis(redisUrl!, {
       maxRetriesPerRequest: null,
     });
@@ -73,10 +128,7 @@ Deno.test({
       workerConnection,
       capacityPoolKey,
       prefix,
-      (job) => {
-        received.push(job.data);
-        return Promise.resolve();
-      },
+      executionProcessor.processor,
     );
 
     let admitted: Awaited<ReturnType<typeof admitToolRun>> | undefined;
@@ -95,15 +147,9 @@ Deno.test({
       const relayResult = await relayOutboxBatch(
         pool,
         async (event) => {
-          const payload = event.payload as {
-            domainJobId: string;
-            runId: string;
-          };
-          const ticket: ExecutionTicket = {
-            domainJobId: payload.domainJobId,
-            dispatchGeneration: 1,
-            policyVersion: 1,
-          };
+          const action = executionOutboxAction(event);
+          if (action.kind !== "dispatch") throw new Error("unreachable");
+          const ticket = ticketFromOutboxPayload(action.payload);
           await queue.add("execute", ticket, { jobId: ticketId(ticket) });
         },
         { leaseOwner: "test-pipeline", leaseDurationMs: 30_000, batchSize: 10 },
@@ -115,17 +161,22 @@ Deno.test({
       );
 
       const deadline = Date.now() + 10_000;
-      while (
-        !received.some((t) => t.domainJobId === jobId) &&
-        Date.now() < deadline
-      ) {
-        await new Promise((r) => setTimeout(r, 50));
+      let state: { status: string; attempt_count: number } | undefined;
+      while (Date.now() < deadline) {
+        const result = await pool.query<{
+          status: string;
+          attempt_count: number;
+        }>(
+          "select status, attempt_count from relay.execution_jobs where id = $1",
+          [jobId],
+        );
+        state = result.rows[0];
+        if (state?.status === "succeeded" && releasedLeases === 1) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
-      assertEquals(
-        received.some((t) => t.domainJobId === jobId),
-        true,
-        "the worker must receive a ticket for the job this admission created",
-      );
+      assertEquals(state, { status: "succeeded", attempt_count: 1 });
+      assertEquals(handlerCalls, 1);
+      assertEquals(releasedLeases, 1);
     } finally {
       await worker.close();
       await queue.close();
