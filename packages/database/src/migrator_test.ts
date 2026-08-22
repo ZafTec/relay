@@ -105,7 +105,11 @@ async function tableExists(schema: string, table: string): Promise<boolean> {
 async function fixtureMigration(
   id: string,
   tableName: string,
-  options: { transactional?: boolean; shouldFail?: boolean } = {},
+  options: {
+    transactional?: boolean;
+    shouldFail?: boolean;
+    nonTransactionalReason?: string;
+  } = {},
 ): Promise<Migration> {
   const canonicalSql = `create table relay.${tableName} (id int primary key)`;
 
@@ -113,6 +117,7 @@ async function fixtureMigration(
     id,
     checksumSha256: await sha256Hex(canonicalSql),
     transactional: options.transactional ?? true,
+    nonTransactionalReason: options.nonTransactionalReason,
     up: async (db) => {
       await sql.raw(canonicalSql).execute(db);
       if (options.shouldFail) {
@@ -242,6 +247,49 @@ Deno.test({
       // The second migration must not have run because validation happens
       // before any pending migration is applied.
       assertEquals(await tableExists("relay", "probe_b"), false);
+    } finally {
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "a non-transactional migration without a documented reason is refused before any DDL runs",
+  ignore: !hasDatabase,
+  fn: async () => {
+    await resetDatabase();
+    const pool = createDatabasePool(
+      {
+        url: new URL(databaseUrl!),
+        poolMax: 5,
+        connectTimeoutMs: 5_000,
+        statementTimeoutMs: 30_000,
+      },
+      "relay-migrate",
+    );
+
+    try {
+      const undocumented = [
+        await fixtureMigration("0001_probe_a", "probe_a", {
+          transactional: false,
+        }),
+      ];
+      await assertRejects(
+        () => migrateUp(pool, undocumented, APP_VERSION, APP_REVISION),
+        Error,
+        "nonTransactionalReason",
+      );
+      assertEquals(await tableExists("relay", "probe_a"), false);
+
+      const documented = [
+        await fixtureMigration("0001_probe_a", "probe_a", {
+          transactional: false,
+          nonTransactionalReason: "CREATE INDEX CONCURRENTLY for this fixture",
+        }),
+      ];
+      await migrateUp(pool, documented, APP_VERSION, APP_REVISION);
+      assertEquals(await tableExists("relay", "probe_a"), true);
     } finally {
       await pool.end();
     }

@@ -46,6 +46,25 @@ function validateManifest(manifest: readonly Migration[]): void {
       throw new Error(`duplicate migration id in manifest: ${migration.id}`);
     }
     seen.add(migration.id);
+
+    // "Initially prohibit non-transactional migrations. Add an explicit
+    // reviewed mode only when an operation such as
+    // `CREATE INDEX CONCURRENTLY` requires it" (02-runtime-database.md
+    // "Migration format") -- a bare `transactional: false` on its own is
+    // not that explicit reviewed mode, so it's refused here unless the
+    // migration also documents why in `nonTransactionalReason`.
+    if (
+      !migration.transactional &&
+      (migration.nonTransactionalReason === undefined ||
+        migration.nonTransactionalReason.trim() === "")
+    ) {
+      throw new Error(
+        `migration "${migration.id}" sets transactional: false without a ` +
+          `nonTransactionalReason -- non-transactional migrations are ` +
+          `prohibited by default; add a non-empty nonTransactionalReason ` +
+          `explaining why (e.g. CREATE INDEX CONCURRENTLY) to opt in`,
+      );
+    }
   }
 }
 
