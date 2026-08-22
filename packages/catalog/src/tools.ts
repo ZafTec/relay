@@ -111,14 +111,40 @@ async function computeImmutableHash(
   }));
 }
 
+export type CreateToolVersionResult =
+  | { readonly kind: "denied" }
+  | { readonly kind: "not_found" }
+  | {
+    readonly kind: "ok";
+    readonly value: {
+      readonly toolVersionId: string;
+      readonly version: number;
+    };
+  };
+
 export async function createToolVersion(
   pool: DatabasePool,
   actorUserId: string,
   input: CreateToolVersionInput,
-): Promise<CatalogMutationResult<{ toolVersionId: string; version: number }>> {
+): Promise<CreateToolVersionResult> {
   if (!await isSuperadmin(pool, actorUserId)) return { kind: "denied" };
 
   return await withTransaction(pool, async (client) => {
+    // Locks the tool row for the rest of this transaction -- without it,
+    // two concurrent createToolVersion calls for the same tool both read
+    // the same `max(version)` before either commits, both compute the
+    // same next_version, and the second's insert throws a raw
+    // unique-violation against tool_versions' (tool_id, version)
+    // constraint instead of being handled. Locking here serializes them:
+    // the second call blocks until the first commits, then re-reads
+    // max(version) and sees the row that just landed. Also doubles as
+    // the tool-exists check this function never had.
+    const toolRows = await client.query(
+      `select id from relay.tools where id = $1 for update`,
+      [input.toolId],
+    );
+    if (toolRows.rows.length === 0) return { kind: "not_found" };
+
     const { rows } = await client.query<{ next_version: number }>(
       `select coalesce(max(version), 0) + 1 as next_version
        from relay.tool_versions where tool_id = $1`,

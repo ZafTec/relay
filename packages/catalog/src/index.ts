@@ -9,6 +9,7 @@ export {
 export type {
   CatalogMutationResult,
   CreateToolVersionInput,
+  CreateToolVersionResult,
   PublishToolVersionResult,
   RegisterToolInput,
   SetToolLifecycleResult,
