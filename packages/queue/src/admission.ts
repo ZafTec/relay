@@ -2,26 +2,27 @@ import type pg from "pg";
 import { sha256Hex, withTransaction } from "@relay/database";
 import type { DatabasePool } from "@relay/database";
 import { generatePublicId, ID_PREFIXES } from "@relay/contracts";
+import { getMembership } from "@relay/auth";
 
 /**
  * The "Acceptance transaction" from
- * docs/implementation-handoff/04-queue-capacity-scheduling.md, steps 1,
- * 3-5, 7-11. Steps 2 ("Authorize workspace, tool version, provider
- * binding, and scheduling class") and 6 ("Reserve usage") are not
- * implemented here -- they depend on the Wave 3B tool/provider catalog
- * and metering, neither of which exist yet. Callers must have already
- * authorized the request and resolved every ID below; this function's
- * job is only the durable admission write, done atomically.
+ * docs/implementation-handoff/04-queue-capacity-scheduling.md, steps
+ * 1-5, 7-11. Step 2 ("Authorize workspace, tool version, provider
+ * binding, and scheduling class") is now implemented for workspace
+ * membership, tool version, and provider binding, using the catalog and
+ * auth packages built in Wave 3B/2A -- "scheduling class" authorization
+ * (verifying the workspace is actually granted the requested class) is
+ * still deferred, since `relay.workspace_scheduling_profiles` (the
+ * weighted-fair-scheduler's, not yet built) doesn't exist. Step 6
+ * ("Reserve usage") is also still deferred to metering, which doesn't
+ * exist yet.
  */
 export interface AdmitRunInput {
   readonly workspaceId: string;
-  /** Counter key -- the tool, not the tool *version*; matches `relay.tool_queue_counters.tool_id`. */
-  readonly toolId: string;
   readonly toolVersionId: string;
   readonly createdBy: string;
   readonly input: unknown;
   readonly idempotencyKey: string;
-  readonly capacityPoolId: number;
   readonly schedulingClass: string;
   readonly schedulingPolicyVersion: number | null;
   readonly estimatedCostUnits: number | null;
@@ -42,6 +43,11 @@ export type AdmitRunResult =
   }
   | { readonly kind: "replayed"; readonly runId: string }
   | { readonly kind: "idempotency_conflict" }
+  | { readonly kind: "not_a_member" }
+  /** No matching `relay.tool_versions` row, it isn't published, or its tool is disabled/retired. */
+  | { readonly kind: "tool_version_unavailable" }
+  /** The tool version has no enabled `relay.tool_provider_bindings` row to route through. */
+  | { readonly kind: "no_provider_binding" }
   | {
     readonly kind: "queue_full";
     readonly scope: "global_tool" | "workspace_total" | "workspace_tool";
@@ -153,10 +159,45 @@ export async function admitToolRun(
       return { kind: "replayed", runId: record.run_id };
     }
 
+    // Step 2: authorize workspace, tool version, and provider binding.
+    const membership = await getMembership(
+      pool,
+      input.workspaceId,
+      input.createdBy,
+    );
+    if (membership === null) return { kind: "not_a_member" };
+
+    const versionRows = await client.query<
+      { tool_id: string; lifecycle: string }
+    >(
+      `select tv.tool_id, t.lifecycle
+       from relay.tool_versions tv
+       join relay.tools t on t.id = tv.tool_id
+       where tv.id = $1 and tv.published_at is not null`,
+      [input.toolVersionId],
+    );
+    if (versionRows.rows.length === 0) {
+      return { kind: "tool_version_unavailable" };
+    }
+    const { tool_id: toolId, lifecycle } = versionRows.rows[0];
+    if (lifecycle === "disabled" || lifecycle === "retired") {
+      return { kind: "tool_version_unavailable" };
+    }
+
+    const bindingRows = await client.query<{ capacity_pool_id: number }>(
+      `select capacity_pool_id from relay.tool_provider_bindings
+       where tool_version_id = $1 and enabled = true
+       order by routing_order asc
+       limit 1`,
+      [input.toolVersionId],
+    );
+    if (bindingRows.rows.length === 0) return { kind: "no_provider_binding" };
+    const capacityPoolId = bindingRows.rows[0].capacity_pool_id;
+
     // Deterministic lock order -- global-tool, then workspace-total, then
     // workspace-tool -- per step 4, so two concurrent admissions can never
     // deadlock against each other.
-    const globalToolCount = await lockToolCounter(client, input.toolId);
+    const globalToolCount = await lockToolCounter(client, toolId);
     if (globalToolCount >= input.limits.globalTool) {
       return { kind: "queue_full", scope: "global_tool" };
     }
@@ -172,7 +213,7 @@ export async function admitToolRun(
     const workspaceToolCount = await lockWorkspaceToolCounter(
       client,
       input.workspaceId,
-      input.toolId,
+      toolId,
     );
     if (workspaceToolCount >= input.limits.workspaceTool) {
       return { kind: "queue_full", scope: "workspace_tool" };
@@ -210,7 +251,7 @@ export async function admitToolRun(
         runId,
         input.workspaceId,
         input.toolVersionId,
-        input.capacityPoolId,
+        capacityPoolId,
         input.schedulingClass,
         input.schedulingPolicyVersion,
         input.estimatedCostUnits,
@@ -224,7 +265,7 @@ export async function admitToolRun(
       `update relay.tool_queue_counters
          set queued_count = queued_count + 1, updated_at = now()
        where tool_id = $1`,
-      [input.toolId],
+      [toolId],
     );
     await client.query(
       `update relay.workspace_queue_counters
@@ -236,7 +277,7 @@ export async function admitToolRun(
       `update relay.workspace_tool_queue_counters
          set queued_count = queued_count + 1, updated_at = now()
        where workspace_id = $1 and tool_id = $2`,
-      [input.workspaceId, input.toolId],
+      [input.workspaceId, toolId],
     );
 
     await client.query(

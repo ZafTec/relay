@@ -1,6 +1,11 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import { type AdmitRunInput, admitToolRun } from "./admission.ts";
+import {
+  type AdmissibleFixture,
+  cleanupAdmissibleFixture,
+  createAdmissibleFixture,
+} from "./test_support.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
 const hasDatabase = databaseUrl !== undefined;
@@ -21,116 +26,16 @@ function unique(label: string): string {
   return `${label}-${crypto.randomUUID()}`;
 }
 
-async function createUser(pool: DatabasePool): Promise<string> {
-  const { rows } = await pool.query<{ id: string }>(
-    `insert into auth."user" (id, name, email, "emailVerified")
-     values (gen_random_uuid()::text, 'Test', $1, true)
-     returning id`,
-    [`${unique("user")}@example.com`],
-  );
-  return rows[0].id;
-}
-
-async function createOrganization(pool: DatabasePool): Promise<string> {
-  const { rows } = await pool.query<{ id: string }>(
-    `insert into auth.organization (id, name, slug, "createdAt")
-     values (gen_random_uuid()::text, 'Test Org', $1, now())
-     returning id`,
-    [unique("org")],
-  );
-  return rows[0].id;
-}
-
-async function createCapacityPool(pool: DatabasePool): Promise<number> {
-  const { rows } = await pool.query<{ id: string }>(
-    `insert into relay.capacity_pools (key, execution_class)
-     values ($1, 'standard')
-     returning id`,
-    [unique("pool")],
-  );
-  return Number(rows[0].id);
-}
-
-interface Fixture {
-  workspaceId: string;
-  createdBy: string;
-  capacityPoolId: number;
-  toolId: string;
-}
-
-async function fixture(pool: DatabasePool): Promise<Fixture> {
-  const [workspaceId, createdBy, capacityPoolId] = await Promise.all([
-    createOrganization(pool),
-    createUser(pool),
-    createCapacityPool(pool),
-  ]);
-  return { workspaceId, createdBy, capacityPoolId, toolId: unique("tool") };
-}
-
-/**
- * Every table a fixture can touch, deleted in dependency order. This
- * matters beyond tidiness: `packages/auth`'s own tests do a full
- * `delete from auth."user"` / `delete from auth.organization` reset,
- * assuming they exclusively own those tables (true before Wave 3.0 added
- * `relay.tool_runs.created_by`'s FK to `auth.user`). A fixture left
- * behind here makes that reset fail with a foreign-key violation the
- * next time both suites run in the same shared dev database -- this is
- * what actually broke when admission/dispatch tests started creating
- * real rows without cleaning them up.
- */
-async function cleanupFixture(pool: DatabasePool, f: Fixture): Promise<void> {
-  await pool.query(
-    `delete from relay.outbox_events
-     where aggregate_id in (select id::text from relay.execution_jobs where workspace_id = $1)`,
-    [f.workspaceId],
-  );
-  await pool.query(
-    `delete from relay.job_attempts
-     where job_id in (select id from relay.execution_jobs where workspace_id = $1)`,
-    [f.workspaceId],
-  );
-  await pool.query("delete from relay.execution_jobs where workspace_id = $1", [
-    f.workspaceId,
-  ]);
-  await pool.query(
-    "delete from relay.idempotency_records where workspace_id = $1",
-    [f.workspaceId],
-  );
-  await pool.query("delete from relay.tool_runs where workspace_id = $1", [
-    f.workspaceId,
-  ]);
-  await pool.query(
-    "delete from relay.workspace_tool_queue_counters where workspace_id = $1",
-    [f.workspaceId],
-  );
-  await pool.query(
-    "delete from relay.workspace_queue_counters where workspace_id = $1",
-    [f.workspaceId],
-  );
-  await pool.query("delete from relay.tool_queue_counters where tool_id = $1", [
-    f.toolId,
-  ]);
-  await pool.query("delete from relay.capacity_pools where id = $1", [
-    f.capacityPoolId,
-  ]);
-  await pool.query("delete from auth.organization where id = $1", [
-    f.workspaceId,
-  ]);
-  await pool.query('delete from auth."user" where id = $1', [f.createdBy]);
-}
-
 function baseInput(
-  f: Fixture,
+  f: AdmissibleFixture,
   overrides: Partial<AdmitRunInput> = {},
 ): AdmitRunInput {
   return {
     workspaceId: f.workspaceId,
-    toolId: f.toolId,
-    toolVersionId: unique("tool-version"),
+    toolVersionId: f.toolVersionId,
     createdBy: f.createdBy,
     input: { prompt: "a cat" },
     idempotencyKey: unique("idem"),
-    capacityPoolId: f.capacityPoolId,
     schedulingClass: "standard",
     schedulingPolicyVersion: 1,
     estimatedCostUnits: 1,
@@ -142,14 +47,55 @@ function baseInput(
 }
 
 Deno.test({
+  name: "admitToolRun refuses a creator who isn't a workspace member",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(pool);
+      const outsiderId = f.catalogActorIds[0]; // superadmin, but never added as a member
+      const result = await admitToolRun(
+        pool,
+        baseInput(f, { createdBy: outsiderId }),
+      );
+      assertEquals(result.kind, "not_a_member");
+    } finally {
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "admitToolRun refuses an unpublished or nonexistent tool version",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(pool);
+      const result = await admitToolRun(
+        pool,
+        baseInput(f, { toolVersionId: unique("tver_nonexistent") }),
+      );
+      assertEquals(result.kind, "tool_version_unavailable");
+    } finally {
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
   name:
     "admitToolRun creates a run, job, counters, and an outbox job.ready event",
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
-    let f: Fixture | undefined;
+    let f: AdmissibleFixture | undefined;
     try {
-      f = await fixture(pool);
+      f = await createAdmissibleFixture(pool);
       const input = baseInput(f);
 
       const result = await admitToolRun(pool, input);
@@ -167,14 +113,20 @@ Deno.test({
       assertEquals(run.rows[0].input, { prompt: "a cat" });
 
       const job = await pool.query<
-        { status: string; run_id: string; scheduling_class: string }
+        {
+          status: string;
+          run_id: string;
+          scheduling_class: string;
+          capacity_pool_id: number;
+        }
       >(
-        "select status, run_id, scheduling_class from relay.execution_jobs where id = $1",
+        "select status, run_id, scheduling_class, capacity_pool_id from relay.execution_jobs where id = $1",
         [result.jobId],
       );
       assertEquals(job.rows[0].status, "queued");
       assertEquals(job.rows[0].run_id, result.runId);
       assertEquals(job.rows[0].scheduling_class, "standard");
+      assertEquals(Number(job.rows[0].capacity_pool_id), f.capacityPoolId);
 
       const counters = await pool.query<{ queued_count: number }>(
         "select queued_count from relay.tool_queue_counters where tool_id = $1",
@@ -191,7 +143,7 @@ Deno.test({
       assertEquals(outbox.rows.length, 1);
       assertEquals(outbox.rows[0].event_type, "job.ready");
     } finally {
-      if (f) await cleanupFixture(pool, f);
+      if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();
     }
   },
@@ -203,9 +155,9 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
-    let f: Fixture | undefined;
+    let f: AdmissibleFixture | undefined;
     try {
-      f = await fixture(pool);
+      f = await createAdmissibleFixture(pool);
       const input = baseInput(f);
 
       const first = await admitToolRun(pool, input);
@@ -233,7 +185,7 @@ Deno.test({
         "replay must not double-count",
       );
     } finally {
-      if (f) await cleanupFixture(pool, f);
+      if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();
     }
   },
@@ -245,9 +197,9 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
-    let f: Fixture | undefined;
+    let f: AdmissibleFixture | undefined;
     try {
-      f = await fixture(pool);
+      f = await createAdmissibleFixture(pool);
       const key = unique("idem");
 
       const first = await admitToolRun(
@@ -265,7 +217,7 @@ Deno.test({
       );
       assertEquals(second.kind, "idempotency_conflict");
     } finally {
-      if (f) await cleanupFixture(pool, f);
+      if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();
     }
   },
@@ -276,9 +228,9 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
-    let f: Fixture | undefined;
+    let f: AdmissibleFixture | undefined;
     try {
-      f = await fixture(pool);
+      f = await createAdmissibleFixture(pool);
       const input = baseInput(f, {
         limits: { globalTool: 0, workspaceTotal: 100, workspaceTool: 100 },
       });
@@ -304,7 +256,7 @@ Deno.test({
         "a rejected admission must not create a run",
       );
     } finally {
-      if (f) await cleanupFixture(pool, f);
+      if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();
     }
   },
@@ -316,9 +268,9 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
-    let f: Fixture | undefined;
+    let f: AdmissibleFixture | undefined;
     try {
-      f = await fixture(pool);
+      f = await createAdmissibleFixture(pool);
       const limits = { globalTool: 100, workspaceTotal: 100, workspaceTool: 1 };
 
       const first = await admitToolRun(pool, baseInput(f, { limits }));
@@ -329,7 +281,7 @@ Deno.test({
       if (second.kind !== "queue_full") throw new Error("unreachable");
       assertEquals(second.scope, "workspace_tool");
     } finally {
-      if (f) await cleanupFixture(pool, f);
+      if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();
     }
   },
@@ -340,9 +292,9 @@ Deno.test({
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
-    let f: Fixture | undefined;
+    let f: AdmissibleFixture | undefined;
     try {
-      f = await fixture(pool);
+      f = await createAdmissibleFixture(pool);
       const result = await admitToolRun(pool, baseInput(f));
       assertEquals(result.kind, "admitted");
       if (result.kind !== "admitted") throw new Error("unreachable");
@@ -357,7 +309,7 @@ Deno.test({
       assertEquals(rows[0].payload.domainJobId, result.jobId);
       assertEquals(rows[0].payload.runId, result.runId);
     } finally {
-      if (f) await cleanupFixture(pool, f);
+      if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();
     }
   },
