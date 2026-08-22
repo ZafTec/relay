@@ -1,5 +1,10 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { loadAuthConfig, loadRuntimeConfig } from "./index.ts";
+import {
+  loadAuthConfig,
+  loadBuildInfo,
+  loadDatabaseConfig,
+  loadRuntimeConfig,
+} from "./index.ts";
 
 const validDatabaseEnv = {
   DATABASE_URL: "postgres://user:pass@localhost:5432/relay",
@@ -80,6 +85,32 @@ Deno.test("loadRuntimeConfig rejects a non-redis REDIS_URL scheme", () => {
 Deno.test("loadRuntimeConfig accepts a valid REDIS_URL", () => {
   const config = loadRuntimeConfig(validDatabaseEnv);
   assertEquals(config.redis.url.toString(), validDatabaseEnv.REDIS_URL);
+});
+
+Deno.test("loadDatabaseConfig does not require REDIS_URL", () => {
+  const { REDIS_URL: _drop, ...databaseOnly } = validDatabaseEnv;
+  const config = loadDatabaseConfig(databaseOnly);
+  assertEquals(config.url.toString(), validDatabaseEnv.DATABASE_URL);
+});
+
+Deno.test("loadDatabaseConfig still requires DATABASE_URL", () => {
+  assertThrows(
+    () => loadDatabaseConfig({}),
+    Error,
+    "DATABASE_URL is required",
+  );
+});
+
+Deno.test("loadBuildInfo defaults version/revision when unset", () => {
+  const info = loadBuildInfo({});
+  assertEquals(info.version, "development");
+  assertEquals(info.revision, "unknown");
+});
+
+Deno.test("loadBuildInfo reads APP_VERSION/GIT_SHA when set", () => {
+  const info = loadBuildInfo({ APP_VERSION: "1.2.3", GIT_SHA: "abc123" });
+  assertEquals(info.version, "1.2.3");
+  assertEquals(info.revision, "abc123");
 });
 
 Deno.test("loadAuthConfig requires BETTER_AUTH_SECRET to be at least 32 characters", () => {

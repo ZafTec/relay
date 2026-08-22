@@ -3,7 +3,11 @@ import type { DatabaseConfig } from "@relay/config";
 
 export type DatabasePool = InstanceType<typeof pg.Pool>;
 
-export type ProcessName = "relay-api" | "relay-worker" | "relay-migrate";
+export type ProcessName =
+  | "relay-api"
+  | "relay-worker"
+  | "relay-migrate"
+  | "relay-healthcheck";
 
 /**
  * One pool per process. Pool lifetime belongs to process bootstrap;
