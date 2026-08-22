@@ -1,6 +1,17 @@
-import type { DatabasePool } from "@relay/database";
-
 export type WorkspaceRole = "owner" | "admin" | "member";
+
+/**
+ * Satisfied by both `pg.Pool` and a checked-out `pg.PoolClient`. Accepting
+ * either lets callers running inside a transaction (e.g. `admitToolRun`,
+ * which holds a `poolMax: 1` connection via `withTransaction`) pass their
+ * transaction's own client instead of `pool.query()` reaching back into the
+ * pool for a second connection -- which, with only one connection in the
+ * pool, would block forever waiting on the connection the caller itself is
+ * still holding.
+ */
+export interface Queryable {
+  query<T>(text: string, params?: unknown[]): Promise<{ rows: T[] }>;
+}
 
 /**
  * `activeOrganizationId` on a session is context, not proof -- every
@@ -11,11 +22,11 @@ export type WorkspaceRole = "owner" | "admin" | "member";
  * "deny," not "assume the personal workspace."
  */
 export async function getMembership(
-  pool: DatabasePool,
+  queryable: Queryable,
   organizationId: string,
   userId: string,
 ): Promise<WorkspaceRole | null> {
-  const result = await pool.query<{ role: WorkspaceRole }>(
+  const result = await queryable.query<{ role: WorkspaceRole }>(
     `select role from auth.member
      where "organizationId" = $1 and "userId" = $2`,
     [organizationId, userId],
@@ -24,10 +35,10 @@ export async function getMembership(
 }
 
 async function countOwners(
-  pool: DatabasePool,
+  queryable: Queryable,
   organizationId: string,
 ): Promise<number> {
-  const result = await pool.query<{ count: string }>(
+  const result = await queryable.query<{ count: string }>(
     `select count(*) from auth.member
      where "organizationId" = $1 and role = 'owner'`,
     [organizationId],
@@ -41,10 +52,10 @@ async function countOwners(
  * this currently just means the last owner can never be removed.
  */
 export async function canRemoveMember(
-  pool: DatabasePool,
+  queryable: Queryable,
   organizationId: string,
   memberRole: WorkspaceRole,
 ): Promise<boolean> {
   if (memberRole !== "owner") return true;
-  return (await countOwners(pool, organizationId)) > 1;
+  return (await countOwners(queryable, organizationId)) > 1;
 }

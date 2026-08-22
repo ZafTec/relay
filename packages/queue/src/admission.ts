@@ -126,174 +126,228 @@ async function lockWorkspaceToolCounter(
   return rows[0].queued_count;
 }
 
+/**
+ * Thrown from inside the acceptance transaction when this admission loses
+ * a concurrent race for the same `(workspace_id, idempotency_key)` pair
+ * (see the comment on the final insert below). Throwing forces
+ * `withTransaction` to roll back everything this attempt already wrote --
+ * the run, job, counter increments, and outbox event -- before the caller
+ * resolves the outcome against the winning attempt's now-committed row.
+ * Never escapes `admitToolRun`.
+ */
+class IdempotencyRaceLost extends Error {}
+
+function resolveAgainstRecord(
+  record: { canonical_payload_hash: string; run_id: string | null } | undefined,
+  canonicalPayloadHash: string,
+): AdmitRunResult {
+  if (record === undefined || record.run_id === null) {
+    // A record with a null run_id is either a race we lost before our own
+    // run/job insert (see IdempotencyRaceLost) or, in principle, a replay
+    // recorded before its run/job insert committed and later restored via
+    // lease/outbox reconciliation -- either way it is not a valid replay
+    // target.
+    return { kind: "idempotency_conflict" };
+  }
+  if (record.canonical_payload_hash !== canonicalPayloadHash) {
+    return { kind: "idempotency_conflict" };
+  }
+  return { kind: "replayed", runId: record.run_id };
+}
+
 export async function admitToolRun(
   pool: DatabasePool,
   input: AdmitRunInput,
 ): Promise<AdmitRunResult> {
   const canonicalPayloadHash = await sha256Hex(canonicalStringify(input.input));
 
-  return await withTransaction(pool, async (client) => {
-    const existing = await client.query<
-      { canonical_payload_hash: string; run_id: string | null }
-    >(
-      `select canonical_payload_hash, run_id from relay.idempotency_records
-       where workspace_id = $1 and idempotency_key = $2`,
-      [input.workspaceId, input.idempotencyKey],
-    );
-
-    if (existing.rows.length > 0) {
-      const record = existing.rows[0];
-      if (record.canonical_payload_hash !== canonicalPayloadHash) {
-        return { kind: "idempotency_conflict" };
-      }
-      // A replay recorded before its run/job insert committed (a crash
-      // between steps 10 and 11 restored via lease/outbox reconciliation,
-      // not here) would have a null run_id; this admission function
-      // always inserts both in the same transaction, so that state never
-      // reaches this branch in practice, but it's still not a valid
-      // replay target -- treat it as a conflict rather than returning
-      // a nonexistent run.
-      if (record.run_id === null) {
-        return { kind: "idempotency_conflict" };
-      }
-      return { kind: "replayed", runId: record.run_id };
-    }
-
-    // Step 2: authorize workspace, tool version, and provider binding.
-    const membership = await getMembership(
-      pool,
-      input.workspaceId,
-      input.createdBy,
-    );
-    if (membership === null) return { kind: "not_a_member" };
-
-    const versionRows = await client.query<
-      { tool_id: string; lifecycle: string }
-    >(
-      `select tv.tool_id, t.lifecycle
-       from relay.tool_versions tv
-       join relay.tools t on t.id = tv.tool_id
-       where tv.id = $1 and tv.published_at is not null`,
-      [input.toolVersionId],
-    );
-    if (versionRows.rows.length === 0) {
-      return { kind: "tool_version_unavailable" };
-    }
-    const { tool_id: toolId, lifecycle } = versionRows.rows[0];
-    if (lifecycle === "disabled" || lifecycle === "retired") {
-      return { kind: "tool_version_unavailable" };
-    }
-
-    const bindingRows = await client.query<{ capacity_pool_id: number }>(
-      `select capacity_pool_id from relay.tool_provider_bindings
-       where tool_version_id = $1 and enabled = true
-       order by routing_order asc
-       limit 1`,
-      [input.toolVersionId],
-    );
-    if (bindingRows.rows.length === 0) return { kind: "no_provider_binding" };
-    const capacityPoolId = bindingRows.rows[0].capacity_pool_id;
-
-    // Deterministic lock order -- global-tool, then workspace-total, then
-    // workspace-tool -- per step 4, so two concurrent admissions can never
-    // deadlock against each other.
-    const globalToolCount = await lockToolCounter(client, toolId);
-    if (globalToolCount >= input.limits.globalTool) {
-      return { kind: "queue_full", scope: "global_tool" };
-    }
-
-    const workspaceTotalCount = await lockWorkspaceCounter(
-      client,
-      input.workspaceId,
-    );
-    if (workspaceTotalCount >= input.limits.workspaceTotal) {
-      return { kind: "queue_full", scope: "workspace_total" };
-    }
-
-    const workspaceToolCount = await lockWorkspaceToolCounter(
-      client,
-      input.workspaceId,
-      toolId,
-    );
-    if (workspaceToolCount >= input.limits.workspaceTool) {
-      return { kind: "queue_full", scope: "workspace_tool" };
-    }
-
-    const runId = generatePublicId(ID_PREFIXES.toolRun);
-    await client.query(
-      `insert into relay.tool_runs
-         (id, workspace_id, tool_version_id, status, input, created_by)
-       values ($1, $2, $3, 'queued', $4, $5)`,
-      [
-        runId,
+  try {
+    return await withTransaction(pool, async (client) => {
+      // Step 2: authorize workspace membership first, before anything
+      // else -- including an idempotency replay. Membership can change
+      // between two calls with the same key (the caller left the
+      // workspace, was removed, etc.), and a stale replay must not bypass
+      // that: every admission, replay or not, is authorized against
+      // *current* membership. Queried through this transaction's own
+      // `client`, not the outer `pool` -- with `poolMax: 1` (the
+      // production admission pool), a second `pool.query()` here would
+      // never get a connection, since the only one is the one this
+      // transaction is already holding.
+      const membership = await getMembership(
+        client,
         input.workspaceId,
-        input.toolVersionId,
-        JSON.stringify(input.input),
         input.createdBy,
-      ],
-    );
+      );
+      if (membership === null) return { kind: "not_a_member" };
 
-    const admissionDeadlineAt = new Date(
-      Date.now() + input.admissionDeadlineMs,
-    );
-    const runDeadlineAt = input.runDeadlineMs === null
-      ? null
-      : new Date(Date.now() + input.runDeadlineMs);
+      const existing = await client.query<
+        { canonical_payload_hash: string; run_id: string | null }
+      >(
+        `select canonical_payload_hash, run_id from relay.idempotency_records
+         where workspace_id = $1 and idempotency_key = $2`,
+        [input.workspaceId, input.idempotencyKey],
+      );
+      if (existing.rows.length > 0) {
+        return resolveAgainstRecord(existing.rows[0], canonicalPayloadHash);
+      }
 
-    const jobResult = await client.query<{ id: string }>(
-      `insert into relay.execution_jobs
-         (run_id, workspace_id, tool_version_id, capacity_pool_id, status,
-          scheduling_class, scheduling_policy_version, estimated_cost_units,
-          admission_deadline_at, run_deadline_at)
-       values ($1, $2, $3, $4, 'queued', $5, $6, $7, $8, $9)
-       returning id`,
-      [
-        runId,
+      const versionRows = await client.query<
+        { tool_id: string; lifecycle: string }
+      >(
+        `select tv.tool_id, t.lifecycle
+         from relay.tool_versions tv
+         join relay.tools t on t.id = tv.tool_id
+         where tv.id = $1 and tv.published_at is not null`,
+        [input.toolVersionId],
+      );
+      if (versionRows.rows.length === 0) {
+        return { kind: "tool_version_unavailable" };
+      }
+      const { tool_id: toolId, lifecycle } = versionRows.rows[0];
+      if (lifecycle === "disabled" || lifecycle === "retired") {
+        return { kind: "tool_version_unavailable" };
+      }
+
+      const bindingRows = await client.query<{ capacity_pool_id: number }>(
+        `select capacity_pool_id from relay.tool_provider_bindings
+         where tool_version_id = $1 and enabled = true
+         order by routing_order asc
+         limit 1`,
+        [input.toolVersionId],
+      );
+      if (bindingRows.rows.length === 0) return { kind: "no_provider_binding" };
+      const capacityPoolId = bindingRows.rows[0].capacity_pool_id;
+
+      // Deterministic lock order -- global-tool, then workspace-total, then
+      // workspace-tool -- per step 4, so two concurrent admissions can
+      // never deadlock against each other.
+      const globalToolCount = await lockToolCounter(client, toolId);
+      if (globalToolCount >= input.limits.globalTool) {
+        return { kind: "queue_full", scope: "global_tool" };
+      }
+
+      const workspaceTotalCount = await lockWorkspaceCounter(
+        client,
         input.workspaceId,
-        input.toolVersionId,
-        capacityPoolId,
-        input.schedulingClass,
-        input.schedulingPolicyVersion,
-        input.estimatedCostUnits,
-        admissionDeadlineAt,
-        runDeadlineAt,
-      ],
-    );
-    const jobId = jobResult.rows[0].id;
+      );
+      if (workspaceTotalCount >= input.limits.workspaceTotal) {
+        return { kind: "queue_full", scope: "workspace_total" };
+      }
 
-    await client.query(
-      `update relay.tool_queue_counters
-         set queued_count = queued_count + 1, updated_at = now()
-       where tool_id = $1`,
-      [toolId],
-    );
-    await client.query(
-      `update relay.workspace_queue_counters
-         set queued_count = queued_count + 1, updated_at = now()
-       where workspace_id = $1`,
-      [input.workspaceId],
-    );
-    await client.query(
-      `update relay.workspace_tool_queue_counters
-         set queued_count = queued_count + 1, updated_at = now()
-       where workspace_id = $1 and tool_id = $2`,
-      [input.workspaceId, toolId],
-    );
+      const workspaceToolCount = await lockWorkspaceToolCounter(
+        client,
+        input.workspaceId,
+        toolId,
+      );
+      if (workspaceToolCount >= input.limits.workspaceTool) {
+        return { kind: "queue_full", scope: "workspace_tool" };
+      }
 
-    await client.query(
-      `insert into relay.idempotency_records
-         (workspace_id, idempotency_key, canonical_payload_hash, run_id)
-       values ($1, $2, $3, $4)`,
-      [input.workspaceId, input.idempotencyKey, canonicalPayloadHash, runId],
-    );
+      const runId = generatePublicId(ID_PREFIXES.toolRun);
+      await client.query(
+        `insert into relay.tool_runs
+           (id, workspace_id, tool_version_id, status, input, created_by)
+         values ($1, $2, $3, 'queued', $4, $5)`,
+        [
+          runId,
+          input.workspaceId,
+          input.toolVersionId,
+          JSON.stringify(input.input),
+          input.createdBy,
+        ],
+      );
 
-    await client.query(
-      `insert into relay.outbox_events
-         (aggregate_type, aggregate_id, aggregate_version, event_type, payload)
-       values ('execution_job', $1, 1, 'job.ready', $2)`,
-      [jobId, JSON.stringify({ domainJobId: jobId, runId })],
-    );
+      const admissionDeadlineAt = new Date(
+        Date.now() + input.admissionDeadlineMs,
+      );
+      const runDeadlineAt = input.runDeadlineMs === null
+        ? null
+        : new Date(Date.now() + input.runDeadlineMs);
 
-    return { kind: "admitted", runId, jobId };
-  });
+      const jobResult = await client.query<{ id: string }>(
+        `insert into relay.execution_jobs
+           (run_id, workspace_id, tool_version_id, capacity_pool_id, status,
+            scheduling_class, scheduling_policy_version, estimated_cost_units,
+            admission_deadline_at, run_deadline_at)
+         values ($1, $2, $3, $4, 'queued', $5, $6, $7, $8, $9)
+         returning id`,
+        [
+          runId,
+          input.workspaceId,
+          input.toolVersionId,
+          capacityPoolId,
+          input.schedulingClass,
+          input.schedulingPolicyVersion,
+          input.estimatedCostUnits,
+          admissionDeadlineAt,
+          runDeadlineAt,
+        ],
+      );
+      const jobId = jobResult.rows[0].id;
+
+      await client.query(
+        `update relay.tool_queue_counters
+           set queued_count = queued_count + 1, updated_at = now()
+         where tool_id = $1`,
+        [toolId],
+      );
+      await client.query(
+        `update relay.workspace_queue_counters
+           set queued_count = queued_count + 1, updated_at = now()
+         where workspace_id = $1`,
+        [input.workspaceId],
+      );
+      await client.query(
+        `update relay.workspace_tool_queue_counters
+           set queued_count = queued_count + 1, updated_at = now()
+         where workspace_id = $1 and tool_id = $2`,
+        [input.workspaceId, toolId],
+      );
+
+      // `ON CONFLICT ... DO NOTHING` rather than a plain insert: two
+      // concurrent requests with the same idempotency key can both reach
+      // this point having seen no existing record (the earlier SELECT ran
+      // before either committed). A plain INSERT would make the loser
+      // throw a raw unique-violation error here. DO NOTHING instead makes
+      // the loser's insert block on the winner's row until the winner
+      // commits or rolls back, then affect zero rows without erroring --
+      // at which point this attempt has definitely lost the race and must
+      // roll back its own run/job/counters/outbox event (they'd otherwise
+      // be an orphaned duplicate of the winner's), so it throws to force
+      // `withTransaction` to roll back, and the caller resolves the
+      // outcome against the winner's now-committed record.
+      const claim = await client.query<{ id: string }>(
+        `insert into relay.idempotency_records
+           (workspace_id, idempotency_key, canonical_payload_hash, run_id)
+         values ($1, $2, $3, $4)
+         on conflict (workspace_id, idempotency_key) do nothing
+         returning id`,
+        [input.workspaceId, input.idempotencyKey, canonicalPayloadHash, runId],
+      );
+      if (claim.rows.length === 0) {
+        throw new IdempotencyRaceLost();
+      }
+
+      await client.query(
+        `insert into relay.outbox_events
+           (aggregate_type, aggregate_id, aggregate_version, event_type, payload)
+         values ('execution_job', $1, 1, 'job.ready', $2)`,
+        [jobId, JSON.stringify({ domainJobId: jobId, runId })],
+      );
+
+      return { kind: "admitted", runId, jobId };
+    });
+  } catch (error) {
+    if (error instanceof IdempotencyRaceLost) {
+      const { rows } = await pool.query<
+        { canonical_payload_hash: string; run_id: string | null }
+      >(
+        `select canonical_payload_hash, run_id from relay.idempotency_records
+         where workspace_id = $1 and idempotency_key = $2`,
+        [input.workspaceId, input.idempotencyKey],
+      );
+      return resolveAgainstRecord(rows[0], canonicalPayloadHash);
+    }
+    throw error;
+  }
 }

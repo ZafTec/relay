@@ -112,6 +112,20 @@ function bindKyselyToClient(client: pg.PoolClient): BoundKysely {
   return { db, releaseClient };
 }
 
+/**
+ * `relay.schema_migrations` is the bootstrap ledger table -- created by
+ * the migrator itself, not listed in the manifest, so it isn't covered
+ * by any migration's own privilege statements. Left alone it inherits
+ * the schema-wide `ALTER DEFAULT PRIVILEGES ... GRANT ... UPDATE, DELETE
+ * ... TO relay_app` from the role-setup script (the same default rule
+ * every other `relay.*` table gets), which means the runtime API/worker
+ * role -- not just the migrator -- could rewrite or erase migration
+ * history. Revoked every time this runs (idempotent; revoking an
+ * already-absent privilege is a no-op), matching the same
+ * insert-only-by-a-different-role pattern already used for
+ * `relay.audit_events`. `relay_app` keeps SELECT so runtime readiness
+ * checks can still read ledger state.
+ */
 async function ensureLedgerTable(db: Kysely<unknown>): Promise<void> {
   await sql`
     create table if not exists relay.schema_migrations (
@@ -122,6 +136,9 @@ async function ensureLedgerTable(db: Kysely<unknown>): Promise<void> {
       app_version text not null,
       app_revision text not null
     )
+  `.execute(db);
+  await sql`
+    revoke insert, update, delete on relay.schema_migrations from relay_app
   `.execute(db);
 }
 
