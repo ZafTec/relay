@@ -21,6 +21,7 @@ import { migration as wave3ForeignKeys } from "./0019_wave3_foreign_keys.ts";
 import { migration as memberUniqueness } from "./0020_member_uniqueness.ts";
 import { migration as capacityAndCounterForeignKeys } from "./0021_capacity_and_counter_foreign_keys.ts";
 import { migration as toolVersionDeleteAndRoutingPolicyImmutability } from "./0022_tool_version_delete_and_routing_policy_immutability.ts";
+import { migration as systemRoleAssignmentImmutability } from "./0023_system_role_assignment_immutability.ts";
 
 /**
  * Immutable, statically imported migration history, in application order.
@@ -56,4 +57,5 @@ export const MIGRATIONS: readonly Migration[] = [
   memberUniqueness,
   capacityAndCounterForeignKeys,
   toolVersionDeleteAndRoutingPolicyImmutability,
+  systemRoleAssignmentImmutability,
 ];
