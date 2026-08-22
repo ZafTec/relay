@@ -58,7 +58,6 @@ Deno.test({
       estimatedCostUnits: 1,
       admissionDeadlineMs: 60_000,
       runDeadlineMs: 300_000,
-      limits: { globalTool: 100, workspaceTotal: 100, workspaceTool: 100 },
     };
 
     const connection = new Redis(redisUrl!, { maxRetriesPerRequest: null });
