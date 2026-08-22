@@ -28,6 +28,42 @@ function personalWorkspaceSlug(userId: string): string {
 }
 
 /**
+ * Heals the one dangerous gap in the sequence below: `personal_workspaces`
+ * (the mapping) and `auth.member` (actual membership) are written by two
+ * separate statements with no shared transaction, so a crash between them
+ * -- or, before this existed, simply never getting that far in an older
+ * process -- can leave a user with a recorded personal workspace they are
+ * not actually a member of. Every `ensurePersonalWorkspace` call checks
+ * this, not just the ones that just created the mapping, so a user in
+ * that state self-heals on their very next call instead of being
+ * permanently locked out of a workspace `getMembership` will never
+ * recognize them in. The cost is one extra indexed SELECT on the
+ * overwhelmingly common already-a-member path.
+ */
+async function ensureMembership(
+  adapter: BetterAuthAdapter,
+  pool: DatabasePool,
+  organizationId: string,
+  userId: string,
+): Promise<void> {
+  const { rows } = await pool.query(
+    `select 1 from auth.member where "organizationId" = $1 and "userId" = $2`,
+    [organizationId, userId],
+  );
+  if (rows.length > 0) return;
+
+  await adapter.create({
+    model: "member",
+    data: {
+      organizationId,
+      userId,
+      role: "owner",
+      createdAt: new Date(),
+    },
+  });
+}
+
+/**
  * Idempotent even under concurrent callers for the same user: the unique
  * `user_id` primary key on `relay.personal_workspaces` is the actual
  * concurrency-safety mechanism (`insert ... on conflict (user_id) do
@@ -47,7 +83,9 @@ export async function ensurePersonalWorkspace(
     [userId],
   );
   if (existing.rows[0]) {
-    return existing.rows[0].organization_id;
+    const organizationId = existing.rows[0].organization_id;
+    await ensureMembership(adapter, pool, organizationId, userId);
+    return organizationId;
   }
 
   const organization = await adapter.create<{ id: string }>({
@@ -69,15 +107,7 @@ export async function ensurePersonalWorkspace(
   );
 
   if (claimed.rows[0]) {
-    await adapter.create({
-      model: "member",
-      data: {
-        organizationId: organization.id,
-        userId,
-        role: "owner",
-        createdAt: new Date(),
-      },
-    });
+    await ensureMembership(adapter, pool, organization.id, userId);
     return organization.id;
   }
 
@@ -94,5 +124,7 @@ export async function ensurePersonalWorkspace(
       `personal workspace mapping missing for user ${userId} immediately after a lost insert race`,
     );
   }
-  return winner.rows[0].organization_id;
+  const winnerOrganizationId = winner.rows[0].organization_id;
+  await ensureMembership(adapter, pool, winnerOrganizationId, userId);
+  return winnerOrganizationId;
 }
