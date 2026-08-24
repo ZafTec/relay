@@ -70,11 +70,38 @@ export function authenticationRequired(): HttpAdapterError {
   });
 }
 
-export function notFound(): HttpAdapterError {
+export function reauthenticationRequired(): HttpAdapterError {
+  return new HttpAdapterError({
+    status: 401,
+    code: "reauthentication_required",
+    message: "Recent authentication is required.",
+  });
+}
+
+export function authorizationDenied(): HttpAdapterError {
+  return new HttpAdapterError({
+    status: 403,
+    code: "authorization_denied",
+    message: "You are not authorized to perform this action.",
+  });
+}
+
+export function idempotencyConflict(): HttpAdapterError {
+  return new HttpAdapterError({
+    status: 409,
+    code: "idempotency_conflict",
+    message: "The idempotency key was already used for a different request.",
+  });
+}
+
+export function notFound(
+  details: PublicErrorDetails = {},
+): HttpAdapterError {
   return new HttpAdapterError({
     status: 404,
     code: "not_found",
     message: "The requested resource was not found.",
+    details,
   });
 }
 

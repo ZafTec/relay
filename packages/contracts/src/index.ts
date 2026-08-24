@@ -29,12 +29,50 @@ export type {
 } from "./schema.ts";
 
 export {
+  adminChangelogReleasePath,
   changelogEntryPath,
   HTTP_PATHS,
   PUBLIC_NOUNS,
   publicSharePath,
   runPath,
 } from "./routes.ts";
+
+export {
+  adminChangelogDraftInputSchema,
+  adminChangelogListResponseSchema,
+  adminChangelogReleaseSchema,
+  adminChangelogRevisionSchema,
+  adminChangelogSummarySchema,
+  CHANGELOG_CATEGORIES,
+  CHANGELOG_CONFLICT_REASONS,
+  CHANGELOG_PUBLISHABILITY_REASONS,
+  CHANGELOG_RELEASE_STATUSES,
+  createAdminChangelogResultSchema,
+  isAdminChangelogReleaseId,
+  listAdminChangelogRequestSchema,
+  publishAdminChangelogRequestSchema,
+  publishAdminChangelogResultSchema,
+  reviseAdminChangelogRequestSchema,
+  reviseAdminChangelogResultSchema,
+  unpublishAdminChangelogRequestSchema,
+  unpublishAdminChangelogResultSchema,
+} from "./changelog.ts";
+export type {
+  AdminChangelogDraftInput,
+  AdminChangelogItemInput,
+  AdminChangelogListResponse,
+  AdminChangelogRelease,
+  AdminChangelogRevision,
+  AdminChangelogSummary,
+  CreateAdminChangelogResult,
+  ListAdminChangelogRequest,
+  PublishAdminChangelogRequest,
+  PublishAdminChangelogResult,
+  ReviseAdminChangelogRequest,
+  ReviseAdminChangelogResult,
+  UnpublishAdminChangelogRequest,
+  UnpublishAdminChangelogResult,
+} from "./changelog.ts";
 
 export {
   createCursorPageSchema,

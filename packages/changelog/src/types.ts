@@ -118,7 +118,7 @@ export type UnpublishChangelogResult = AuthorizationFailure | {
     | "revision_conflict";
   readonly replayed: boolean;
   readonly releaseId?: string;
-  readonly revision?: number;
+  readonly revision?: number | null;
   readonly actualRevision?: number;
 };
 

@@ -1,7 +1,13 @@
 import type { ApplicationServices } from "@relay/application";
 import {
+  createChangelogDraft,
+  getAdminChangelogRelease,
   getPublishedChangelogBySlug,
+  listAdminChangelog,
   listPublishedChangelog,
+  publishChangelogRelease,
+  reviseChangelogDraft,
+  unpublishChangelogRelease,
 } from "@relay/changelog";
 import type { RuntimeConfig } from "@relay/config";
 import { loadAuthConfig, loadRuntimeConfig } from "@relay/config";
@@ -21,6 +27,7 @@ import {
 } from "@relay/observability";
 import { createApp, createRelayMcpHttpHandler } from "./app.ts";
 import {
+  type AdminChangelogService,
   createAuthSessionIdentityResolver,
   type PublicChangelogReader,
 } from "./routes/mod.ts";
@@ -31,6 +38,34 @@ export function createPostgresPublicChangelogReader(
   return {
     list: (options) => listPublishedChangelog(pool, options),
     getBySlug: (slug) => getPublishedChangelogBySlug(pool, slug),
+  };
+}
+
+export function createPostgresAdminChangelogService(
+  pool: DatabasePool,
+): AdminChangelogService {
+  return {
+    list: (session, request) => listAdminChangelog(pool, session, request),
+    get: (session, releaseId) =>
+      getAdminChangelogRelease(pool, session, releaseId),
+    create: (context, input) => createChangelogDraft(pool, context, input),
+    revise: (context, releaseId, expectedRevision, input) =>
+      reviseChangelogDraft(
+        pool,
+        context,
+        releaseId,
+        expectedRevision,
+        input,
+      ),
+    publish: (context, releaseId, expectedRevision) =>
+      publishChangelogRelease(pool, context, releaseId, expectedRevision),
+    unpublish: (context, releaseId, expectedPublishedRevision) =>
+      unpublishChangelogRelease(
+        pool,
+        context,
+        releaseId,
+        expectedPublishedRevision,
+      ),
   };
 }
 
@@ -78,6 +113,24 @@ export function startApi(
     auth,
     publicChangelog: {
       reader: createPostgresPublicChangelogReader(pool),
+    },
+    adminChangelog: {
+      auth,
+      service: createPostgresAdminChangelogService(pool),
+      allowedOrigins: [
+        authConfig.baseUrl.origin,
+        ...authConfig.trustedOrigins,
+      ],
+      onUnexpectedError: (error, requestId, httpRoute) =>
+        logger.error({
+          eventName: "admin.changelog.request_failed",
+          message: "Admin changelog request failed",
+          operation: "admin.changelog",
+          outcome: "failure",
+          error,
+          httpRoute,
+          requestId,
+        }),
     },
     ...(runtimeOptions.applicationServices === undefined ? {} : {
       v1: {

@@ -1,3 +1,9 @@
+export { createAdminChangelogRoutes } from "./admin_changelog.ts";
+export type {
+  AdminChangelogRouteDependencies,
+  AdminChangelogService,
+} from "./admin_changelog.ts";
+
 export { createPublicChangelogRoutes } from "./changelog.ts";
 export type {
   PublicChangelogReader,

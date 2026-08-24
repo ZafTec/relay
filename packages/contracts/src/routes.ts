@@ -24,6 +24,10 @@ export const HTTP_PATHS: Readonly<{
   events: "/api/v1/events";
   changelog: "/api/v1/changelog";
   changelogEntry: "/api/v1/changelog/:slug";
+  adminChangelog: "/api/v1/admin/changelog";
+  adminChangelogRelease: "/api/v1/admin/changelog/:releaseId";
+  adminChangelogPublish: "/api/v1/admin/changelog/:releaseId/publish";
+  adminChangelogUnpublish: "/api/v1/admin/changelog/:releaseId/unpublish";
   publicShareTemplate: "/s/:token";
 }> = Object.freeze({
   tools: "/api/v1/tools",
@@ -40,6 +44,10 @@ export const HTTP_PATHS: Readonly<{
   events: "/api/v1/events",
   changelog: "/api/v1/changelog",
   changelogEntry: "/api/v1/changelog/:slug",
+  adminChangelog: "/api/v1/admin/changelog",
+  adminChangelogRelease: "/api/v1/admin/changelog/:releaseId",
+  adminChangelogPublish: "/api/v1/admin/changelog/:releaseId/publish",
+  adminChangelogUnpublish: "/api/v1/admin/changelog/:releaseId/unpublish",
   publicShareTemplate: "/s/:token",
 });
 
@@ -49,6 +57,10 @@ export function runPath(runId: string): string {
 
 export function changelogEntryPath(slug: string): string {
   return `${HTTP_PATHS.changelog}/${encodeURIComponent(slug)}`;
+}
+
+export function adminChangelogReleasePath(releaseId: string): string {
+  return `${HTTP_PATHS.adminChangelog}/${encodeURIComponent(releaseId)}`;
 }
 
 export function publicSharePath(token: string): string {

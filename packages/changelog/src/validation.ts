@@ -16,6 +16,8 @@ const SAFE_HTTPS_AUTHORITY_PATTERN =
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const POSTGRES_INTEGER_MAX = 2_147_483_647;
+const POSTGRES_BIGINT_MAX = "9223372036854775807";
 
 function hasUnsafeUrlInput(value: string): boolean {
   return value.includes("\\") || [...value].some((character) => {
@@ -100,9 +102,12 @@ function normalizeItem(
   if (!(CHANGELOG_CATEGORIES as readonly string[]).includes(item.category)) {
     throw new TypeError(`items[${index}].category is invalid`);
   }
-  if (!Number.isSafeInteger(item.sortOrder) || item.sortOrder < 0) {
+  if (
+    !Number.isSafeInteger(item.sortOrder) || item.sortOrder < 0 ||
+    item.sortOrder > POSTGRES_INTEGER_MAX
+  ) {
     throw new TypeError(
-      `items[${index}].sortOrder must be a non-negative safe integer`,
+      `items[${index}].sortOrder must be an integer from 0 through ${POSTGRES_INTEGER_MAX}`,
     );
   }
   return {
@@ -256,15 +261,27 @@ export function normalizeMutationContext(
 }
 
 export function positiveIntegerString(value: string, field: string): string {
-  if (!/^[1-9][0-9]*$/u.test(value)) {
-    throw new TypeError(`${field} must be a positive integer string`);
+  if (
+    !/^[1-9][0-9]*$/u.test(value) ||
+    value.length > POSTGRES_BIGINT_MAX.length ||
+    (value.length === POSTGRES_BIGINT_MAX.length &&
+      value > POSTGRES_BIGINT_MAX)
+  ) {
+    throw new TypeError(
+      `${field} must be a positive PostgreSQL bigint string`,
+    );
   }
   return value;
 }
 
 export function positiveRevision(value: number, field = "revision"): number {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new TypeError(`${field} must be a positive safe integer`);
+  if (
+    !Number.isSafeInteger(value) || value <= 0 ||
+    value > POSTGRES_INTEGER_MAX
+  ) {
+    throw new TypeError(
+      `${field} must be an integer from 1 through ${POSTGRES_INTEGER_MAX}`,
+    );
   }
   return value;
 }

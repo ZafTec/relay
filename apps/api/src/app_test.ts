@@ -1,6 +1,11 @@
 import { assertEquals } from "@std/assert";
 import type { Auth } from "@relay/auth";
 import {
+  adminChangelogReleasePath,
+  errorEnvelopeSchema,
+  HTTP_PATHS,
+} from "@relay/contracts";
+import {
   createJsonLogger,
   type LogRecord,
   type TelemetryAttributes,
@@ -10,7 +15,10 @@ import {
   createApp,
   type RelayMcpHttpHandler,
 } from "./app.ts";
-import type { PublicChangelogReader } from "./routes/mod.ts";
+import type {
+  AdminChangelogService,
+  PublicChangelogReader,
+} from "./routes/mod.ts";
 import {
   AUTHENTICATED_IDENTITY,
   createStubServices,
@@ -174,6 +182,81 @@ Deno.test("public changelog routes mount independently of application services",
 
   assertEquals(response.status, 200);
   assertEquals(await response.json(), { entries: [], nextCursor: null });
+});
+
+Deno.test("admin changelog routes mount independently of application services", async () => {
+  const auth = {
+    api: {
+      getSession: () =>
+        Promise.resolve({
+          session: {
+            id: "session-admin-0001",
+            userId: "user-admin-0001",
+            createdAt: new Date("2026-08-25T10:00:00.000Z"),
+          },
+          user: {
+            id: "user-admin-0001",
+            email: "admin@relay.test",
+            name: "Relay Admin",
+          },
+        }),
+    },
+  } as unknown as Auth;
+  const service: AdminChangelogService = {
+    list: () => Promise.resolve({ kind: "ok", value: [] }),
+    get: () => Promise.resolve({ kind: "not_found" }),
+    create: () => Promise.resolve({ kind: "denied", replayed: false }),
+    revise: () => Promise.resolve({ kind: "denied", replayed: false }),
+    publish: () => Promise.resolve({ kind: "denied", replayed: false }),
+    unpublish: () => Promise.resolve({ kind: "denied", replayed: false }),
+  };
+  const app = createApp(config, {
+    publicChangelog: {
+      reader: {
+        list: () => Promise.resolve({ entries: [], nextCursor: null }),
+        getBySlug: () => Promise.resolve(null),
+      },
+    },
+    adminChangelog: {
+      auth,
+      service,
+      allowedOrigins: ["https://console.relay.test"],
+    },
+    v1: {
+      services: createStubServices(),
+      resolveIdentity: AUTHENTICATED_IDENTITY,
+    },
+  });
+  const response = await app.request(HTTP_PATHS.adminChangelog);
+
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), { releases: [] });
+  assertEquals(response.headers.get("cache-control"), "no-store");
+  assertEquals(response.headers.get("x-content-type-options"), "nosniff");
+  assertEquals(response.headers.has("x-request-id"), true);
+  assertEquals((await app.request("/health/live")).status, 200);
+  assertEquals((await app.request("/api/v1/changelog")).status, 200);
+  assertEquals((await app.request("/api/v1/tools")).status, 200);
+
+  for (
+    const request of [
+      new Request(`http://localhost${adminChangelogReleasePath("42")}`, {
+        method: "DELETE",
+      }),
+      new Request(
+        `http://localhost${adminChangelogReleasePath("42")}/revisions`,
+      ),
+    ]
+  ) {
+    const unsupported = await app.request(request);
+    assertEquals(unsupported.status, 404);
+    assertEquals(
+      errorEnvelopeSchema.parse(await unsupported.json()).error.code,
+      "not_found",
+    );
+    assertEquals(unsupported.headers.get("cache-control"), "no-store");
+    assertEquals(unsupported.headers.has("x-request-id"), true);
+  }
 });
 
 Deno.test("exact OAuth metadata aliases are forwarded to Better Auth", async () => {

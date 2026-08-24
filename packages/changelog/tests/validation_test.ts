@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { assertIdempotencyKey } from "../src/index.ts";
 import {
   assertPublishableDraft,
   isValidSemver,
   normalizeChangelogDraft,
   normalizeLegalDocument,
+  positiveIntegerString,
+  positiveRevision,
 } from "../src/validation.ts";
 
 Deno.test("changelog normalization is bounded and deterministically shaped", () => {
@@ -111,6 +114,39 @@ Deno.test("changelog validation rejects duplicate ordering and partial SHAs", ()
         ],
       }),
     /sortOrder values must be unique/,
+  );
+});
+
+Deno.test("the package exports idempotency-key validation", () => {
+  assert.doesNotThrow(() => assertIdempotencyKey("release-request-0001"));
+  assert.throws(() => assertIdempotencyKey("short"), /16-128/);
+});
+
+Deno.test("PostgreSQL integer boundaries are enforced before queries", () => {
+  assert.equal(
+    positiveIntegerString("9223372036854775807", "releaseId"),
+    "9223372036854775807",
+  );
+  assert.throws(
+    () => positiveIntegerString("9223372036854775808", "releaseId"),
+    /PostgreSQL bigint/,
+  );
+  assert.equal(positiveRevision(2_147_483_647), 2_147_483_647);
+  assert.throws(() => positiveRevision(2_147_483_648), /2147483647/);
+  assert.throws(
+    () =>
+      normalizeChangelogDraft({
+        version: "0.4.0",
+        slug: "release-0-4-0",
+        title: "Release",
+        items: [{
+          category: "added",
+          title: "Overflow",
+          description: "The order is outside PostgreSQL integer range.",
+          sortOrder: 2_147_483_648,
+        }],
+      }),
+    /2147483647/,
   );
 });
 

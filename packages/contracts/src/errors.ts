@@ -1,4 +1,5 @@
 import {
+  arrayValue,
   booleanValue,
   type ContractSchema,
   defineContractSchema,
@@ -16,10 +17,13 @@ import {
   safeCodeParser,
   toolKeyParser,
 } from "./identifiers.ts";
+import { CHANGELOG_PUBLISHABILITY_REASONS } from "./changelog.ts";
 
 export const ERROR_CODES = [
   "invalid_request",
   "authentication_required",
+  "authorization_denied",
+  "reauthentication_required",
   "not_found",
   "idempotency_conflict",
   "not_entitled",
@@ -43,8 +47,12 @@ export interface PublicErrorDetails {
     | "run"
     | "artifact"
     | "upload"
-    | "share_link";
+    | "share_link"
+    | "changelog_release";
   readonly reason?: string;
+  readonly actualRevision?: number;
+  readonly reasons?:
+    readonly (typeof CHANGELOG_PUBLISHABILITY_REASONS)[number][];
   readonly scope?: "global_tool" | "workspace_total" | "workspace_tool";
   readonly metric?: string;
   readonly unit?: string;
@@ -73,8 +81,10 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const RAW_URL_PATTERN = /\b[a-z][a-z0-9+.-]*:\/\//i;
 
 const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly string[]>> = {
-  invalid_request: ["field", "reason"],
+  invalid_request: ["field", "reason", "actualRevision", "reasons"],
   authentication_required: [],
+  authorization_denied: [],
+  reauthentication_required: [],
   not_found: ["resource"],
   idempotency_conflict: [],
   not_entitled: ["metric"],
@@ -105,7 +115,7 @@ function errorDetails(
     maxBytes: 16 * 1024,
   });
   const object = strictObject(safe, path, ERROR_DETAIL_KEYS[code]);
-  const result: Record<string, string> = {};
+  const result: Record<string, unknown> = {};
   for (const key of ERROR_DETAIL_KEYS[code]) {
     if (!Object.hasOwn(object, key)) continue;
     const itemPath = `${path}.${key}`;
@@ -121,6 +131,7 @@ function errorDetails(
             "artifact",
             "upload",
             "share_link",
+            "changelog_release",
           ] as const,
         );
         break;
@@ -150,6 +161,33 @@ function errorDetails(
       case "toolKey":
         result[key] = toolKeyParser(object[key], itemPath);
         break;
+      case "actualRevision":
+        result[key] = integerValue(object[key], itemPath, {
+          minimum: 1,
+          maximum: 2_147_483_647,
+        });
+        break;
+      case "reasons": {
+        const reasons = arrayValue(
+          object[key],
+          itemPath,
+          (item, reasonPath) =>
+            enumValue(item, reasonPath, CHANGELOG_PUBLISHABILITY_REASONS),
+          {
+            minItems: 1,
+            maxItems: CHANGELOG_PUBLISHABILITY_REASONS.length,
+          },
+        );
+        if (new Set(reasons).size !== reasons.length) {
+          validationError(
+            itemPath,
+            "invalid_value",
+            "must not contain duplicates",
+          );
+        }
+        result[key] = reasons;
+        break;
+      }
       case "field":
         result[key] = stringValue(object[key], itemPath, {
           minLength: 1,
@@ -158,7 +196,7 @@ function errorDetails(
         break;
     }
   }
-  return result;
+  return result as PublicErrorDetails;
 }
 
 export const publicErrorSchema: ContractSchema<PublicError> =
@@ -192,9 +230,25 @@ export const publicErrorSchema: ContractSchema<PublicError> =
                 "artifact",
                 "upload",
                 "share_link",
+                "changelog_release",
               ],
             },
             reason: { type: "string", minLength: 1, maxLength: 128 },
+            actualRevision: {
+              type: "integer",
+              minimum: 1,
+              maximum: 2_147_483_647,
+            },
+            reasons: {
+              type: "array",
+              minItems: 1,
+              maxItems: CHANGELOG_PUBLISHABILITY_REASONS.length,
+              uniqueItems: true,
+              items: {
+                type: "string",
+                enum: CHANGELOG_PUBLISHABILITY_REASONS,
+              },
+            },
             scope: {
               enum: ["global_tool", "workspace_total", "workspace_tool"],
             },

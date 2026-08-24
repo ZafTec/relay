@@ -12,6 +12,7 @@ export {
   encodePublicChangelogCursor,
 } from "./cursor.ts";
 export {
+  assertIdempotencyKey,
   canonicalJson,
   createMutationArtifacts,
   GovernanceIdempotencyConflictError,

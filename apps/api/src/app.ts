@@ -11,6 +11,8 @@ import {
 } from "@relay/observability";
 import type { RelayMcpHttpHandler } from "./http/mcp.ts";
 import {
+  type AdminChangelogRouteDependencies,
+  createAdminChangelogRoutes,
   createPublicChangelogRoutes,
   createV1Routes,
   type PublicChangelogRouteDependencies,
@@ -40,6 +42,8 @@ export interface AppDependencies {
   readonly auth?: Auth;
   /** Public, published-only changelog reads. */
   readonly publicChangelog?: PublicChangelogRouteDependencies;
+  /** Cookie-authenticated superadmin changelog management. */
+  readonly adminChangelog?: AdminChangelogRouteDependencies;
   /** Versioned HTTP resources and workspace event streaming. */
   readonly v1?: V1RouteDependencies;
   /** OAuth-protected MCP Streamable HTTP boundary. */
@@ -136,6 +140,10 @@ export function createApp(
 
   if (dependencies.publicChangelog) {
     app.route("/", createPublicChangelogRoutes(dependencies.publicChangelog));
+  }
+
+  if (dependencies.adminChangelog) {
+    app.route("/", createAdminChangelogRoutes(dependencies.adminChangelog));
   }
 
   if (dependencies.v1) {
