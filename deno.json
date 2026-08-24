@@ -13,6 +13,7 @@
     "./packages/contracts",
     "./packages/database",
     "./packages/metering",
+    "./packages/mcp",
     "./packages/observability",
     "./packages/queue",
     "./packages/scheduler",

@@ -10,6 +10,7 @@ import {
   requireMeteredAdmissionUsagePort,
   RunAdmissionAdapter,
 } from "./admission.ts";
+import { createPostgresRunService } from "./factory.ts";
 
 Deno.test("run admission requires both handler and metering dependencies", () => {
   const pool = {} as DatabasePool;
@@ -91,4 +92,54 @@ Deno.test("artifact command adapter keeps bytes outside upload JSON", async () =
   );
   assertEquals(result, { kind: "quota_exceeded" });
   assertEquals(Object.hasOwn(received as object, "bytes"), false);
+});
+
+Deno.test("run admission pins an adapter-supplied tool version", async () => {
+  const calls: Array<{ readonly text: string; readonly params: unknown[] }> =
+    [];
+  const pool = {
+    query<Row>(text: string, params: unknown[] = []) {
+      calls.push({ text, params });
+      return Promise.resolve({
+        rows: [{ member: true, tool_version_id: null }] as Row[],
+      });
+    },
+  } as unknown as DatabasePool;
+  const handlers = {
+    get: () => undefined,
+    isCompatible: () => false,
+  } as unknown as HandlerRegistry;
+  const usage: AdmissionUsagePort = {
+    quote: () => Promise.resolve({ estimatedCostUnits: 1, policyKey: "test" }),
+    reserve: () => Promise.resolve("reservation_test"),
+  };
+  const service = createPostgresRunService({
+    pool,
+    handlers,
+    admissionUsage: usage,
+    admissionDeadlineMs: 60_000,
+    runDeadlineMs: 300_000,
+  });
+  const expectedToolVersionId = "tver_0123456789abcdef0123456789abcdef";
+
+  assertEquals(
+    await service.create(
+      { workspaceId: "workspace", actorUserId: "user" },
+      { toolKey: "image.generate", input: { prompt: "mountain" } },
+      "mcp-test-idempotency",
+      expectedToolVersionId,
+    ),
+    { kind: "tool_unavailable" },
+  );
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].params, [
+    "workspace",
+    "user",
+    "image.generate",
+    expectedToolVersionId,
+  ]);
+  assertEquals(
+    calls[0].text.includes("tool.active_version_id = $4"),
+    true,
+  );
 });

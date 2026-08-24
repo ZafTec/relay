@@ -54,6 +54,7 @@ export interface RunAdmissionApplicationService {
     context: WorkspaceActorContext,
     request: CreateRunRequest,
     idempotencyKey: string,
+    expectedToolVersionId?: string,
   ): Promise<CreateRunResult>;
 }
 

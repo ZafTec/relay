@@ -111,10 +111,17 @@ export class RunAdmissionAdapter implements RunAdmissionApplicationService {
     rawContext: WorkspaceActorContext,
     rawRequest: CreateRunRequest,
     rawIdempotencyKey: string,
+    expectedToolVersionId?: string,
   ): Promise<CreateRunResult> {
     const context = validateWorkspaceActorContext(rawContext);
     const request = createRunRequestSchema.parse(rawRequest);
     const idempotencyKey = validateIdempotencyKey(rawIdempotencyKey);
+    if (
+      expectedToolVersionId !== undefined &&
+      !PUBLIC_ID_PATTERNS.toolVersion.test(expectedToolVersionId)
+    ) {
+      throw new TypeError("expectedToolVersionId has an invalid format");
+    }
 
     // Resolve the public key only after proving current membership. A missing
     // workspace and an inaccessible workspace are intentionally indistinguishable.
@@ -133,12 +140,18 @@ export class RunAdmissionAdapter implements RunAdmissionApplicationService {
              join relay.tool_versions version
                on version.id = tool.active_version_id
             where tool.key = $3
+              and ($4::text is null or tool.active_version_id = $4)
               and tool.visibility = 'public'
               and tool.lifecycle in ('published', 'deprecated')
               and version.published_at is not null
               and version.retired_at is null
          ) as tool_version_id`,
-      [context.workspaceId, context.actorUserId, request.toolKey],
+      [
+        context.workspaceId,
+        context.actorUserId,
+        request.toolKey,
+        expectedToolVersionId ?? null,
+      ],
     );
     const resolved = resolution.rows[0];
     if (resolved?.member !== true) return { kind: "not_found" };

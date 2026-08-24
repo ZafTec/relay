@@ -782,6 +782,14 @@
           "npm:@better-auth/core@1.7.1"
         ]
       },
+      "packages/mcp": {
+        "dependencies": [
+          "jsr:@std/assert@^1.0.19",
+          "npm:@modelcontextprotocol/client@2.0.0",
+          "npm:@modelcontextprotocol/server@2.0.0",
+          "npm:zod@4.4.3"
+        ]
+      },
       "packages/metering": {
         "dependencies": [
           "jsr:@std/assert@^1.0.19",

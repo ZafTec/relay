@@ -192,6 +192,9 @@ export type {
   WorkspaceEventType,
 } from "./events.ts";
 
+export { RELAY_MCP_RESOURCE_SCOPES } from "./mcp.ts";
+export type { RelayMcpResourceScope } from "./mcp.ts";
+
 export interface BuildInfo {
   readonly version: string;
   readonly revision: string;

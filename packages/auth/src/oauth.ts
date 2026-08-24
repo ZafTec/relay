@@ -1,23 +1,15 @@
 import type { McpOptions } from "@better-auth/mcp";
 import { APIError } from "better-auth/api";
+import { RELAY_MCP_RESOURCE_SCOPES } from "@relay/contracts";
 import { getMembership, type Queryable } from "./authorization.ts";
+
+export { RELAY_MCP_RESOURCE_SCOPES } from "@relay/contracts";
 
 export const RELAY_AUTHORIZATION_SCOPES = [
   "openid",
   "profile",
   "email",
   "offline_access",
-] as const;
-
-export const RELAY_MCP_RESOURCE_SCOPES = [
-  "tools:read",
-  "tools:execute",
-  "runs:read",
-  "runs:cancel",
-  "artifacts:read",
-  "artifacts:write",
-  "artifacts:share",
-  "usage:read",
 ] as const;
 
 export const RELAY_OAUTH_SCOPES = [

@@ -71,8 +71,14 @@ export function createPostgresRunService(
       context: WorkspaceActorContext,
       request: CreateRunRequest,
       idempotencyKey: string,
+      expectedToolVersionId?: string,
     ): Promise<CreateRunResult> {
-      return admission.create(context, request, idempotencyKey);
+      return admission.create(
+        context,
+        request,
+        idempotencyKey,
+        expectedToolVersionId,
+      );
     },
     list(
       context: WorkspaceActorContext,
