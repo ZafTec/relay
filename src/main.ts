@@ -1,5 +1,5 @@
 import { startApi } from "../apps/api/src/server.ts";
-import { startWorker } from "@relay/worker";
+import { createExecutionHandlerRegistry, startWorker } from "@relay/worker";
 import { loadBuildInfo, loadDatabaseConfig } from "@relay/config";
 import {
   checkDatabaseHealth,
@@ -18,9 +18,11 @@ switch (service) {
     await server.finished;
     break;
   }
-  case "worker":
-    await startWorker();
+  case "worker": {
+    const handlers = createExecutionHandlerRegistry();
+    await startWorker(undefined, { handlerRegistry: handlers });
     break;
+  }
   case "migrate": {
     if (subcommand !== "up" && subcommand !== "status") {
       console.error("Usage: relay migrate <up|status>");

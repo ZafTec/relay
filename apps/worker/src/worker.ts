@@ -8,18 +8,22 @@ import {
   type ExecutionLease,
 } from "@relay/capacity";
 import {
+  loadSchedulingClassProfiles,
+  WeightedFairScheduler,
+} from "@relay/scheduler";
+import {
   type AcquiredCapacityLease,
   createExecutionWorker,
   createRedisConnection,
   type DurableCapacityLease,
   type ExecutionCapacityController,
-  type ExecutionHandler,
   executionOutboxAction,
   ExecutionProcessor,
   ExecutionQueueRegistry,
+  ExecutionSchedulerBridge,
   expireQueuedJobs,
   listEnabledCapacityPoolKeys,
-  reconcileLostTickets,
+  MAX_SCHEDULER_COST_UNITS,
   reconcileQueueCounters,
   reconcileRedisReset,
   recoverExpiredJobLeases,
@@ -27,6 +31,11 @@ import {
   RedisDispatchGate,
   relayOutboxBatch,
 } from "@relay/queue";
+import {
+  createExecutionHandlerRegistry,
+  createRegistryBackedExecutionHandler,
+  type ExecutionHandlerRegistry,
+} from "./handlers.ts";
 
 const EXECUTION_OUTBOX_EVENTS = [
   "job.ready",
@@ -36,8 +45,7 @@ const EXECUTION_OUTBOX_EVENTS = [
 ] as const;
 
 export interface WorkerRuntimeOptions {
-  /** Required until a real provider adapter is composed by the application. */
-  readonly executionHandler?: ExecutionHandler;
+  readonly handlerRegistry?: ExecutionHandlerRegistry;
   readonly signal?: AbortSignal;
   readonly installSignalHandlers?: boolean;
   readonly instanceId?: string;
@@ -58,11 +66,18 @@ export interface WorkerRuntimeOptions {
   readonly shutdownDeadlineMs?: number;
   readonly reconciliationLockMs?: number;
   readonly redisResetCooldownMs?: number;
+  readonly schedulerPollIntervalMs?: number;
+  readonly schedulerDispatchLeaseMs?: number;
+  readonly schedulerDispatchBatchSize?: number;
+  readonly schedulerMaxCostUnits?: number;
+  readonly schedulerDeficitCapUnits?: number;
+  readonly bullmqWaitingLimitPerPool?: number;
+  readonly schedulerBufferRetryMs?: number;
   readonly log?: (record: Readonly<Record<string, unknown>>) => void;
 }
 
 interface ResolvedWorkerOptions {
-  readonly executionHandler: ExecutionHandler;
+  readonly handlerRegistry: ExecutionHandlerRegistry;
   readonly signal?: AbortSignal;
   readonly installSignalHandlers: boolean;
   readonly instanceId: string;
@@ -83,24 +98,30 @@ interface ResolvedWorkerOptions {
   readonly shutdownDeadlineMs: number;
   readonly reconciliationLockMs: number;
   readonly redisResetCooldownMs: number;
+  readonly schedulerPollIntervalMs: number;
+  readonly schedulerDispatchLeaseMs: number;
+  readonly schedulerDispatchBatchSize: number;
+  readonly schedulerMaxCostUnits: number;
+  readonly schedulerDeficitCapUnits: number;
+  readonly bullmqWaitingLimitPerPool: number;
+  readonly schedulerBufferRetryMs: number;
   readonly log: (record: Readonly<Record<string, unknown>>) => void;
 }
 
 function resolveOptions(options: WorkerRuntimeOptions): ResolvedWorkerOptions {
-  if (options.executionHandler === undefined) {
-    throw new Error(
-      "Worker executionHandler is required; no fake production provider is installed",
-    );
-  }
   const environment = options.environment ?? "development";
+  const concurrency = options.concurrency ?? 1;
+  const schedulerMaxCostUnits = options.schedulerMaxCostUnits ??
+    MAX_SCHEDULER_COST_UNITS;
   return {
-    executionHandler: options.executionHandler,
+    handlerRegistry: options.handlerRegistry ??
+      createExecutionHandlerRegistry(),
     signal: options.signal,
     installSignalHandlers: options.installSignalHandlers ?? true,
     instanceId: options.instanceId ?? `worker-${crypto.randomUUID()}`,
     environment,
     queuePrefix: options.queuePrefix ?? `relay:${environment}:bullmq`,
-    concurrency: options.concurrency ?? 1,
+    concurrency,
     leaseDurationMs: options.leaseDurationMs ?? 30_000,
     heartbeatIntervalMs: options.heartbeatIntervalMs ?? 10_000,
     relayPollIntervalMs: options.relayPollIntervalMs ?? 250,
@@ -116,6 +137,16 @@ function resolveOptions(options: WorkerRuntimeOptions): ResolvedWorkerOptions {
     reconciliationLockMs: options.reconciliationLockMs ?? 30_000,
     redisResetCooldownMs: options.redisResetCooldownMs ??
       Math.max(options.leaseDurationMs ?? 30_000, 60_000),
+    schedulerPollIntervalMs: options.schedulerPollIntervalMs ?? 50,
+    schedulerDispatchLeaseMs: options.schedulerDispatchLeaseMs ?? 30_000,
+    schedulerDispatchBatchSize: options.schedulerDispatchBatchSize ??
+      Math.max(1, concurrency * 2),
+    schedulerMaxCostUnits,
+    schedulerDeficitCapUnits: options.schedulerDeficitCapUnits ??
+      schedulerMaxCostUnits,
+    bullmqWaitingLimitPerPool: options.bullmqWaitingLimitPerPool ??
+      Math.max(1, concurrency * 2),
+    schedulerBufferRetryMs: options.schedulerBufferRetryMs ?? 100,
     log: options.log ?? ((record) => console.log(JSON.stringify(record))),
   };
 }
@@ -416,6 +447,10 @@ export async function startWorker(
     config.redis,
     `${options.instanceId}-capacity`,
   );
+  const schedulerRedis = createRedisConnection(
+    config.redis,
+    `${options.instanceId}-scheduler`,
+  );
   const cancellationRedis = createRedisConnection(
     config.redis,
     `${options.instanceId}-cancellation-subscriber`,
@@ -430,6 +465,12 @@ export async function startWorker(
     env: options.environment,
     leaseDurationMs: options.leaseDurationMs,
   });
+  const scheduler = new WeightedFairScheduler(schedulerRedis, {
+    env: options.environment,
+    dispatchLeaseDurationMs: options.schedulerDispatchLeaseMs,
+    maxCostUnits: options.schedulerMaxCostUnits,
+    idleDeficitCapUnits: options.schedulerDeficitCapUnits,
+  });
   const processor = new ExecutionProcessor(
     pool,
     new CoordinatorAdapter(
@@ -438,7 +479,7 @@ export async function startWorker(
       options.instanceId,
     ),
     gate,
-    options.executionHandler,
+    createRegistryBackedExecutionHandler(pool, options.handlerRegistry),
     {
       leaseOwner: options.instanceId,
       leaseDurationMs: options.leaseDurationMs,
@@ -452,6 +493,19 @@ export async function startWorker(
       maxRetryWaitMs: options.maxRetryWaitMs,
     },
   );
+  const schedulerBridge = new ExecutionSchedulerBridge(
+    pool,
+    schedulerRedis,
+    scheduler,
+    queues,
+    {
+      environment: options.environment,
+      maxBullmqWaitingPerPool: options.bullmqWaitingLimitPerPool,
+      maxDispatchesPerIteration: options.schedulerDispatchBatchSize,
+      bufferRetryDelayMs: options.schedulerBufferRetryMs,
+      poolBufferLockDurationMs: options.schedulerDispatchLeaseMs,
+    },
+  );
   const workerRecords = new Map<string, WorkerRecord>();
   const loopTasks: Promise<void>[] = [];
   cancellationRedis.on("message", (channel, jobId) => {
@@ -459,8 +513,18 @@ export async function startWorker(
   });
 
   const syncConsumers = async () => {
+    if (options.handlerRegistry.keys.size === 0) {
+      await Promise.allSettled(
+        [...workerRecords.values()].map((record) => record.worker.pause(true)),
+      );
+      return;
+    }
     for (const capacityPoolKey of await listEnabledCapacityPoolKeys(pool)) {
-      if (workerRecords.has(capacityPoolKey)) continue;
+      const existing = workerRecords.get(capacityPoolKey);
+      if (existing !== undefined) {
+        await existing.worker.resume();
+        continue;
+      }
       const connection = createRedisConnection(
         config.redis,
         `${options.instanceId}-consumer-${capacityPoolKey}`,
@@ -525,6 +589,9 @@ export async function startWorker(
 
   const maintain = async () => {
     await expireQueuedJobs(pool);
+    await scheduler.configureProfiles(
+      await loadSchedulingClassProfiles(pool),
+    );
     if (!(await gate.isReady())) {
       await reconcileRedisReset(
         pool,
@@ -542,7 +609,7 @@ export async function startWorker(
               options.environment,
               lease,
             ),
-          hasRunnableTicket: (payload) => queues.hasRunnableTicket(payload),
+          rebuildScheduler: () => schedulerBridge.rebuildAll(),
         },
         {
           owner: options.instanceId,
@@ -560,10 +627,7 @@ export async function startWorker(
       );
       await releaseRecoveredLeases(stalled.capacityLeasesToRelease);
       await reconcileQueueCounters(pool);
-      await reconcileLostTickets(
-        pool,
-        (payload) => queues.hasRunnableTicket(payload),
-      );
+      await schedulerBridge.rebuildAll();
     }
     await syncConsumers();
   };
@@ -573,6 +637,7 @@ export async function startWorker(
       pool.query("select 1"),
       producerRedis.ping(),
       capacityRedis.ping(),
+      schedulerRedis.ping(),
       cancellationRedis.ping(),
     ]);
     await cancellationRedis.subscribe(cancellationChannel);
@@ -593,7 +658,7 @@ export async function startWorker(
                     action.payload.domainJobId,
                   );
                 }
-                await queues.publishOutboxEvent(event);
+                await schedulerBridge.handleOutboxEvent(event);
               },
               {
                 leaseOwner: options.instanceId,
@@ -616,6 +681,38 @@ export async function startWorker(
           });
         }
         await wait(options.relayPollIntervalMs, lifecycle.signal);
+      }
+    })());
+
+    loopTasks.push((async () => {
+      while (!lifecycle.signal.aborted) {
+        try {
+          if (
+            options.handlerRegistry.keys.size > 0 &&
+            await gate.isReady()
+          ) {
+            const dispatch = await schedulerBridge.dispatchBatch(
+              options.instanceId,
+            );
+            if (dispatch.failed > 0 || dispatch.lostLease > 0) {
+              options.log({
+                level: "warn",
+                service: "worker",
+                message:
+                  "Scheduler dispatch completed with recoverable failures",
+                ...dispatch,
+              });
+            }
+          }
+        } catch (error) {
+          options.log({
+            level: "error",
+            service: "worker",
+            message: "Scheduler dispatch iteration failed",
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        await wait(options.schedulerPollIntervalMs, lifecycle.signal);
       }
     })());
 
@@ -697,6 +794,7 @@ export async function startWorker(
         Promise.allSettled([
           closeRedis(producerRedis),
           closeRedis(capacityRedis),
+          closeRedis(schedulerRedis),
           closeRedis(cancellationRedis),
         ]),
         shutdownDeadlineAt,
@@ -708,6 +806,7 @@ export async function startWorker(
       for (const record of records) record.connection.disconnect(false);
       producerRedis.disconnect(false);
       capacityRedis.disconnect(false);
+      schedulerRedis.disconnect(false);
       cancellationRedis.disconnect(false);
     }
 
@@ -724,4 +823,12 @@ export async function startWorker(
   }
 }
 
+export {
+  createExecutionHandlerRegistry,
+  createRegistryBackedExecutionHandler,
+} from "./handlers.ts";
+export type {
+  ExecutionHandlerRegistry,
+  RegisteredExecutionHandler,
+} from "./handlers.ts";
 export type { DatabasePool };

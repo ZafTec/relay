@@ -2,6 +2,7 @@ import { assertEquals, assertRejects } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import { type AdmitRunInput, admitToolRun } from "./admission.ts";
 import {
+  armSchedulerTicket,
   beginJobAttempt,
   claimJobForDispatch,
   completeJobCancellation,
@@ -22,6 +23,7 @@ import {
   type AdmissibleFixture,
   cleanupAdmissibleFixture,
   createAdmissibleFixture,
+  TEST_USAGE_PORT,
 } from "./test_support.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
@@ -57,19 +59,32 @@ async function admitJob(pool: DatabasePool): Promise<AdmittedJob> {
     createdBy: fixture.createdBy,
     input: { prompt: "a cat" },
     idempotencyKey: unique("idem"),
-    schedulingClass: "standard",
-    schedulingPolicyVersion: 1,
-    estimatedCostUnits: 1,
     admissionDeadlineMs: 60_000,
     runDeadlineMs: 300_000,
   };
-  const result = await admitToolRun(pool, input);
+  const result = await admitToolRun(pool, input, {
+    handlers: fixture.handlers,
+    usage: TEST_USAGE_PORT,
+  });
   if (result.kind !== "admitted") throw new Error("fixture admission failed");
+  const token = schedulerToken(result.jobId, 0);
+  if (await armSchedulerTicket(pool, result.jobId, 0, token) === null) {
+    throw new Error("fixture scheduler token arm failed");
+  }
   return { fixture, jobId: result.jobId, runId: result.runId };
 }
 
+function schedulerToken(jobId: string, dispatchGeneration: number): string {
+  return `scheduler-test.${jobId}.${dispatchGeneration}`;
+}
+
 function ticketFor(jobId: string, dispatchGeneration = 0): ExecutionTicket {
-  return { domainJobId: jobId, dispatchGeneration, policyVersion: 1 };
+  return {
+    domainJobId: jobId,
+    dispatchGeneration,
+    policyVersion: 1,
+    schedulerToken: schedulerToken(jobId, dispatchGeneration),
+  };
 }
 
 async function attachCapacityAndBeginAttempt(
@@ -194,6 +209,44 @@ Deno.test({
 });
 
 Deno.test({
+  name: "BullMQ delivery without the armed scheduler provenance is a no-op",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      const rejected = await claimJobForDispatch(
+        pool,
+        {
+          ...ticketFor(admitted.jobId),
+          schedulerToken: "legacy-publisher-token-0001",
+        },
+        "legacy-worker",
+        30_000,
+      );
+      assertEquals(rejected.kind, "no_op");
+      const job = await pool.query<{ status: string }>(
+        "select status from relay.execution_jobs where id = $1",
+        [admitted.jobId],
+      );
+      assertEquals(job.rows[0].status, "queued");
+
+      const accepted = await claimJobForDispatch(
+        pool,
+        ticketFor(admitted.jobId),
+        "scheduler-worker",
+        30_000,
+      );
+      assertEquals(accepted.kind, "claimed");
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
   name: "redelivering the same ticket after a successful claim is a no-op",
   ignore: !hasDatabase,
   fn: async () => {
@@ -274,6 +327,12 @@ Deno.test({
       assertEquals(staleRedelivery.kind, "no_op");
 
       const freshTicket = ticketFor(jobId, 1);
+      await armSchedulerTicket(
+        pool,
+        jobId,
+        1,
+        freshTicket.schedulerToken,
+      );
       const freshClaim = await claimJobForDispatch(
         pool,
         freshTicket,
@@ -744,9 +803,16 @@ Deno.test({
       assertEquals(job.rows[0].dispatch_generation, 1);
       assertEquals(Number(job.rows[0].lease_epoch), claim.job.leaseEpoch + 1);
       await assertAllCounters(pool, admitted.fixture, 1, 0);
+      const freshTicket = ticketFor(admitted.jobId, 1);
+      await armSchedulerTicket(
+        pool,
+        admitted.jobId,
+        1,
+        freshTicket.schedulerToken,
+      );
       const fresh = await claimJobForDispatch(
         pool,
-        ticketFor(admitted.jobId, 1),
+        freshTicket,
         "worker-redelivery",
         30_000,
       );

@@ -8,6 +8,7 @@ import {
 import {
   dispatchDeduplicationKey,
   type ExecutionOutboxPayload,
+  parseExecutionOutboxPayload,
 } from "./tickets.ts";
 
 const READY_PREFIX = "ready:v2:";
@@ -113,18 +114,28 @@ interface QueuedDispatchDbRow {
   id: string;
   run_id: string;
   dispatch_generation: number;
-  scheduling_policy_version: number | null;
+  scheduling_policy_version: number;
   capacity_pool_key: string;
+  workspace_id: string;
+  scheduling_class: string;
+  estimated_cost_units: string | number;
+  fifo_sequence: string | number;
+  eligible_at: Date;
 }
 
 function queuedPayload(row: QueuedDispatchDbRow): ExecutionOutboxPayload {
-  return {
+  return parseExecutionOutboxPayload({
     domainJobId: row.id,
     runId: row.run_id,
     dispatchGeneration: row.dispatch_generation,
     policyVersion: row.scheduling_policy_version,
     capacityPoolKey: row.capacity_pool_key,
-  };
+    workspaceId: row.workspace_id,
+    classKey: row.scheduling_class,
+    costUnits: Number(row.estimated_cost_units),
+    fifoSequence: Number(row.fifo_sequence),
+    eligibleAtMs: row.eligible_at.getTime(),
+  });
 }
 
 export interface LostTicketReconciliationResult {
@@ -140,7 +151,9 @@ export async function reconcileLostTickets(
 ): Promise<LostTicketReconciliationResult> {
   const { rows } = await pool.query<QueuedDispatchDbRow>(
     `select j.id, j.run_id, j.dispatch_generation,
-            j.scheduling_policy_version, cp.key as capacity_pool_key
+            j.scheduling_policy_version, cp.key as capacity_pool_key,
+            j.workspace_id, j.scheduling_class, j.estimated_cost_units,
+            j.fifo_sequence, j.eligible_at
        from relay.execution_jobs j
        join relay.capacity_pools cp on cp.id = j.capacity_pool_id
       where j.status = 'queued' and j.eligible_at <= now()
@@ -172,7 +185,12 @@ export async function reconcileLostTickets(
                 'runId', j.run_id,
                 'capacityPoolKey', cp.key,
                 'dispatchGeneration', j.dispatch_generation,
-                'policyVersion', j.scheduling_policy_version
+                'policyVersion', j.scheduling_policy_version,
+                'workspaceId', j.workspace_id,
+                'classKey', j.scheduling_class,
+                'costUnits', j.estimated_cost_units,
+                'fifoSequence', j.fifo_sequence,
+                'eligibleAtMs', floor(extract(epoch from j.eligible_at) * 1000)
               ),
               greatest(j.eligible_at, now()), $3
          from relay.execution_jobs j
@@ -301,7 +319,10 @@ export interface RedisResetReconciliationOptions {
 export interface RedisResetReconciliationDependencies {
   restoreCapacityLease(lease: DurableCapacityLease): Promise<void>;
   releaseCapacityLease(lease: DurableCapacityLease): Promise<void>;
-  hasRunnableTicket(payload: ExecutionOutboxPayload): Promise<boolean>;
+  rebuildScheduler(): Promise<{
+    readonly enqueued: number;
+    readonly rearmed: number;
+  }>;
 }
 
 export type RedisResetReconciliationResult =
@@ -309,9 +330,66 @@ export type RedisResetReconciliationResult =
     readonly kind: "reconciled";
     readonly restoredLeases: number;
     readonly recoveredJobs: number;
-    readonly rearmedTickets: number;
+    readonly rebuiltSchedulerJobs: number;
+    readonly rearmedSchedulerJobs: number;
   }
   | { readonly kind: "followed_existing_reconciliation" };
+
+interface ReconciliationHeartbeat {
+  readonly verify: (phase: string) => Promise<void>;
+  readonly stop: () => Promise<void>;
+}
+
+function startReconciliationHeartbeat(
+  gate: RedisDispatchGate,
+  owner: string,
+  leaseDurationMs: number,
+): ReconciliationHeartbeat {
+  let stopped = false;
+  let lost = false;
+  let wake: (() => void) | undefined;
+  const intervalMs = Math.max(1, Math.floor(leaseDurationMs / 3));
+
+  const renew = async (): Promise<void> => {
+    try {
+      if (!(await gate.renew(owner, leaseDurationMs))) lost = true;
+    } catch {
+      lost = true;
+    }
+  };
+
+  const task = (async () => {
+    while (!stopped && !lost) {
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          wake = undefined;
+          resolve();
+        }, intervalMs);
+        wake = () => {
+          clearTimeout(timeout);
+          wake = undefined;
+          resolve();
+        };
+      });
+      if (stopped || lost) break;
+      await renew();
+    }
+  })();
+
+  return {
+    verify: async (phase: string) => {
+      if (!lost) await renew();
+      if (lost) {
+        throw new Error(`Lost Redis reconciliation ownership ${phase}`);
+      }
+    },
+    stop: async () => {
+      stopped = true;
+      wake?.();
+      await task;
+    },
+  };
+}
 
 /**
  * Rebuilds all safety-critical Redis state before setting the shared ready
@@ -331,63 +409,64 @@ export async function reconcileRedisReset(
     throw new Error("Timed out waiting for Redis reconciliation owner");
   }
 
-  const stalled = await recoverExpiredJobLeases(
-    pool,
-    undefined,
-    100,
-    options.retryWaitMs,
+  const heartbeat = startReconciliationHeartbeat(
+    gate,
+    reconciliationOwner,
+    options.lockDurationMs,
   );
-  for (const lease of stalled.capacityLeasesToRelease) {
-    await dependencies.releaseCapacityLease(lease);
-  }
-  const plan = await loadCapacityRehydrationPlan(pool);
-  if (plan.unsafeJobIds.length > 0) {
-    throw new Error(
-      `Cannot safely reconstruct capacity for active jobs: ${
-        plan.unsafeJobIds.join(", ")
-      }`,
+  try {
+    const stalled = await recoverExpiredJobLeases(
+      pool,
+      undefined,
+      100,
+      options.retryWaitMs,
     );
-  }
-  for (const lease of plan.leases) {
-    if (!(await gate.renew(reconciliationOwner, options.lockDurationMs))) {
+    await heartbeat.verify("after expired lease recovery");
+    for (const lease of stalled.capacityLeasesToRelease) {
+      await dependencies.releaseCapacityLease(lease);
+      await heartbeat.verify("during recovered capacity release");
+    }
+
+    const plan = await loadCapacityRehydrationPlan(pool);
+    if (plan.unsafeJobIds.length > 0) {
       throw new Error(
-        "Lost Redis reconciliation ownership during lease restore",
+        `Cannot safely reconstruct capacity for active jobs: ${
+          plan.unsafeJobIds.join(", ")
+        }`,
       );
     }
-    await dependencies.restoreCapacityLease(lease);
-  }
-  if (!(await gate.renew(reconciliationOwner, options.lockDurationMs))) {
-    throw new Error(
-      "Lost Redis reconciliation ownership before durable repair",
-    );
-  }
-  await reconcileQueueCounters(pool);
-  const tickets = await reconcileLostTickets(
-    pool,
-    dependencies.hasRunnableTicket,
-  );
-  if (options.conservativeDelayMs > 0) {
-    if (
-      !(await gate.renew(
-        reconciliationOwner,
-        options.conservativeDelayMs + options.lockDurationMs,
-      ))
-    ) {
-      throw new Error("Lost Redis reconciliation ownership before cooldown");
+    for (const lease of plan.leases) {
+      await dependencies.restoreCapacityLease(lease);
+      await heartbeat.verify("during lease restore");
     }
-    await new Promise((resolve) =>
-      setTimeout(resolve, options.conservativeDelayMs)
-    );
+
+    await heartbeat.verify("before durable repair");
+    await reconcileQueueCounters(pool);
+    await heartbeat.verify("after queue counter repair");
+    const scheduler = await dependencies.rebuildScheduler();
+    await heartbeat.verify("after scheduler rebuild");
+
+    if (options.conservativeDelayMs > 0) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, options.conservativeDelayMs)
+      );
+      await heartbeat.verify("after cooldown");
+    }
+    if (!(await gate.finish(reconciliationOwner))) {
+      throw new Error(
+        "Lost Redis reconciliation ownership before finalization",
+      );
+    }
+    return {
+      kind: "reconciled",
+      restoredLeases: plan.leases.length,
+      recoveredJobs: stalled.recovered + stalled.cancelled + stalled.failed,
+      rebuiltSchedulerJobs: scheduler.enqueued,
+      rearmedSchedulerJobs: scheduler.rearmed,
+    };
+  } finally {
+    await heartbeat.stop();
   }
-  if (!(await gate.finish(reconciliationOwner))) {
-    throw new Error("Lost Redis reconciliation ownership before finalization");
-  }
-  return {
-    kind: "reconciled",
-    restoredLeases: plan.leases.length,
-    recoveredJobs: stalled.recovered + stalled.cancelled + stalled.failed,
-    rearmedTickets: tickets.rearmed,
-  };
 }
 
 export async function listEnabledCapacityPoolKeys(

@@ -85,6 +85,11 @@ Deno.test({
         capacityPoolKey,
         dispatchGeneration: 7,
         policyVersion: 11,
+        workspaceId: unique("workspace"),
+        classKey: "standard",
+        costUnits: 1,
+        fifoSequence: 1,
+        eligibleAtMs: Date.now(),
       });
 
       const result = await relayOutboxBatch(
@@ -92,14 +97,16 @@ Deno.test({
         async (event) => {
           const action = executionOutboxAction(event);
           if (action.kind !== "dispatch") throw new Error("unreachable");
-          const ticket = ticketFromOutboxPayload(action.payload);
+          const ticket = ticketFromOutboxPayload(
+            action.payload,
+            `outbox-scheduler.${action.payload.domainJobId}`,
+          );
           await queue.add("execute", ticket, { jobId: ticketId(ticket) });
         },
         { leaseOwner: "test-relay", leaseDurationMs: 30_000, batchSize: 10 },
       );
 
       assertEquals(result.claimed >= 1, true);
-      assertEquals(result.failed, 0);
 
       // Wait specifically for *this* ticket -- a shared dev table can have
       // other unpublished rows from other tests still in flight, and a

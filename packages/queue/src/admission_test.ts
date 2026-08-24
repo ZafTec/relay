@@ -1,11 +1,16 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
-import { type AdmitRunInput, admitToolRun } from "./admission.ts";
+import pg from "pg";
+import {
+  type AdmitRunInput,
+  admitToolRun as admitToolRunWithDependencies,
+} from "./admission.ts";
 import {
   type AdmissibleFixture,
   cleanupAdmissibleFixture,
   createAdmissibleFixture,
   setQueueLimits,
+  TEST_USAGE_PORT,
 } from "./test_support.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
@@ -50,23 +55,72 @@ function unique(label: string): string {
   return `${label}-${crypto.randomUUID()}`;
 }
 
+async function setSchedulingProfileAsOwner(
+  workspaceId: string,
+  classKey: string,
+): Promise<void> {
+  const ownerUrl = new URL(databaseUrl!);
+  ownerUrl.username = "relay_migrator";
+  ownerUrl.password = "relay_dev_only";
+  const client = new pg.Client({ connectionString: ownerUrl.toString() });
+  await client.connect();
+  try {
+    await client.query("begin");
+    await client.query("set local role relay_owner");
+    await client.query(
+      `update relay.workspace_scheduling_profiles profile
+          set class_key = classes.class_key,
+              policy_version = classes.policy_version,
+              granted_at = now(),
+              expires_at = null
+         from relay.scheduler_classes classes
+        where profile.workspace_id = $1 and classes.class_key = $2`,
+      [workspaceId, classKey],
+    );
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
+const handlersByInput = new WeakMap<
+  AdmitRunInput,
+  AdmissibleFixture["handlers"]
+>();
+
 function baseInput(
   f: AdmissibleFixture,
   overrides: Partial<AdmitRunInput> = {},
 ): AdmitRunInput {
-  return {
+  const input: AdmitRunInput = {
     workspaceId: f.workspaceId,
     toolVersionId: f.toolVersionId,
     createdBy: f.createdBy,
     input: { prompt: "a cat" },
     idempotencyKey: unique("idem"),
-    schedulingClass: "standard",
-    schedulingPolicyVersion: 1,
-    estimatedCostUnits: 1,
     admissionDeadlineMs: 60_000,
     runDeadlineMs: 300_000,
     ...overrides,
   };
+  handlersByInput.set(input, f.handlers);
+  return input;
+}
+
+function admitToolRun(
+  pool: DatabasePool,
+  input: AdmitRunInput,
+) {
+  const handlers = handlersByInput.get(input);
+  if (handlers === undefined) {
+    throw new Error("fixture handler registry missing");
+  }
+  return admitToolRunWithDependencies(pool, input, {
+    handlers,
+    usage: TEST_USAGE_PORT,
+  });
 }
 
 Deno.test({
@@ -206,15 +260,24 @@ Deno.test({
           status: string;
           run_id: string;
           scheduling_class: string;
+          scheduling_policy_version: number;
+          estimated_cost_units: string | number;
+          fifo_sequence: string | number;
           capacity_pool_id: number;
         }
       >(
-        "select status, run_id, scheduling_class, capacity_pool_id from relay.execution_jobs where id = $1",
+        `select status, run_id, scheduling_class,
+                scheduling_policy_version, estimated_cost_units, fifo_sequence,
+                capacity_pool_id
+           from relay.execution_jobs where id = $1`,
         [result.jobId],
       );
       assertEquals(job.rows[0].status, "queued");
       assertEquals(job.rows[0].run_id, result.runId);
       assertEquals(job.rows[0].scheduling_class, "standard");
+      assertEquals(job.rows[0].scheduling_policy_version, 1);
+      assertEquals(Number(job.rows[0].estimated_cost_units), 1);
+      assertEquals(Number(job.rows[0].fifo_sequence) > 0, true);
       assertEquals(Number(job.rows[0].capacity_pool_id), f.capacityPoolId);
 
       const counters = await pool.query<{ queued_count: number }>(
@@ -234,21 +297,56 @@ Deno.test({
 
       const routingDecision = await pool.query<
         {
+          tool_id: string;
+          tool_version_id: string;
+          tool_version_immutable_hash: string;
+          handler_key: string;
+          input_schema_version: number;
+          handler_version: string;
           provider_id: number;
           provider_model_id: number;
+          capacity_pool_id: number;
+          routing_order: number;
+          routing_policy_id: number | null;
+          routing_policy_revision: number | null;
+          routing_policy_immutable_hash: string | null;
           fallback_used: boolean;
+          fallback_reason: string | null;
         }
       >(
-        "select provider_id, provider_model_id, fallback_used from relay.routing_decisions where tool_run_id = $1",
+        `select tool_id, tool_version_id, tool_version_immutable_hash,
+                handler_key, input_schema_version, handler_version,
+                provider_id, provider_model_id, capacity_pool_id, routing_order,
+                routing_policy_id, routing_policy_revision,
+                routing_policy_immutable_hash, fallback_used, fallback_reason
+           from relay.routing_decisions where tool_run_id = $1`,
         [result.runId],
       );
       assertEquals(routingDecision.rows.length, 1);
+      assertEquals(routingDecision.rows[0].tool_id, f.toolId);
+      assertEquals(routingDecision.rows[0].tool_version_id, f.toolVersionId);
+      assertEquals(
+        routingDecision.rows[0].tool_version_immutable_hash.length,
+        64,
+      );
+      assertEquals(routingDecision.rows[0].handler_key, f.handlerKey);
+      assertEquals(routingDecision.rows[0].input_schema_version, 1);
+      assertEquals(routingDecision.rows[0].handler_version, "1");
       assertEquals(Number(routingDecision.rows[0].provider_id), f.providerId);
       assertEquals(
         Number(routingDecision.rows[0].provider_model_id),
         f.providerModelId,
       );
+      assertEquals(
+        Number(routingDecision.rows[0].capacity_pool_id),
+        f.capacityPoolId,
+      );
+      assertEquals(routingDecision.rows[0].routing_order, 1);
+      assertEquals(routingDecision.rows[0].routing_policy_id, null);
+      assertEquals(routingDecision.rows[0].routing_policy_revision, null);
+      assertEquals(routingDecision.rows[0].routing_policy_immutable_hash, null);
       assertEquals(routingDecision.rows[0].fallback_used, false);
+      assertEquals(routingDecision.rows[0].fallback_reason, null);
     } finally {
       if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();
@@ -411,9 +509,9 @@ Deno.test({
       assertEquals(first.kind, "admitted");
 
       // Same workspace, actor, idempotency key, and payload -- but a
-      // different tool version. The durable idempotency scope must
-      // include the tool version, or this request would silently be
-      // treated as a replay of a run against an entirely different tool.
+      // different tool version. Register the second deployed handler so route
+      // validation succeeds and idempotency comparison owns the outcome.
+      f.handlers.register(g.handlerKey);
       const second = await admitToolRun(
         pool,
         baseInput(f, {
@@ -646,7 +744,12 @@ Deno.test({
             runId: string;
             capacityPoolKey: string;
             dispatchGeneration: number;
-            policyVersion: number | null;
+            policyVersion: number;
+            workspaceId: string;
+            classKey: string;
+            costUnits: number;
+            fifoSequence: number;
+            eligibleAtMs: number;
           };
         }
       >(
@@ -658,11 +761,164 @@ Deno.test({
       assertEquals(rows[0].payload.runId, result.runId);
       assertEquals(rows[0].payload.dispatchGeneration, 0);
       assertEquals(rows[0].payload.policyVersion, 1);
+      assertEquals(rows[0].payload.workspaceId, f.workspaceId);
+      assertEquals(rows[0].payload.classKey, "standard");
+      assertEquals(rows[0].payload.costUnits, 1);
+      assertEquals(Number.isSafeInteger(rows[0].payload.fifoSequence), true);
+      assertEquals(Number.isSafeInteger(rows[0].payload.eligibleAtMs), true);
       const capacityPool = await pool.query<{ key: string }>(
         "select key from relay.capacity_pools where id = $1",
         [f.capacityPoolId],
       );
       assertEquals(rows[0].payload.capacityPoolKey, capacityPool.rows[0].key);
+    } finally {
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "admission fails closed when the deployed handler is missing",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(pool);
+      f.handlers.unregister(f.handlerKey);
+      const result = await admitToolRun(pool, baseInput(f));
+      assertEquals(result.kind, "tool_version_unavailable");
+    } finally {
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "database scheduling and usage ports own class, cost, and reservation",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(pool);
+      await setSchedulingProfileAsOwner(f.workspaceId, "paid");
+      const input = baseInput(f);
+      const result = await admitToolRunWithDependencies(pool, input, {
+        handlers: f.handlers,
+        usage: {
+          quote: () =>
+            Promise.resolve({
+              estimatedCostUnits: 3,
+              policyKey: "test-meter-policy:v1",
+            }),
+          reserve: () => Promise.resolve(null),
+        },
+      });
+      assertEquals(result.kind, "admitted");
+      if (result.kind !== "admitted") throw new Error("unreachable");
+
+      const job = await pool.query<{
+        scheduling_class: string;
+        scheduling_policy_version: number;
+        estimated_cost_units: string | number;
+      }>(
+        `select scheduling_class, scheduling_policy_version,
+                estimated_cost_units
+           from relay.execution_jobs where id = $1`,
+        [result.jobId],
+      );
+      assertEquals(job.rows[0].scheduling_class, "paid");
+      assertEquals(job.rows[0].scheduling_policy_version, 1);
+      assertEquals(Number(job.rows[0].estimated_cost_units), 3);
+      const run = await pool.query<{ reservation_id: string | null }>(
+        "select reservation_id from relay.tool_runs where id = $1",
+        [result.runId],
+      );
+      assertEquals(run.rows[0].reservation_id, null);
+    } finally {
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "idempotency hash includes server usage policy without double reservation",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(pool);
+      const input = baseInput(f, { idempotencyKey: unique("idem-usage") });
+      let policyKey = "usage-policy:v1";
+      let reservations = 0;
+      const usage = {
+        quote: () => Promise.resolve({ estimatedCostUnits: 2, policyKey }),
+        reserve: () => {
+          reservations += 1;
+          return Promise.resolve(null);
+        },
+      };
+      const first = await admitToolRunWithDependencies(pool, input, {
+        handlers: f.handlers,
+        usage,
+      });
+      assertEquals(first.kind, "admitted");
+      policyKey = "usage-policy:v2";
+      const second = await admitToolRunWithDependencies(pool, input, {
+        handlers: f.handlers,
+        usage,
+      });
+      assertEquals(second.kind, "idempotency_conflict");
+      assertEquals(reservations, 1);
+    } finally {
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "idempotency hash includes deadline and requested-model behavior",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(pool);
+      const key = unique("idem-policy");
+      const first = await admitToolRun(
+        pool,
+        baseInput(f, {
+          idempotencyKey: key,
+          requestedModelVersion: "model-a",
+          runDeadlineMs: 300_000,
+        }),
+      );
+      assertEquals(first.kind, "admitted");
+      const changedDeadline = await admitToolRun(
+        pool,
+        baseInput(f, {
+          idempotencyKey: key,
+          requestedModelVersion: "model-a",
+          runDeadlineMs: 600_000,
+        }),
+      );
+      assertEquals(changedDeadline.kind, "idempotency_conflict");
+      const changedModel = await admitToolRun(
+        pool,
+        baseInput(f, {
+          idempotencyKey: key,
+          requestedModelVersion: "model-b",
+          runDeadlineMs: 300_000,
+        }),
+      );
+      assertEquals(changedModel.kind, "idempotency_conflict");
     } finally {
       if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();

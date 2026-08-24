@@ -4,6 +4,7 @@ import {
   dispatchDeduplicationKey,
   type ExecutionOutboxPayload,
   type ExecutionTicket,
+  parseExecutionOutboxPayload,
 } from "./tickets.ts";
 import { sanitizeError } from "./safety.ts";
 import {
@@ -37,7 +38,7 @@ export interface ClaimedJob {
   readonly capacityPoolId: string;
   readonly capacityPoolKey: string;
   readonly capacityUnits: number;
-  readonly policyVersion: number | null;
+  readonly policyVersion: number;
   readonly capacityPolicyRevision: number | null;
   readonly capacityLimits: ExecutionCapacityLimits;
   /** Guides resume/inspect behavior after an interrupted or retryable attempt. */
@@ -63,7 +64,7 @@ interface ClaimedJobDbRow {
   tool_version_id: string;
   lease_epoch: string;
   dispatch_generation: number;
-  scheduling_policy_version: number | null;
+  scheduling_policy_version: number;
   tool_id: string;
   tool_key: string;
   capacity_pool_id: string;
@@ -163,11 +164,13 @@ export async function claimJobForDispatch(
                 lease_epoch = j.lease_epoch + 1,
                 lease_owner = $2,
                 lease_expires_at = now() + ($3 || ' milliseconds')::interval,
+                scheduler_ticket_token = null,
                 state_version = j.state_version + 1
            from relay.tool_versions tv, relay.tools t, relay.capacity_pools cp
           where j.id = $1
             and j.dispatch_generation = $4
-            and j.scheduling_policy_version is not distinct from $5
+            and j.scheduling_policy_version = $5
+            and j.scheduler_ticket_token = $6
             and j.status = 'queued'
             and j.eligible_at <= now()
             and (j.run_deadline_at is null or j.run_deadline_at > now())
@@ -197,6 +200,7 @@ export async function claimJobForDispatch(
           leaseDurationMs,
           ticket.dispatchGeneration,
           ticket.policyVersion,
+          ticket.schedulerToken,
         ],
       );
 
@@ -659,22 +663,45 @@ export async function heartbeatJob(
   )).kind === "renewed";
 }
 
-function outboxPayload(
-  row: {
+async function loadExecutionOutboxPayload(
+  client: pg.PoolClient,
+  jobId: string,
+): Promise<ExecutionOutboxPayload> {
+  const { rows } = await client.query<{
     id: string;
     run_id: string;
-    dispatch_generation: number;
-    scheduling_policy_version: number | null;
     capacity_pool_key: string;
-  },
-): ExecutionOutboxPayload {
-  return {
+    dispatch_generation: number;
+    scheduling_policy_version: number;
+    workspace_id: string;
+    scheduling_class: string;
+    estimated_cost_units: string | number;
+    fifo_sequence: string | number;
+    eligible_at: Date;
+  }>(
+    `select j.id, j.run_id, cp.key as capacity_pool_key,
+            j.dispatch_generation, j.scheduling_policy_version,
+            j.workspace_id, j.scheduling_class, j.estimated_cost_units,
+            j.fifo_sequence, j.eligible_at
+       from relay.execution_jobs j
+       join relay.capacity_pools cp on cp.id = j.capacity_pool_id
+      where j.id = $1`,
+    [jobId],
+  );
+  if (rows.length !== 1) throw new Error("Execution job has no outbox payload");
+  const row = rows[0];
+  return parseExecutionOutboxPayload({
     domainJobId: row.id,
     runId: row.run_id,
     capacityPoolKey: row.capacity_pool_key,
     dispatchGeneration: row.dispatch_generation,
     policyVersion: row.scheduling_policy_version,
-  };
+    workspaceId: row.workspace_id,
+    classKey: row.scheduling_class,
+    costUnits: Number(row.estimated_cost_units),
+    fifoSequence: Number(row.fifo_sequence),
+    eligibleAtMs: row.eligible_at.getTime(),
+  });
 }
 
 async function insertDispatchOutbox(
@@ -704,6 +731,94 @@ async function insertDispatchOutbox(
   );
 }
 
+export async function armSchedulerTicket(
+  pool: DatabasePool,
+  jobId: string,
+  dispatchGeneration: number,
+  proposedToken: string,
+): Promise<string | null> {
+  if (proposedToken.length < 16 || proposedToken.length > 256) {
+    throw new Error("Scheduler ticket token has invalid length");
+  }
+  const { rows } = await pool.query<{ scheduler_ticket_token: string }>(
+    `update relay.execution_jobs
+        set scheduler_ticket_token = coalesce(scheduler_ticket_token, $3),
+            state_version = case
+              when scheduler_ticket_token is null then state_version + 1
+              else state_version
+            end
+      where id = $1 and status = 'queued' and dispatch_generation = $2
+      returning scheduler_ticket_token`,
+    [jobId, dispatchGeneration, proposedToken],
+  );
+  return rows[0]?.scheduler_ticket_token ?? null;
+}
+
+/** Creates a newer durable generation when a dispatched transport ticket vanished. */
+export async function rearmQueuedJobDispatch(
+  pool: DatabasePool,
+  jobId: string,
+  expectedGeneration: number,
+  reason: string,
+): Promise<ExecutionOutboxPayload | null> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    try {
+      const updated = await client.query<{ eligible_at: Date }>(
+        `update relay.execution_jobs
+            set dispatch_generation = dispatch_generation + 1,
+                eligible_at = greatest(eligible_at, now()),
+                scheduler_ticket_token = null,
+                state_version = state_version + 1
+          where id = $1 and status = 'queued'
+            and dispatch_generation = $2
+            and (run_deadline_at is null or run_deadline_at > now())
+            and (
+              (attempt_count = 0 and (
+                admission_deadline_at is null or admission_deadline_at > now()
+              ))
+              or (attempt_count > 0 and (
+                attempt_deadline_at is null or attempt_deadline_at > now()
+              ))
+            )
+          returning eligible_at`,
+        [jobId, expectedGeneration],
+      );
+      if (updated.rows.length === 0) {
+        await client.query("rollback");
+        return null;
+      }
+      requireExactlyOne(updated.rows, "rearm queued scheduler dispatch");
+      const payload = await loadExecutionOutboxPayload(client, jobId);
+      await insertDispatchOutbox(
+        client,
+        "job.ready",
+        payload,
+        updated.rows[0].eligible_at,
+      );
+      const outbox = await client.query<{ id: string }>(
+        `update relay.outbox_events
+            set payload = jsonb_set(payload, '{reason}', to_jsonb($2::text), true)
+          where deduplication_key = $1
+          returning id`,
+        [
+          dispatchDeduplicationKey(jobId, payload.dispatchGeneration),
+          reason,
+        ],
+      );
+      requireExactlyOne(outbox.rows, "annotate rearmed scheduler outbox event");
+      await client.query("commit");
+      return payload;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    }
+  } finally {
+    client.release();
+  }
+}
+
 /** Capacity denial returns to queued without ever creating an attempt. */
 export async function deferJob(
   pool: DatabasePool,
@@ -725,7 +840,7 @@ export async function deferJob(
         workspace_id: string;
         tool_version_id: string;
         dispatch_generation: number;
-        scheduling_policy_version: number | null;
+        scheduling_policy_version: number;
         capacity_pool_key: string;
         capacity_lease_id: string | null;
       }>(
@@ -751,6 +866,7 @@ export async function deferJob(
                 dispatch_generation = dispatch_generation + 1,
                 deferral_count = deferral_count + 1,
                 eligible_at = $5,
+                scheduler_ticket_token = null,
                 lease_owner = null,
                 lease_expires_at = null,
                 capacity_lease_id = null,
@@ -786,10 +902,7 @@ export async function deferJob(
         queuedDelta: 1,
         runningDelta: -1,
       });
-      const payload = outboxPayload({
-        ...row,
-        dispatch_generation: updated.rows[0].dispatch_generation,
-      });
+      const payload = await loadExecutionOutboxPayload(client, jobId);
       await insertDispatchOutbox(client, "job.deferred", payload, eligibleAt);
       const outbox = await client.query<{ id: string }>(
         `update relay.outbox_events
@@ -842,7 +955,7 @@ export async function retryJob(
         workspace_id: string;
         tool_version_id: string;
         dispatch_generation: number;
-        scheduling_policy_version: number | null;
+        scheduling_policy_version: number;
         capacity_pool_key: string;
         capacity_lease_id: string | null;
       }>(
@@ -892,6 +1005,7 @@ export async function retryJob(
                 dispatch_generation = dispatch_generation + 1,
                 eligible_at = $5,
                 attempt_deadline_at = $6,
+                scheduler_ticket_token = null,
                 lease_owner = null,
                 lease_expires_at = null,
                 capacity_lease_id = null,
@@ -934,10 +1048,7 @@ export async function retryJob(
         queuedDelta: 1,
         runningDelta: -1,
       });
-      const payload = outboxPayload({
-        ...row,
-        dispatch_generation: updated.rows[0].dispatch_generation,
-      });
+      const payload = await loadExecutionOutboxPayload(client, jobId);
       await insertDispatchOutbox(client, "job.deferred", payload, eligibleAt);
       const outbox = await client.query<{ id: string }>(
         `update relay.outbox_events
@@ -1038,6 +1149,7 @@ async function transitionJobToTerminal(
                 lease_owner = null,
                 lease_expires_at = null,
                 capacity_lease_id = null,
+                scheduler_ticket_token = null,
                 state_version = state_version + 1
           where id = $1 and lease_epoch = $2 and lease_owner = $3
             and status = any($5::text[])
@@ -1164,7 +1276,7 @@ export async function requestJobCancellation(
         tool_version_id: string;
         status: string;
         dispatch_generation: number;
-        scheduling_policy_version: number | null;
+        scheduling_policy_version: number;
         capacity_pool_key: string;
         state_version: string;
       }>(
@@ -1198,6 +1310,7 @@ export async function requestJobCancellation(
             set status = $2,
                 cancel_requested_at = now(),
                 terminal_at = case when $2 = 'cancelled' then now() else terminal_at end,
+                scheduler_ticket_token = null,
                 state_version = state_version + 1
           where id = $1 and status = $3
           returning id`,
@@ -1222,7 +1335,7 @@ export async function requestJobCancellation(
         });
       }
 
-      const payload = outboxPayload(row);
+      const payload = await loadExecutionOutboxPayload(client, jobId);
       const eventType = running ? "job.cancel_requested" : "job.cancelled";
       await client.query(
         `insert into relay.outbox_events
@@ -1309,6 +1422,7 @@ export async function expireQueuedJobs(
                   lease_owner = null,
                   lease_expires_at = null,
                   capacity_lease_id = null,
+                  scheduler_ticket_token = null,
                   state_version = state_version + 1
             where id = $1 and status = 'queued'
             returning id`,
@@ -1399,7 +1513,7 @@ export async function recoverExpiredJobLeases(
         status: "running" | "cancel_requested";
         lease_epoch: string;
         dispatch_generation: number;
-        scheduling_policy_version: number | null;
+        scheduling_policy_version: number;
         admission_deadline_at: Date | null;
         run_deadline_at: Date | null;
         attempt_count: number;
@@ -1465,6 +1579,7 @@ export async function recoverExpiredJobLeases(
                   lease_owner = null,
                   lease_expires_at = null,
                   capacity_lease_id = null,
+                  scheduler_ticket_token = null,
                   state_version = state_version + 1
             where id = $1 and lease_epoch = $5
             returning id`,
@@ -1538,10 +1653,7 @@ export async function recoverExpiredJobLeases(
           await insertDispatchOutbox(
             client,
             "job.ready",
-            outboxPayload({
-              ...row,
-              dispatch_generation: nextGeneration,
-            }),
+            await loadExecutionOutboxPayload(client, row.id),
             effectiveNow,
           );
           recovered += 1;

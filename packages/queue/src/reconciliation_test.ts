@@ -2,7 +2,7 @@ import { assertEquals } from "@std/assert";
 import { Redis } from "ioredis";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import { type AdmitRunInput, admitToolRun } from "./admission.ts";
-import { claimJobForDispatch } from "./dispatch.ts";
+import { armSchedulerTicket, claimJobForDispatch } from "./dispatch.ts";
 import {
   loadCapacityRehydrationPlan,
   reconcileLostTickets,
@@ -13,6 +13,7 @@ import {
   type AdmissibleFixture,
   cleanupAdmissibleFixture,
   createAdmissibleFixture,
+  TEST_USAGE_PORT,
 } from "./test_support.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
@@ -40,6 +41,7 @@ async function admitJob(
   fixture: AdmissibleFixture;
   jobId: string;
   policyVersion: number;
+  schedulerToken: string;
 }> {
   const fixture = await createAdmissibleFixture(pool);
   const input: AdmitRunInput = {
@@ -48,22 +50,25 @@ async function admitJob(
     createdBy: fixture.createdBy,
     input: { prompt: "reconcile me" },
     idempotencyKey: unique("idem"),
-    schedulingClass: "standard",
-    schedulingPolicyVersion: 23,
-    estimatedCostUnits: 1,
     admissionDeadlineMs: 60_000,
     runDeadlineMs: 300_000,
   };
-  const result = await admitToolRun(pool, input);
+  const result = await admitToolRun(pool, input, {
+    handlers: fixture.handlers,
+    usage: TEST_USAGE_PORT,
+  });
   if (result.kind !== "admitted") throw new Error("fixture admission failed");
   const job = await pool.query<{ scheduling_policy_version: number }>(
     "select scheduling_policy_version from relay.execution_jobs where id = $1",
     [result.jobId],
   );
+  const schedulerToken = `reconciliation-scheduler.${result.jobId}`;
+  await armSchedulerTicket(pool, result.jobId, 0, schedulerToken);
   return {
     fixture,
     jobId: result.jobId,
     policyVersion: job.rows[0].scheduling_policy_version,
+    schedulerToken,
   };
 }
 
@@ -143,6 +148,7 @@ Deno.test({
           domainJobId: admitted.jobId,
           dispatchGeneration: 0,
           policyVersion: admitted.policyVersion,
+          schedulerToken: admitted.schedulerToken,
         },
         "crashed-worker",
         30_000,
@@ -165,7 +171,7 @@ Deno.test({
 
 Deno.test({
   name:
-    "Redis-reset reconciliation keeps dispatch closed until lost tickets are rearmed",
+    "Redis-reset reconciliation keeps dispatch closed until scheduler rebuild",
   ignore: databaseUrl === undefined || redisUrl === undefined,
   fn: async () => {
     const pool = testPool();
@@ -185,7 +191,7 @@ Deno.test({
         {
           restoreCapacityLease: () => Promise.resolve(),
           releaseCapacityLease: () => Promise.resolve(),
-          hasRunnableTicket: () => Promise.resolve(false),
+          rebuildScheduler: () => Promise.resolve({ enqueued: 1, rearmed: 0 }),
         },
         {
           owner: unique("reconciler"),
@@ -194,12 +200,58 @@ Deno.test({
         },
       );
       assertEquals(result.kind, "reconciled");
+      if (result.kind === "reconciled") {
+        assertEquals(result.rebuiltSchedulerJobs, 1);
+        assertEquals(result.rearmedSchedulerJobs, 0);
+      }
       assertEquals(await gate.isReady(), true);
     } finally {
       await gate.invalidate();
       if (admitted) {
         await cleanupAdmissibleFixture(pool, admitted.fixture);
       }
+      await redis.quit();
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "Redis-reset reconciliation renews ownership through a long rebuild",
+  ignore: databaseUrl === undefined || redisUrl === undefined,
+  fn: async () => {
+    const pool = testPool();
+    const redis = new Redis(redisUrl!, { maxRetriesPerRequest: null });
+    const gate = new RedisDispatchGate(redis, unique("renewing-reset-gate"));
+    let intruderAcquired = false;
+    try {
+      const result = await reconcileRedisReset(
+        pool,
+        gate,
+        {
+          restoreCapacityLease: () => Promise.resolve(),
+          releaseCapacityLease: () => Promise.resolve(),
+          rebuildScheduler: async () => {
+            for (let batch = 0; batch < 3; batch++) {
+              await new Promise((resolve) => setTimeout(resolve, 150));
+              if (batch === 1) {
+                intruderAcquired = await gate.tryBegin("intruder", 200);
+              }
+            }
+            return { enqueued: 0, rearmed: 0 };
+          },
+        },
+        {
+          owner: unique("renewing-reconciler"),
+          lockDurationMs: 200,
+          conservativeDelayMs: 0,
+        },
+      );
+      assertEquals(result.kind, "reconciled");
+      assertEquals(intruderAcquired, false);
+      assertEquals(await gate.isReady(), true);
+    } finally {
+      await gate.invalidate();
       await redis.quit();
       await pool.end();
     }

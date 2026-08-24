@@ -119,15 +119,24 @@ export class ExecutionQueueRegistry {
     return queue;
   }
 
-  async publish(payload: ExecutionOutboxPayload): Promise<void> {
+  async publish(
+    payload: ExecutionOutboxPayload,
+    schedulerToken: string,
+  ): Promise<void> {
     const queue = this.#queue(payload.capacityPoolKey);
-    const ticket = ticketFromOutboxPayload(payload);
+    const ticket = ticketFromOutboxPayload(payload, schedulerToken);
     const id = ticketId(ticket);
     const existing = await queue.getJob(id);
     if (existing !== undefined) {
       const state = await existing.getState();
-      if (RUNNABLE_TICKET_STATES.has(state)) return;
-      // A completed/failed transport record must not permanently suppress a
+      if (
+        RUNNABLE_TICKET_STATES.has(state) &&
+        existing.data.schedulerToken === schedulerToken
+      ) return;
+      if (state === "active") {
+        throw new Error("Active BullMQ ticket has stale scheduler provenance");
+      }
+      // A completed/failed/stale transport record must not permanently suppress a
       // PostgreSQL job that reconciliation still sees as queued.
       await existing.remove();
     }
@@ -142,25 +151,23 @@ export class ExecutionQueueRegistry {
 
   async cancel(payload: ExecutionOutboxPayload): Promise<void> {
     const queue = this.#queue(payload.capacityPoolKey);
-    const job = await queue.getJob(ticketId(ticketFromOutboxPayload(payload)));
+    const job = await queue.getJob(ticketId(payload));
     if (job === undefined) return;
     const state = await job.getState();
     if (state === "active") return;
     await job.remove();
   }
 
+  async waitingCount(capacityPoolKey: string): Promise<number> {
+    return await this.#queue(capacityPoolKey).getWaitingCount();
+  }
+
   async hasRunnableTicket(payload: ExecutionOutboxPayload): Promise<boolean> {
     const job = await this.#queue(payload.capacityPoolKey).getJob(
-      ticketId(ticketFromOutboxPayload(payload)),
+      ticketId(payload),
     );
     return job !== undefined &&
       RUNNABLE_TICKET_STATES.has(await job.getState());
-  }
-
-  async publishOutboxEvent(event: OutboxEventRow): Promise<void> {
-    const action = executionOutboxAction(event);
-    if (action.kind === "dispatch") await this.publish(action.payload);
-    else await this.cancel(action.payload);
   }
 
   async close(): Promise<void> {

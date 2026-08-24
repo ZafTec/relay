@@ -1,18 +1,23 @@
 import { assertEquals } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import { Redis } from "ioredis";
+import {
+  loadSchedulingClassProfiles,
+  WeightedFairScheduler,
+} from "@relay/scheduler";
+import {
+  createExecutionHandlerRegistry,
+  createRegistryBackedExecutionHandler,
+} from "../../../apps/worker/src/handlers.ts";
 import { type AdmitRunInput, admitToolRun } from "./admission.ts";
 import { relayOutboxBatch } from "./outbox-relay.ts";
-import {
-  createExecutionQueue,
-  createExecutionWorker,
-  executionOutboxAction,
-} from "./bullmq.ts";
+import { createExecutionWorker, ExecutionQueueRegistry } from "./bullmq.ts";
 import { ExecutionProcessor } from "./processor.ts";
-import { ticketFromOutboxPayload, ticketId } from "./tickets.ts";
+import { ExecutionSchedulerBridge } from "./scheduler-bridge.ts";
 import {
   cleanupAdmissibleFixture,
   createAdmissibleFixture,
+  TEST_USAGE_PORT,
 } from "./test_support.ts";
 
 /**
@@ -20,8 +25,8 @@ import {
  * run/job/outbox row (admission.ts, now also authorizing against a real
  * workspace membership and a real published catalog tool version), the
  * outbox relay claims and publishes it (outbox-relay.ts) as a real
- * BullMQ ticket (bullmq.ts), and the real ExecutionProcessor claims capacity,
- * opens one attempt, invokes the handler, and commits terminal state.
+ * scheduler entry, bounded BullMQ ticket, and real ExecutionProcessor claim.
+ * The registry-backed handler revalidates the immutable route before execution.
  */
 const databaseUrl = Deno.env.get("DATABASE_URL");
 const redisUrl = Deno.env.get("REDIS_URL");
@@ -57,24 +62,51 @@ Deno.test({
       createdBy: fixture.createdBy,
       input: { prompt: "a cat wearing a hat" },
       idempotencyKey: unique("idem"),
-      schedulingClass: "standard",
-      schedulingPolicyVersion: 1,
-      estimatedCostUnits: 1,
       admissionDeadlineMs: 60_000,
       runDeadlineMs: 300_000,
     };
 
     const connection = new Redis(redisUrl!, { maxRetriesPerRequest: null });
+    const schedulerRedis = new Redis(redisUrl!, { maxRetriesPerRequest: null });
     const capacityPool = await pool.query<{ key: string }>(
       "select key from relay.capacity_pools where id = $1",
       [fixture.capacityPoolId],
     );
     const capacityPoolKey = capacityPool.rows[0].key;
-    const prefix = "relay:test-pipeline";
-    const queue = createExecutionQueue(connection, capacityPoolKey, prefix);
+    const environment = unique("pipeline");
+    const prefix = `relay:${environment}:bullmq`;
+    const queues = new ExecutionQueueRegistry(connection, prefix);
+    const scheduler = new WeightedFairScheduler(schedulerRedis, {
+      env: environment,
+      dispatchLeaseDurationMs: 30_000,
+      maxCostUnits: 100,
+    });
+    await scheduler.configureProfiles(await loadSchedulingClassProfiles(pool));
+    const bridge = new ExecutionSchedulerBridge(
+      pool,
+      schedulerRedis,
+      scheduler,
+      queues,
+      {
+        environment,
+        maxBullmqWaitingPerPool: 2,
+        maxDispatchesPerIteration: 2,
+        bufferRetryDelayMs: 50,
+        poolBufferLockDurationMs: 5_000,
+      },
+    );
 
     let handlerCalls = 0;
     let releasedLeases = 0;
+    const executionHandlers = createExecutionHandlerRegistry([{
+      key: fixture.handlerKey,
+      inputSchemaVersion: 1,
+      handlerVersion: "1",
+      execute: () => {
+        handlerCalls += 1;
+        return Promise.resolve({ kind: "succeeded" });
+      },
+    }]);
     const executionProcessor = new ExecutionProcessor(
       pool,
       {
@@ -109,10 +141,7 @@ Deno.test({
         isReady: () => Promise.resolve(true),
         readyToken: () => Promise.resolve("ready:pipeline"),
       },
-      () => {
-        handlerCalls += 1;
-        return Promise.resolve({ kind: "succeeded" });
-      },
+      createRegistryBackedExecutionHandler(pool, executionHandlers),
       {
         leaseOwner: "pipeline-worker",
         leaseDurationMs: 30_000,
@@ -139,26 +168,33 @@ Deno.test({
       worker.run();
       await ready;
 
-      admitted = await admitToolRun(pool, input);
+      admitted = await admitToolRun(pool, input, {
+        handlers: executionHandlers.catalogHandlers,
+        usage: TEST_USAGE_PORT,
+      });
       assertEquals(admitted.kind, "admitted");
       if (admitted.kind !== "admitted") throw new Error("unreachable");
       const jobId = admitted.jobId;
 
       const relayResult = await relayOutboxBatch(
         pool,
-        async (event) => {
-          const action = executionOutboxAction(event);
-          if (action.kind !== "dispatch") throw new Error("unreachable");
-          const ticket = ticketFromOutboxPayload(action.payload);
-          await queue.add("execute", ticket, { jobId: ticketId(ticket) });
+        (event) => bridge.handleOutboxEvent(event),
+        {
+          leaseOwner: "test-pipeline",
+          leaseDurationMs: 30_000,
+          batchSize: 10,
+          eventTypes: ["job.ready", "job.deferred"],
         },
-        { leaseOwner: "test-pipeline", leaseDurationMs: 30_000, batchSize: 10 },
       );
       assertEquals(
         relayResult.published >= 1,
         true,
         "the outbox relay must publish at least the row this admission created",
       );
+
+      assertEquals(await queues.waitingCount(capacityPoolKey), 0);
+      const dispatch = await bridge.dispatchBatch("pipeline-scheduler");
+      assertEquals(dispatch.published, 1);
 
       const deadline = Date.now() + 10_000;
       let state: { status: string; attempt_count: number } | undefined;
@@ -179,9 +215,12 @@ Deno.test({
       assertEquals(releasedLeases, 1);
     } finally {
       await worker.close();
-      await queue.close();
+      await queues.close();
       await connection.quit();
       await workerConnection.quit();
+      const schedulerKeys = await schedulerRedis.keys(`relay:${environment}:*`);
+      if (schedulerKeys.length > 0) await schedulerRedis.del(...schedulerKeys);
+      await schedulerRedis.quit();
       await cleanupAdmissibleFixture(pool, fixture);
       await pool.end();
     }

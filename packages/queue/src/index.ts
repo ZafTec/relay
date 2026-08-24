@@ -3,6 +3,7 @@ export type { Redis } from "./redis.ts";
 
 export {
   dispatchDeduplicationKey,
+  MAX_SCHEDULER_COST_UNITS,
   parseExecutionOutboxPayload,
   parseExecutionTicket,
   ticketFromOutboxPayload,
@@ -38,9 +39,17 @@ export type {
 } from "./outbox-relay.ts";
 
 export { admitToolRun } from "./admission.ts";
-export type { AdmitRunInput, AdmitRunResult } from "./admission.ts";
+export type {
+  AdmissionUsagePort,
+  AdmissionUsageQuote,
+  AdmissionUsageRequest,
+  AdmitRunDependencies,
+  AdmitRunInput,
+  AdmitRunResult,
+} from "./admission.ts";
 
 export {
+  armSchedulerTicket,
   beginJobAttempt,
   claimJobForDispatch,
   completeJobCancellation,
@@ -53,6 +62,7 @@ export {
   markAttemptSubmitted,
   markAttemptSubmitting,
   persistCapacityLease,
+  rearmQueuedJobDispatch,
   reconcileQueueCounters,
   recoverExpiredJobLeases,
   requestJobCancellation,
@@ -85,6 +95,18 @@ export type {
   RetryClassification,
   SubmissionPermitResult,
 } from "./processor.ts";
+
+export {
+  ExecutionSchedulerBridge,
+  loadScheduledExecution,
+} from "./scheduler-bridge.ts";
+export type {
+  ExecutionTransport,
+  ScheduledExecution,
+  SchedulerBridgeOptions,
+  SchedulerDispatchResult,
+  SchedulerReconciliationResult,
+} from "./scheduler-bridge.ts";
 
 export {
   listEnabledCapacityPoolKeys,

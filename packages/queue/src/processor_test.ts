@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import { type AdmitRunInput, admitToolRun } from "./admission.ts";
-import { requestJobCancellation } from "./dispatch.ts";
+import { armSchedulerTicket, requestJobCancellation } from "./dispatch.ts";
 import {
   type AcquiredCapacityLease,
   type CapacityAcquisitionResult,
@@ -15,6 +15,7 @@ import {
   type AdmissibleFixture,
   cleanupAdmissibleFixture,
   createAdmissibleFixture,
+  TEST_USAGE_PORT,
 } from "./test_support.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
@@ -46,18 +47,24 @@ async function admitJob(pool: DatabasePool): Promise<AdmittedJob> {
     createdBy: fixture.createdBy,
     input: { prompt: "processor test" },
     idempotencyKey: `idem-${crypto.randomUUID()}`,
-    schedulingClass: "standard",
-    schedulingPolicyVersion: 1,
-    estimatedCostUnits: 1,
     admissionDeadlineMs: 60_000,
     runDeadlineMs: 300_000,
   };
-  const result = await admitToolRun(pool, input);
+  const result = await admitToolRun(pool, input, {
+    handlers: fixture.handlers,
+    usage: TEST_USAGE_PORT,
+  });
   if (result.kind !== "admitted") throw new Error("fixture admission failed");
   const job = await pool.query<{ scheduling_policy_version: number }>(
     "select scheduling_policy_version from relay.execution_jobs where id = $1",
     [result.jobId],
   );
+  const schedulerToken = `processor-scheduler.${result.jobId}`;
+  if (
+    await armSchedulerTicket(pool, result.jobId, 0, schedulerToken) === null
+  ) {
+    throw new Error("fixture scheduler token arm failed");
+  }
   return {
     fixture,
     jobId: result.jobId,
@@ -66,6 +73,7 @@ async function admitJob(pool: DatabasePool): Promise<AdmittedJob> {
       domainJobId: result.jobId,
       dispatchGeneration: 0,
       policyVersion: job.rows[0].scheduling_policy_version,
+      schedulerToken,
     },
   };
 }

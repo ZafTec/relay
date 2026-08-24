@@ -1,9 +1,17 @@
 import type { DatabasePool } from "@relay/database";
 import { generatePublicId, ID_PREFIXES } from "@relay/contracts";
+import { createHandlerRegistry, type HandlerRegistry } from "@relay/catalog";
+import type { AdmissionUsagePort } from "./admission.ts";
 
 const FOREIGN_KEY_VIOLATION = "23503";
 const IMMUTABLE_ROW_VIOLATION = "55000";
 const INSUFFICIENT_PRIVILEGE = "42501";
+
+export const TEST_USAGE_PORT: AdmissionUsagePort = {
+  quote: () =>
+    Promise.resolve({ estimatedCostUnits: 1, policyKey: "test-unmetered:v1" }),
+  reserve: () => Promise.resolve(null),
+};
 
 /**
  * `relay.routing_decisions` being insert-only for `relay_app`
@@ -57,6 +65,8 @@ export interface AdmissibleFixture {
   readonly capacityPoolId: number;
   readonly providerId: number;
   readonly providerModelId: number;
+  readonly handlerKey: string;
+  readonly handlers: HandlerRegistry;
   /** Additional users owned by the fixture (the first is a non-member outsider). */
   readonly catalogActorIds: readonly string[];
 }
@@ -206,6 +216,8 @@ export async function createAdmissibleFixture(
     capacityPoolId,
     providerId,
     providerModelId,
+    handlerKey,
+    handlers: createHandlerRegistry([handlerKey]),
     catalogActorIds: [outsiderId],
   };
 }

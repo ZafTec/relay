@@ -3,21 +3,30 @@ import { sha256Hex, withTransaction } from "@relay/database";
 import type { DatabasePool } from "@relay/database";
 import { generatePublicId, ID_PREFIXES } from "@relay/contracts";
 import { getMembership } from "@relay/auth";
+import {
+  type CatalogRouteSelection,
+  type HandlerRegistry,
+  persistCatalogRoutingDecision,
+  resolveCatalogRoute,
+} from "@relay/catalog";
+import {
+  resolveWorkspaceSchedulingProfile,
+  type WorkspaceSchedulingProfile,
+} from "@relay/scheduler";
 import { lockQueueCounterMutation } from "./counter-lock.ts";
-import { dispatchDeduplicationKey } from "./tickets.ts";
+import {
+  dispatchDeduplicationKey,
+  MAX_SCHEDULER_COST_UNITS,
+} from "./tickets.ts";
 
 /**
  * The "Acceptance transaction" from
  * docs/implementation-handoff/04-queue-capacity-scheduling.md, steps
- * 1-5, 7-11. Step 2 ("Authorize workspace, tool version, provider
- * binding, and scheduling class") is now implemented for workspace
- * membership, tool version, and provider binding, using the catalog and
- * auth packages built in Wave 3B/2A -- "scheduling class" authorization
- * (verifying the workspace is actually granted the requested class) is
- * still deferred, since `relay.workspace_scheduling_profiles` (the
- * weighted-fair-scheduler's, not yet built) doesn't exist. Step 6
- * ("Reserve usage") is also still deferred to metering, which doesn't
- * exist yet. Queue depth limits are resolved server-side from
+ * 1-5, 7-11. Workspace membership, immutable catalog routing, scheduling
+ * profile, and cost are all resolved by server-owned services or database
+ * constraints. Step 6 ("Reserve usage") is represented by the required
+ * AdmissionUsagePort; this package does not silently install an unmetered
+ * production fallback. Queue depth limits are resolved server-side from
  * `relay.capacity_policies` (see `resolveQueueLimits` below), never
  * accepted from the caller -- an admission caller choosing its own
  * limits could admit past whatever depth every other admission control
@@ -29,11 +38,42 @@ export interface AdmitRunInput {
   readonly createdBy: string;
   readonly input: unknown;
   readonly idempotencyKey: string;
-  readonly schedulingClass: string;
-  readonly schedulingPolicyVersion: number | null;
-  readonly estimatedCostUnits: number | null;
+  readonly requestedModelVersion?: string | null;
   readonly admissionDeadlineMs: number;
   readonly runDeadlineMs: number | null;
+}
+
+export interface AdmissionUsageRequest {
+  readonly workspaceId: string;
+  readonly toolVersionId: string;
+  readonly createdBy: string;
+  readonly input: unknown;
+  readonly route: CatalogRouteSelection;
+  readonly schedulingProfile: WorkspaceSchedulingProfile;
+}
+
+export interface AdmissionUsageQuote {
+  readonly estimatedCostUnits: number;
+  /** Stable version/fingerprint of the server-owned estimate policy. */
+  readonly policyKey: string;
+}
+
+/** Future metering integrates here without changing the acceptance transaction. */
+export interface AdmissionUsagePort {
+  quote(
+    client: pg.PoolClient,
+    request: AdmissionUsageRequest,
+  ): Promise<AdmissionUsageQuote>;
+  reserve(
+    client: pg.PoolClient,
+    request: AdmissionUsageRequest,
+    quote: AdmissionUsageQuote,
+  ): Promise<string | null>;
+}
+
+export interface AdmitRunDependencies {
+  readonly handlers: HandlerRegistry;
+  readonly usage: AdmissionUsagePort;
 }
 
 export type AdmitRunResult =
@@ -53,6 +93,35 @@ export type AdmitRunResult =
     readonly kind: "queue_full";
     readonly scope: "global_tool" | "workspace_total" | "workspace_tool";
   };
+
+const TOOL_VERSION_UNAVAILABLE_CODES = new Set([
+  "tool_version_not_found",
+  "tool_version_unpublished",
+  "tool_disabled",
+  "tool_retired",
+  "handler_not_registered",
+  "handler_compatibility_mismatch",
+  "immutable_hash_mismatch",
+]);
+
+function unavailableCatalogResult(
+  issueCodes: readonly string[],
+): AdmitRunResult {
+  return issueCodes.some((code) => TOOL_VERSION_UNAVAILABLE_CODES.has(code))
+    ? { kind: "tool_version_unavailable" }
+    : { kind: "no_provider_binding" };
+}
+
+function assertEstimatedCostUnits(value: number): void {
+  if (
+    !Number.isFinite(value) || value <= 0 ||
+    value > MAX_SCHEDULER_COST_UNITS
+  ) {
+    throw new Error(
+      `Admission usage estimate must be between 0 and ${MAX_SCHEDULER_COST_UNITS}`,
+    );
+  }
+}
 
 /**
  * Deterministic key order so the same logical payload always hashes the
@@ -215,6 +284,7 @@ function resolveAgainstRecord(
 export async function admitToolRun(
   pool: DatabasePool,
   input: AdmitRunInput,
+  dependencies: AdmitRunDependencies,
 ): Promise<AdmitRunResult> {
   // Scoped to actor + tool version + payload, not payload alone: an
   // idempotency key is only client-supplied and unique per
@@ -225,11 +295,18 @@ export async function admitToolRun(
   // that belongs to a different actor/tool version than the one this
   // call actually asked for; including createdBy/toolVersionId in the
   // hash makes that a conflict instead.
-  const canonicalPayloadHash = await sha256Hex(canonicalStringify({
-    actor: input.createdBy,
-    toolVersionId: input.toolVersionId,
-    input: input.input,
-  }));
+  if (
+    !Number.isSafeInteger(input.admissionDeadlineMs) ||
+    input.admissionDeadlineMs <= 0 ||
+    (input.runDeadlineMs !== null &&
+      (!Number.isSafeInteger(input.runDeadlineMs) || input.runDeadlineMs <= 0))
+  ) {
+    throw new TypeError(
+      "Admission and run deadlines must be positive integers",
+    );
+  }
+
+  let canonicalPayloadHash: string | undefined;
 
   try {
     return await withTransaction(pool, async (client) => {
@@ -274,6 +351,62 @@ export async function admitToolRun(
       );
       if (membership === null) return { kind: "not_a_member" };
 
+      const routeResolution = await resolveCatalogRoute(
+        client,
+        dependencies.handlers,
+        input.toolVersionId,
+      );
+      if (routeResolution.kind === "unavailable") {
+        return unavailableCatalogResult(
+          routeResolution.issues.map((issue) => issue.code),
+        );
+      }
+      const routeSelection: CatalogRouteSelection = {
+        route: routeResolution.route,
+        fallback: routeResolution.fallback,
+      };
+      const toolId = routeResolution.route.toolId;
+      const capacityPoolId = routeResolution.route.capacityPoolId;
+      const capacityPool = await client.query<{ key: string }>(
+        `select key from relay.capacity_pools
+          where id = $1 and enabled = true`,
+        [capacityPoolId],
+      );
+      if (capacityPool.rows.length !== 1) {
+        return { kind: "no_provider_binding" };
+      }
+      const capacityPoolKey = capacityPool.rows[0].key;
+      const schedulingProfile = await resolveWorkspaceSchedulingProfile(
+        client,
+        input.workspaceId,
+      );
+      const usagePort = dependencies.usage;
+      const usageRequest: AdmissionUsageRequest = {
+        workspaceId: input.workspaceId,
+        toolVersionId: input.toolVersionId,
+        createdBy: input.createdBy,
+        input: input.input,
+        route: routeSelection,
+        schedulingProfile,
+      };
+      const usageQuote = await usagePort.quote(client, usageRequest);
+      assertEstimatedCostUnits(usageQuote.estimatedCostUnits);
+      if (usageQuote.policyKey.trim() === "") {
+        throw new Error("Admission usage policy key must not be empty");
+      }
+      canonicalPayloadHash = await sha256Hex(canonicalStringify({
+        workspaceId: input.workspaceId,
+        actor: input.createdBy,
+        toolVersionId: input.toolVersionId,
+        input: input.input,
+        requestedModelVersion: input.requestedModelVersion ?? null,
+        admissionDeadlineMs: input.admissionDeadlineMs,
+        runDeadlineMs: input.runDeadlineMs,
+        route: routeSelection,
+        schedulingProfile,
+        usageQuote,
+      }));
+
       const existing = await client.query<
         { canonical_payload_hash: string; run_id: string | null }
       >(
@@ -284,70 +417,6 @@ export async function admitToolRun(
       if (existing.rows.length > 0) {
         return resolveAgainstRecord(existing.rows[0], canonicalPayloadHash);
       }
-
-      const versionRows = await client.query<
-        { tool_id: string; lifecycle: string }
-      >(
-        `select tv.tool_id, t.lifecycle
-         from relay.tool_versions tv
-         join relay.tools t on t.id = tv.tool_id
-         where tv.id = $1 and tv.published_at is not null`,
-        [input.toolVersionId],
-      );
-      if (versionRows.rows.length === 0) {
-        return { kind: "tool_version_unavailable" };
-      }
-      const { tool_id: toolId, lifecycle } = versionRows.rows[0];
-      if (lifecycle === "disabled" || lifecycle === "retired") {
-        return { kind: "tool_version_unavailable" };
-      }
-
-      // A binding row being `enabled` only says the *routing entry*
-      // itself hasn't been turned off -- it says nothing about whether
-      // the provider, provider model, or capacity pool it points at are
-      // themselves usable. Without these joins, a disabled provider/model
-      // or a disabled capacity pool could still admit runs onto a route
-      // nothing should be dispatching through. Excluding
-      // disabled/retired here (not requiring exactly 'published') matches
-      // the tool-lifecycle check just above: 'draft'/'internal'/
-      // 'deprecated' provider state is a soft warning elsewhere, not a
-      // hard admission block. A disabled/retired provider or model, or a
-      // disabled pool, simply drops out of eligible routing order here --
-      // if a lower-priority binding is still fully eligible, admission
-      // falls through to it rather than rejecting outright.
-      const bindingRows = await client.query<
-        {
-          binding_id: number;
-          capacity_pool_id: number;
-          capacity_pool_key: string;
-          provider_id: number;
-          provider_model_id: number;
-        }
-      >(
-        `select tpb.id as binding_id, tpb.capacity_pool_id,
-                cp.key as capacity_pool_key,
-                p.id as provider_id, pm.id as provider_model_id
-         from relay.tool_provider_bindings tpb
-         join relay.provider_models pm on pm.id = tpb.provider_model_id
-         join relay.providers p on p.id = pm.provider_id
-         join relay.capacity_pools cp on cp.id = tpb.capacity_pool_id
-         where tpb.tool_version_id = $1
-           and tpb.enabled = true
-           and cp.enabled = true
-           and pm.lifecycle not in ('disabled', 'retired')
-           and p.lifecycle not in ('disabled', 'retired')
-         order by tpb.routing_order asc
-         limit 1`,
-        [input.toolVersionId],
-      );
-      if (bindingRows.rows.length === 0) return { kind: "no_provider_binding" };
-      const {
-        capacity_pool_id: capacityPoolId,
-        capacity_pool_key: capacityPoolKey,
-        binding_id: selectedBindingId,
-        provider_id: providerId,
-        provider_model_id: providerModelId,
-      } = bindingRows.rows[0];
 
       const limits = await resolveQueueLimits(client, toolId);
 
@@ -376,33 +445,30 @@ export async function admitToolRun(
         return { kind: "queue_full", scope: "workspace_tool" };
       }
 
+      const reservationId = await usagePort.reserve(
+        client,
+        usageRequest,
+        usageQuote,
+      );
+
       const runId = generatePublicId(ID_PREFIXES.toolRun);
       await client.query(
         `insert into relay.tool_runs
-           (id, workspace_id, tool_version_id, status, input, created_by)
-         values ($1, $2, $3, 'queued', $4, $5)`,
+           (id, workspace_id, tool_version_id, status, input, reservation_id,
+            created_by)
+         values ($1, $2, $3, 'queued', $4, $5, $6)`,
         [
           runId,
           input.workspaceId,
           input.toolVersionId,
           JSON.stringify(input.input),
+          reservationId,
           input.createdBy,
         ],
       );
-
-      // "Every run references an immutable routing-decision record"
-      // (0017_routing_decisions.ts) -- admission is exactly where that
-      // selection is actually made (the binding-eligibility query above),
-      // so it's recorded here rather than left for a routing subsystem
-      // that doesn't exist yet. No policy/fallback machinery exists yet
-      // either (routing_policy_id stays null, fallback_used stays false)
-      // -- only the binding this admission actually selected.
-      await client.query(
-        `insert into relay.routing_decisions
-           (tool_run_id, selected_binding_id, provider_id, provider_model_id)
-         values ($1, $2, $3, $4)`,
-        [runId, selectedBindingId, providerId, providerModelId],
-      );
+      await persistCatalogRoutingDecision(client, runId, routeSelection, {
+        requestedModelVersion: input.requestedModelVersion ?? null,
+      });
 
       const admissionDeadlineAt = new Date(
         Date.now() + input.admissionDeadlineMs,
@@ -411,26 +477,47 @@ export async function admitToolRun(
         ? null
         : new Date(Date.now() + input.runDeadlineMs);
 
-      const jobResult = await client.query<{ id: string }>(
+      const jobResult = await client.query<{
+        id: string;
+        scheduling_class: string;
+        scheduling_policy_version: number;
+        estimated_cost_units: string | number;
+        fifo_sequence: string | number;
+        eligible_at: Date;
+      }>(
         `insert into relay.execution_jobs
            (run_id, workspace_id, tool_version_id, capacity_pool_id, status,
             scheduling_class, scheduling_policy_version, estimated_cost_units,
             admission_deadline_at, run_deadline_at)
          values ($1, $2, $3, $4, 'queued', $5, $6, $7, $8, $9)
-         returning id`,
+         returning id, scheduling_class, scheduling_policy_version,
+                   estimated_cost_units, fifo_sequence, eligible_at`,
         [
           runId,
           input.workspaceId,
           input.toolVersionId,
           capacityPoolId,
-          input.schedulingClass,
-          input.schedulingPolicyVersion,
-          input.estimatedCostUnits,
+          schedulingProfile.classKey,
+          schedulingProfile.policyVersion,
+          usageQuote.estimatedCostUnits,
           admissionDeadlineAt,
           runDeadlineAt,
         ],
       );
-      const jobId = jobResult.rows[0].id;
+      const job = jobResult.rows[0];
+      if (
+        job.scheduling_class !== schedulingProfile.classKey ||
+        job.scheduling_policy_version !== schedulingProfile.policyVersion
+      ) {
+        throw new Error("Scheduling profile changed during admission; retry");
+      }
+      const jobId = job.id;
+      const persistedCostUnits = Number(job.estimated_cost_units);
+      const fifoSequence = Number(job.fifo_sequence);
+      assertEstimatedCostUnits(persistedCostUnits);
+      if (!Number.isSafeInteger(fifoSequence) || fifoSequence <= 0) {
+        throw new Error("Database returned an invalid execution FIFO sequence");
+      }
 
       await client.query(
         `update relay.tool_queue_counters
@@ -487,7 +574,12 @@ export async function admitToolRun(
             runId,
             capacityPoolKey,
             dispatchGeneration: 0,
-            policyVersion: input.schedulingPolicyVersion,
+            policyVersion: job.scheduling_policy_version,
+            workspaceId: input.workspaceId,
+            classKey: job.scheduling_class,
+            costUnits: persistedCostUnits,
+            fifoSequence,
+            eligibleAtMs: job.eligible_at.getTime(),
           }),
           dispatchDeduplicationKey(jobId, 0),
         ],
@@ -496,7 +588,9 @@ export async function admitToolRun(
       return { kind: "admitted", runId, jobId };
     });
   } catch (error) {
-    if (error instanceof IdempotencyRaceLost) {
+    if (
+      error instanceof IdempotencyRaceLost && canonicalPayloadHash !== undefined
+    ) {
       const { rows } = await pool.query<
         { canonical_payload_hash: string; run_id: string | null }
       >(
