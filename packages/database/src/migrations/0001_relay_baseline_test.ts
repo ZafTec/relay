@@ -11,6 +11,14 @@ Deno.test("0001 baseline contains the complete MVP trust boundaries", () => {
   for (
     const invariant of [
       'CREATE TABLE auth."user"',
+      "CREATE TABLE auth.jwks",
+      'CREATE TABLE auth."oauthClient"',
+      'CREATE TABLE auth."oauthResource"',
+      'CREATE TABLE auth."oauthClientResource"',
+      'CREATE TABLE auth."oauthRefreshToken"',
+      'CREATE TABLE auth."oauthAccessToken"',
+      'CREATE TABLE auth."oauthConsent"',
+      'CREATE TABLE auth."oauthClientAssertion"',
       "CREATE TABLE relay.tool_runs",
       "CREATE TABLE relay.execution_jobs",
       "CREATE TABLE relay.artifacts",
@@ -79,6 +87,31 @@ Deno.test({
           "tools",
           "usage_events",
           "usage_reservations",
+        ],
+      );
+
+      const authTables = await client.query<{ table_name: string }>(
+        `select table_name
+           from information_schema.tables
+          where table_schema = 'auth'
+            and table_name in (
+              'jwks', 'oauthClient', 'oauthResource', 'oauthClientResource',
+              'oauthRefreshToken', 'oauthAccessToken', 'oauthConsent',
+              'oauthClientAssertion'
+            )
+          order by table_name`,
+      );
+      assertEquals(
+        authTables.rows.map((row: { table_name: string }) => row.table_name),
+        [
+          "jwks",
+          "oauthAccessToken",
+          "oauthClient",
+          "oauthClientAssertion",
+          "oauthClientResource",
+          "oauthConsent",
+          "oauthRefreshToken",
+          "oauthResource",
         ],
       );
 

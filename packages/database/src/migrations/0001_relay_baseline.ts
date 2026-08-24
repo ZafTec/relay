@@ -4746,6 +4746,137 @@ CREATE TABLE auth.invitation (
     "inviterId" text NOT NULL
 );
 
+CREATE TABLE auth.jwks (
+    id text NOT NULL,
+    "publicKey" text NOT NULL,
+    "privateKey" text NOT NULL,
+    "createdAt" timestamp with time zone NOT NULL,
+    "expiresAt" timestamp with time zone,
+    alg text,
+    crv text
+);
+
+CREATE TABLE auth."oauthClient" (
+    id text NOT NULL,
+    "clientId" text NOT NULL,
+    "clientSecret" text,
+    "clientDiscoveryId" text,
+    disabled boolean,
+    "skipConsent" boolean,
+    "enableEndSession" boolean,
+    "subjectType" text,
+    scopes jsonb,
+    "clientCredentialsScopes" jsonb,
+    "userId" text,
+    "createdAt" timestamp with time zone,
+    "updatedAt" timestamp with time zone,
+    name text,
+    uri text,
+    icon text,
+    contacts jsonb,
+    tos text,
+    policy text,
+    "softwareId" text,
+    "softwareVersion" text,
+    "softwareStatement" text,
+    "redirectUris" jsonb NOT NULL,
+    "postLogoutRedirectUris" jsonb,
+    "backchannelLogoutUri" text,
+    "backchannelLogoutSessionRequired" boolean,
+    "tokenEndpointAuthMethod" text,
+    "applicationType" text,
+    jwks text,
+    "jwksUri" text,
+    "grantTypes" jsonb,
+    "responseTypes" jsonb,
+    "requirePKCE" boolean,
+    "dpopBoundAccessTokens" boolean,
+    "referenceId" text,
+    metadata jsonb
+);
+
+CREATE TABLE auth."oauthResource" (
+    id text NOT NULL,
+    identifier text NOT NULL,
+    name text NOT NULL,
+    "accessTokenTtl" integer,
+    "refreshTokenTtl" integer,
+    "signingAlgorithm" text,
+    "signingKeyId" text,
+    "allowedScopes" jsonb,
+    "customClaims" jsonb,
+    "dpopBoundAccessTokensRequired" boolean,
+    disabled boolean,
+    "createdAt" timestamp with time zone,
+    "updatedAt" timestamp with time zone,
+    "policyVersion" integer,
+    metadata jsonb
+);
+
+CREATE TABLE auth."oauthClientResource" (
+    id text NOT NULL,
+    "clientId" text NOT NULL,
+    "resourceId" text NOT NULL,
+    metadata jsonb,
+    "createdAt" timestamp with time zone
+);
+
+CREATE TABLE auth."oauthRefreshToken" (
+    id text NOT NULL,
+    token text NOT NULL,
+    "clientId" text NOT NULL,
+    "sessionId" text,
+    "userId" text NOT NULL,
+    "referenceId" text,
+    "authorizationCodeId" text,
+    resources jsonb,
+    "requestedUserInfoClaims" jsonb,
+    "expiresAt" timestamp with time zone NOT NULL,
+    "createdAt" timestamp with time zone NOT NULL,
+    revoked timestamp with time zone,
+    "rotatedAt" timestamp with time zone,
+    "rotationReplayResponse" text,
+    "rotationReplayExpiresAt" timestamp with time zone,
+    "authTime" timestamp with time zone,
+    confirmation jsonb,
+    scopes jsonb NOT NULL
+);
+
+CREATE TABLE auth."oauthAccessToken" (
+    id text NOT NULL,
+    token text NOT NULL,
+    "clientId" text NOT NULL,
+    "sessionId" text,
+    "userId" text,
+    "referenceId" text,
+    "authorizationCodeId" text,
+    resources jsonb,
+    "requestedUserInfoClaims" jsonb,
+    "refreshId" text,
+    "expiresAt" timestamp with time zone NOT NULL,
+    "createdAt" timestamp with time zone NOT NULL,
+    revoked timestamp with time zone,
+    confirmation jsonb,
+    scopes jsonb NOT NULL
+);
+
+CREATE TABLE auth."oauthConsent" (
+    id text NOT NULL,
+    "clientId" text NOT NULL,
+    "userId" text,
+    "referenceId" text,
+    resources jsonb,
+    "requestedUserInfoClaims" jsonb,
+    scopes jsonb NOT NULL,
+    "createdAt" timestamp with time zone NOT NULL,
+    "updatedAt" timestamp with time zone NOT NULL
+);
+
+CREATE TABLE auth."oauthClientAssertion" (
+    id text NOT NULL,
+    "expiresAt" timestamp with time zone NOT NULL
+);
+
 CREATE TABLE auth.member (
     id text NOT NULL,
     "organizationId" text NOT NULL,
@@ -5927,6 +6058,42 @@ ALTER TABLE ONLY auth.account
 ALTER TABLE ONLY auth.invitation
     ADD CONSTRAINT invitation_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY auth.jwks
+    ADD CONSTRAINT jwks_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY auth."oauthAccessToken"
+    ADD CONSTRAINT "oauthAccessToken_pkey" PRIMARY KEY (id);
+
+ALTER TABLE ONLY auth."oauthAccessToken"
+    ADD CONSTRAINT "oauthAccessToken_token_key" UNIQUE (token);
+
+ALTER TABLE ONLY auth."oauthClient"
+    ADD CONSTRAINT "oauthClient_clientId_key" UNIQUE ("clientId");
+
+ALTER TABLE ONLY auth."oauthClient"
+    ADD CONSTRAINT "oauthClient_pkey" PRIMARY KEY (id);
+
+ALTER TABLE ONLY auth."oauthClientAssertion"
+    ADD CONSTRAINT "oauthClientAssertion_pkey" PRIMARY KEY (id);
+
+ALTER TABLE ONLY auth."oauthClientResource"
+    ADD CONSTRAINT "oauthClientResource_pkey" PRIMARY KEY (id);
+
+ALTER TABLE ONLY auth."oauthConsent"
+    ADD CONSTRAINT "oauthConsent_pkey" PRIMARY KEY (id);
+
+ALTER TABLE ONLY auth."oauthRefreshToken"
+    ADD CONSTRAINT "oauthRefreshToken_pkey" PRIMARY KEY (id);
+
+ALTER TABLE ONLY auth."oauthRefreshToken"
+    ADD CONSTRAINT "oauthRefreshToken_token_key" UNIQUE (token);
+
+ALTER TABLE ONLY auth."oauthResource"
+    ADD CONSTRAINT "oauthResource_identifier_key" UNIQUE (identifier);
+
+ALTER TABLE ONLY auth."oauthResource"
+    ADD CONSTRAINT "oauthResource_pkey" PRIMARY KEY (id);
+
 ALTER TABLE ONLY auth.member
     ADD CONSTRAINT member_organization_id_user_id_key UNIQUE ("organizationId", "userId");
 
@@ -6289,6 +6456,36 @@ CREATE INDEX invitation_email_idx ON auth.invitation USING btree (email);
 
 CREATE INDEX "invitation_organizationId_idx" ON auth.invitation USING btree ("organizationId");
 
+CREATE INDEX "oauthAccessToken_authorizationCodeId_idx" ON auth."oauthAccessToken" USING btree ("authorizationCodeId");
+
+CREATE INDEX "oauthAccessToken_clientId_idx" ON auth."oauthAccessToken" USING btree ("clientId");
+
+CREATE INDEX "oauthAccessToken_refreshId_idx" ON auth."oauthAccessToken" USING btree ("refreshId");
+
+CREATE INDEX "oauthAccessToken_sessionId_idx" ON auth."oauthAccessToken" USING btree ("sessionId");
+
+CREATE INDEX "oauthAccessToken_userId_idx" ON auth."oauthAccessToken" USING btree ("userId");
+
+CREATE INDEX "oauthClient_userId_idx" ON auth."oauthClient" USING btree ("userId");
+
+CREATE INDEX "oauthClientResource_clientId_idx" ON auth."oauthClientResource" USING btree ("clientId");
+
+CREATE UNIQUE INDEX "oauthClientResource_clientId_resourceId_uidx" ON auth."oauthClientResource" USING btree ("clientId", "resourceId");
+
+CREATE INDEX "oauthClientResource_resourceId_idx" ON auth."oauthClientResource" USING btree ("resourceId");
+
+CREATE INDEX "oauthConsent_clientId_idx" ON auth."oauthConsent" USING btree ("clientId");
+
+CREATE INDEX "oauthConsent_userId_idx" ON auth."oauthConsent" USING btree ("userId");
+
+CREATE INDEX "oauthRefreshToken_authorizationCodeId_idx" ON auth."oauthRefreshToken" USING btree ("authorizationCodeId");
+
+CREATE INDEX "oauthRefreshToken_clientId_idx" ON auth."oauthRefreshToken" USING btree ("clientId");
+
+CREATE INDEX "oauthRefreshToken_sessionId_idx" ON auth."oauthRefreshToken" USING btree ("sessionId");
+
+CREATE INDEX "oauthRefreshToken_userId_idx" ON auth."oauthRefreshToken" USING btree ("userId");
+
 CREATE INDEX "member_organizationId_idx" ON auth.member USING btree ("organizationId");
 
 CREATE INDEX "member_userId_idx" ON auth.member USING btree ("userId");
@@ -6522,6 +6719,42 @@ ALTER TABLE ONLY auth.member
 
 ALTER TABLE ONLY auth.session
     ADD CONSTRAINT "session_userId_fkey" FOREIGN KEY ("userId") REFERENCES auth."user"(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY auth."oauthAccessToken"
+    ADD CONSTRAINT "oauthAccessToken_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES auth."oauthClient"("clientId") ON DELETE CASCADE;
+
+ALTER TABLE ONLY auth."oauthAccessToken"
+    ADD CONSTRAINT "oauthAccessToken_refreshId_fkey" FOREIGN KEY ("refreshId") REFERENCES auth."oauthRefreshToken"(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY auth."oauthAccessToken"
+    ADD CONSTRAINT "oauthAccessToken_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES auth.session(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY auth."oauthAccessToken"
+    ADD CONSTRAINT "oauthAccessToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES auth."user"(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY auth."oauthClient"
+    ADD CONSTRAINT "oauthClient_userId_fkey" FOREIGN KEY ("userId") REFERENCES auth."user"(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY auth."oauthClientResource"
+    ADD CONSTRAINT "oauthClientResource_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES auth."oauthClient"("clientId") ON DELETE CASCADE;
+
+ALTER TABLE ONLY auth."oauthClientResource"
+    ADD CONSTRAINT "oauthClientResource_resourceId_fkey" FOREIGN KEY ("resourceId") REFERENCES auth."oauthResource"(identifier) ON DELETE CASCADE;
+
+ALTER TABLE ONLY auth."oauthConsent"
+    ADD CONSTRAINT "oauthConsent_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES auth."oauthClient"("clientId") ON DELETE CASCADE;
+
+ALTER TABLE ONLY auth."oauthConsent"
+    ADD CONSTRAINT "oauthConsent_userId_fkey" FOREIGN KEY ("userId") REFERENCES auth."user"(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY auth."oauthRefreshToken"
+    ADD CONSTRAINT "oauthRefreshToken_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES auth."oauthClient"("clientId") ON DELETE CASCADE;
+
+ALTER TABLE ONLY auth."oauthRefreshToken"
+    ADD CONSTRAINT "oauthRefreshToken_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES auth.session(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY auth."oauthRefreshToken"
+    ADD CONSTRAINT "oauthRefreshToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES auth."user"(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY relay.artifact_uploads
     ADD CONSTRAINT artifact_uploads_artifact_fkey FOREIGN KEY (workspace_id, artifact_id) REFERENCES relay.artifacts(workspace_id, id);
@@ -6953,7 +7186,23 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE auth.account TO relay_app;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE auth.invitation TO relay_app;
 
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE auth.jwks TO relay_app;
+
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE auth.member TO relay_app;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE auth."oauthAccessToken" TO relay_app;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE auth."oauthClient" TO relay_app;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE auth."oauthClientAssertion" TO relay_app;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE auth."oauthClientResource" TO relay_app;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE auth."oauthConsent" TO relay_app;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE auth."oauthRefreshToken" TO relay_app;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE auth."oauthResource" TO relay_app;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE auth.organization TO relay_app;
 
@@ -7088,7 +7337,7 @@ export { CANONICAL_SQL };
 export const migration: Migration = {
   id: "0001_relay_baseline",
   checksumSha256:
-    "2635e4f55639e9dc14ceea64e7abe0f589c11034c26b85052170f7913c06dcee",
+    "817d9f2edbefc4a5a53f35e651673af39d07920e2421923494d19a76a39dcb36",
   transactional: true,
   up: async (db) => {
     await sql.raw(CANONICAL_SQL).execute(db);

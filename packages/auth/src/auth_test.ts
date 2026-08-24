@@ -3,6 +3,7 @@ import {
   assertExists,
   assertNotEquals,
   assertRejects,
+  assertStringIncludes,
 } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import {
@@ -10,6 +11,7 @@ import {
   createAuthOptions,
   isDeferredOrganizationMutation,
 } from "./auth.ts";
+import { RELAY_MCP_RESOURCE_SCOPES, RELAY_OAUTH_SCOPES } from "./oauth.ts";
 import {
   createTestAuth,
   TEST_AUTH_CONFIG,
@@ -103,34 +105,66 @@ Deno.test("production auth config contains only Google and GitHub", async () => 
     ]);
     assertEquals(options.socialProviders.google.requireEmailVerification, true);
     assertEquals(options.socialProviders.github.requireEmailVerification, true);
-    assertEquals(options.plugins.map((plugin) => plugin.id), ["organization"]);
+    assertEquals(options.disabledPaths, ["/token"]);
+
+    const plugins = options.plugins as Array<{
+      id: string;
+      options?: Record<string, unknown>;
+    }>;
+    assertEquals(plugins.map((plugin) => plugin.id), [
+      "organization",
+      "jwt",
+      "oauth-provider",
+    ]);
+    assertEquals(
+      plugins.find((plugin) => plugin.id === "jwt")?.options
+        ?.disableSettingJwtHeader,
+      true,
+    );
+
+    const oauthOptions = plugins.find((plugin) =>
+      plugin.id === "oauth-provider"
+    )?.options;
+    const resource = new URL("/mcp", TEST_AUTH_CONFIG.baseUrl).toString();
+    assertEquals(oauthOptions?.loginPage, "/sign-in");
+    assertEquals(oauthOptions?.consentPage, "/oauth/consent");
+    assertEquals(oauthOptions?.scopes, [...RELAY_OAUTH_SCOPES]);
+    assertEquals(oauthOptions?.resources, [{
+      identifier: resource,
+      allowedScopes: [...RELAY_MCP_RESOURCE_SCOPES],
+    }]);
+    assertEquals(oauthOptions?.enforcePerClientResources, true);
+    assertEquals(oauthOptions?.clientRegistrationDefaultResources, [resource]);
+    assertEquals(oauthOptions?.clientRegistrationAllowedResources, []);
+    assertEquals(oauthOptions?.grantTypes, [
+      "authorization_code",
+      "refresh_token",
+    ]);
+    assertEquals(oauthOptions?.allowDynamicClientRegistration, false);
+    assertEquals(oauthOptions?.allowUnauthenticatedClientRegistration, false);
+    assertEquals(oauthOptions?.refreshTokenReuseInterval, 30);
   } finally {
     await pool.end();
   }
 });
 
-Deno.test("test helpers exist only on the dedicated test auth instance", async () => {
-  const fixture = hasDatabase ? liveTestAuthFixture() : (() => {
-    const pool = testPool();
-    return { pool, auth: createTestAuth(pool) };
-  })();
-  try {
-    const context = hasDatabase
-      ? sharedTestAuthContext!
-      : await fixture.auth.$context;
+Deno.test({
+  name: "test helpers exist only on the dedicated test auth instance",
+  ignore: !hasDatabase,
+  fn: () => {
+    const { pool } = liveTestAuthFixture();
+    const context = sharedTestAuthContext!;
     assertExists(context.test);
     assertExists(context.test.createOrganization);
     assertEquals(
       context.options.plugins?.map((plugin) => plugin.id),
-      ["organization", "test-utils"],
+      ["organization", "jwt", "oauth-provider", "test-utils"],
     );
-  } finally {
-    if (!hasDatabase) await fixture.pool.end();
-  }
-  if (hasDatabase) assertEquals(sharedTestPool?.ended, false);
+    assertEquals(pool.ended, false);
+  },
 });
 
-Deno.test("single-member MVP organization mutation routes are disabled", async () => {
+Deno.test("only active-workspace selection bypasses deferred org mutations", () => {
   const mutationPaths = [
     "accept-invitation",
     "add-team-member",
@@ -144,7 +178,6 @@ Deno.test("single-member MVP organization mutation routes are disabled", async (
     "remove-member",
     "remove-team",
     "remove-team-member",
-    "set-active",
     "set-active-team",
     "update",
     "update-member-role",
@@ -175,6 +208,7 @@ Deno.test("single-member MVP organization mutation routes are disabled", async (
       ["GET", "list-user-invitations"],
       ["POST", "check-slug"],
       ["POST", "has-permission"],
+      ["POST", "set-active"],
     ]
   ) {
     assertEquals(
@@ -203,25 +237,116 @@ Deno.test("single-member MVP organization mutation routes are disabled", async (
     ),
     false,
   );
+});
 
-  const pool = testPool();
-  try {
+Deno.test({
+  name: "MCP discovery and protected-route defaults match the boundary",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const { pool } = liveTestAuthFixture();
     const auth = createAuth(pool, TEST_AUTH_CONFIG);
-    const response = await auth.handler(
+    const resource = new URL("/mcp", TEST_AUTH_CONFIG.baseUrl).toString();
+
+    assertEquals(auth.mcpResource, resource);
+
+    const deniedOrganizationMutation = await auth.handler(
       new Request("http://localhost:8000/api/auth/organization/invite-member", {
         method: "POST",
       }),
     );
-    assertEquals(response.status, 404);
-    assertEquals(await response.json(), {
+    assertEquals(deniedOrganizationMutation.status, 404);
+    assertEquals(await deniedOrganizationMutation.json(), {
       error: {
         code: "not_found",
         message: "The requested resource was not found.",
       },
     });
-  } finally {
-    await pool.end();
-  }
+
+    const allowedOrganizationMutation = await auth.handler(
+      new Request("http://localhost:8000/api/auth/organization/set-active", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ organizationId: null }),
+      }),
+    );
+    assertNotEquals(allowedOrganizationMutation.status, 404);
+
+    const tokenResponse = await auth.handler(
+      new Request("http://localhost:8000/api/auth/token"),
+    );
+    assertEquals(tokenResponse.status, 404);
+
+    const jwksResponse = await auth.handler(
+      new Request("http://localhost:8000/api/auth/jwks"),
+    );
+    assertEquals(jwksResponse.status, 200);
+    const jwks = await jwksResponse.json() as { keys?: unknown[] };
+    assertExists(jwks.keys?.[0]);
+
+    const sessionResponse = await auth.handler(
+      new Request("http://localhost:8000/api/auth/get-session"),
+    );
+    assertEquals(sessionResponse.headers.has("set-auth-jwt"), false);
+
+    const registrationResponse = await auth.handler(
+      new Request("http://localhost:8000/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          redirect_uris: ["http://localhost:3000/callback"],
+        }),
+      }),
+    );
+    assertEquals(registrationResponse.status, 403);
+
+    const authorizationMetadataResponse = await auth.handler(
+      new Request(
+        "http://localhost:8000/.well-known/oauth-authorization-server/api/auth",
+      ),
+    );
+    assertEquals(authorizationMetadataResponse.status, 200);
+    const authorizationMetadata = await authorizationMetadataResponse
+      .json() as Record<string, unknown>;
+    assertEquals(authorizationMetadata.registration_endpoint, undefined);
+    assertEquals(authorizationMetadata.grant_types_supported, [
+      "authorization_code",
+      "refresh_token",
+    ]);
+    assertEquals(
+      authorizationMetadata.scopes_supported,
+      [...RELAY_OAUTH_SCOPES],
+    );
+
+    const resourceMetadataResponse = await auth.handler(
+      new Request(
+        "http://localhost:8000/.well-known/oauth-protected-resource/mcp",
+      ),
+    );
+    assertEquals(resourceMetadataResponse.status, 200);
+    const resourceMetadata = await resourceMetadataResponse.json() as Record<
+      string,
+      unknown
+    >;
+    assertEquals(resourceMetadata.resource, resource);
+    assertEquals(resourceMetadata.authorization_servers, [
+      "http://localhost:8000/api/auth",
+    ]);
+    assertEquals(
+      resourceMetadata.scopes_supported,
+      [...RELAY_MCP_RESOURCE_SCOPES],
+    );
+
+    const protectedHandler = auth.protectMcp(() => new Response("unexpected"));
+    const unauthorizedResponse = await protectedHandler(
+      new Request(resource, { method: "POST" }),
+    );
+    assertEquals(unauthorizedResponse.status, 401);
+    const challenge = unauthorizedResponse.headers.get("www-authenticate");
+    assertExists(challenge);
+    for (const scope of RELAY_MCP_RESOURCE_SCOPES) {
+      assertStringIncludes(challenge, scope);
+    }
+  },
 });
 
 Deno.test({

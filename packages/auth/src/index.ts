@@ -1,5 +1,12 @@
 export { createAuth } from "./auth.ts";
-export type { Auth } from "./auth.ts";
+export type { Auth, McpRequestHandler, ProtectMcpOptions } from "./auth.ts";
+export {
+  RELAY_AUTHORIZATION_SCOPES,
+  RELAY_MCP_RESOURCE_SCOPES,
+  RELAY_OAUTH_SCOPES,
+  RELAY_WORKSPACE_ID_CLAIM,
+  relayMcpResource,
+} from "./oauth.ts";
 
 export {
   ensurePersonalWorkspace,

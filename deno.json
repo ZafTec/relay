@@ -26,8 +26,8 @@
     "migrate:up": "deno run --env-file=.env --allow-env --allow-net src/main.ts migrate up",
     "migrate:status": "deno run --env-file=.env --allow-env --allow-net src/main.ts migrate status",
     "compile": "deno compile --allow-env --allow-net --output dist/relay src/main.ts",
-    "test": "deno test --allow-env --allow-net",
-    "check": "deno fmt --check apps packages src && deno lint apps packages src && deno check src/main.ts && deno test --allow-env --allow-net",
+    "test": "deno test --allow-env --allow-net apps/api apps/worker packages src",
+    "check": "deno fmt --check apps packages src && deno lint apps packages src && deno check src/main.ts && deno test --allow-env --allow-net apps/api apps/worker packages src",
     "check:live": "deno run --allow-env --allow-run --allow-read scripts/dev/check-live.ts",
     "fmt": "deno fmt apps packages src",
     "lint": "deno lint apps packages src"
@@ -44,13 +44,20 @@
     "frozen": true
   },
   "imports": {
+    "@better-auth/mcp": "npm:@better-auth/mcp@1.7.1",
     "@hono/hono": "jsr:@hono/hono@^4.13.2",
+    "@modelcontextprotocol/client": "npm:@modelcontextprotocol/client@2.0.0",
+    "@modelcontextprotocol/server": "npm:@modelcontextprotocol/server@2.0.0",
     "@std/assert": "jsr:@std/assert@^1.0.19",
     "better-auth": "npm:better-auth@1.7.1",
+    "better-auth/api": "npm:better-auth@1.7.1/api",
+    "better-auth/oauth2": "npm:better-auth@1.7.1/oauth2",
     "better-auth/plugins": "npm:better-auth@1.7.1/plugins",
+    "better-auth/plugins/jwt": "npm:better-auth@1.7.1/plugins/jwt",
     "bullmq": "npm:bullmq@6.1.2",
     "ioredis": "npm:ioredis@5.11.1",
     "kysely": "npm:kysely@^0.29.5",
-    "pg": "npm:pg@^8.23.0"
+    "pg": "npm:pg@^8.23.0",
+    "zod/v4": "npm:zod@4.4.3/v4"
   }
 }

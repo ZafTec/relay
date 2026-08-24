@@ -1,13 +1,24 @@
+import {
+  mcp,
+  requireMcpAuth,
+  type RequireMcpAuthOptions,
+} from "@better-auth/mcp";
 import { betterAuth } from "better-auth";
-// The import map intentionally stays unchanged; Better Auth exposes these
-// tree-shakeable entry points only as npm package subpaths.
+import { jwt } from "better-auth/plugins/jwt";
+// Better Auth exposes these tree-shakeable entry points only as npm package
+// subpaths; keep them pinned to the same version as the root import map.
 // deno-lint-ignore no-import-prefix
 import { organization } from "npm:better-auth@1.7.1/plugins/organization";
 // deno-lint-ignore no-import-prefix
 import { github, google } from "npm:better-auth@1.7.1/social-providers";
 import type { AuthConfig } from "@relay/config";
 import type { DatabasePool } from "@relay/database";
-import { requireCurrentVerifiedEmail } from "./oauth.ts";
+import {
+  createMcpOAuthOptions,
+  RELAY_MCP_RESOURCE_SCOPES,
+  relayMcpResource,
+  requireCurrentVerifiedEmail,
+} from "./oauth.ts";
 import {
   type AuthConnectionInfo,
   prepareAuthRequest,
@@ -30,6 +41,7 @@ const ALLOWED_ORGANIZATION_REQUESTS = new Set([
   "GET /api/auth/organization/list-user-invitations",
   "POST /api/auth/organization/check-slug",
   "POST /api/auth/organization/has-permission",
+  "POST /api/auth/organization/set-active",
 ]);
 
 interface AuthSession {
@@ -47,6 +59,9 @@ interface AuthUser {
   readonly [key: string]: unknown;
 }
 
+export type McpRequestHandler = Parameters<typeof requireMcpAuth>[1];
+export type ProtectMcpOptions = Omit<RequireMcpAuthOptions, "resource">;
+
 /** Production-facing auth surface. Privileged adapters/test helpers stay out. */
 export interface Auth {
   readonly handler: (
@@ -58,6 +73,14 @@ export interface Auth {
       args: { headers: Headers },
     ): Promise<{ session: AuthSession; user: AuthUser } | null>;
   };
+  readonly mcpResource: string;
+  readonly protectMcp: (
+    handler: McpRequestHandler,
+    options?: ProtectMcpOptions,
+  ) => (
+    request: Request,
+    connection?: AuthConnectionInfo,
+  ) => Promise<Response>;
 }
 
 export function isDeferredOrganizationMutation(request: Request): boolean {
@@ -101,6 +124,7 @@ export function createAuthOptions(pool: DatabasePool, config: AuthConfig) {
     secret: config.secret,
     database: pool,
     trustedOrigins: [...config.trustedOrigins],
+    disabledPaths: ["/token"],
 
     // No emailAndPassword config -> disabled. OAuth-only, no magic-link/OTP.
     socialProviders: {
@@ -164,6 +188,8 @@ export function createAuthOptions(pool: DatabasePool, config: AuthConfig) {
         teams: { enabled: false },
         dynamicAccessControl: { enabled: false },
       }),
+      jwt({ disableSettingJwtHeader: true }),
+      mcp(createMcpOAuthOptions(pool, config.baseUrl)),
     ],
 
     databaseHooks: {
@@ -202,6 +228,7 @@ export function createAuthOptions(pool: DatabasePool, config: AuthConfig) {
 /** One Better Auth instance per API process, sharing its PostgreSQL pool. */
 export function createAuth(pool: DatabasePool, config: AuthConfig): Auth {
   const auth = betterAuth(createAuthOptions(pool, config));
+  const mcpResource = relayMcpResource(config.baseUrl);
 
   return {
     handler: (request, connection) => {
@@ -212,6 +239,18 @@ export function createAuth(pool: DatabasePool, config: AuthConfig): Auth {
     },
     api: {
       getSession: (args) => auth.api.getSession(args),
+    },
+    mcpResource,
+    protectMcp: (handler, options) => {
+      const protectedHandler = requireMcpAuth(auth, handler, {
+        ...options,
+        resource: mcpResource,
+        challengeScopes: options?.challengeScopes ?? RELAY_MCP_RESOURCE_SCOPES,
+      });
+      return (request, connection) => {
+        const prepared = prepareAuthRequest(request, connection);
+        return protectedHandler(new Request(mcpResource, prepared));
+      };
     },
   };
 }
