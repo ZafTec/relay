@@ -401,8 +401,8 @@ Deno.test({
       const targetId = unique("target");
       const event = {
         actorType: "user" as const,
-        action: "changelog.publish",
-        targetType: "changelog_entry",
+        action: "artifact.inspected",
+        targetType: "artifact",
         targetId,
         outcome: "success" as const,
       };

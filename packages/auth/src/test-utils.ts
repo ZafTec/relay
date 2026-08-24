@@ -1,5 +1,9 @@
 import { betterAuth } from "better-auth";
 import { testUtils } from "better-auth/plugins";
+// Better Auth's test helpers call the ambient adapter context internally.
+// Pin them to the instance under test when OpenTelemetry context propagation is
+// present in the process.
+import { runWithAdapter } from "@better-auth/core/context";
 import type { AuthConfig } from "@relay/config";
 import type { DatabasePool } from "@relay/database";
 import { createAuthOptions } from "./auth.ts";
@@ -29,4 +33,14 @@ export function createTestAuth(pool: DatabasePool) {
     ...productionOptions,
     plugins: [...productionOptions.plugins, testUtils()],
   });
+}
+
+export async function withTestAuthContext<T>(
+  auth: ReturnType<typeof createTestAuth>,
+  operation: (
+    test: Awaited<ReturnType<typeof createTestAuth>["$context"]>["test"],
+  ) => T | Promise<T>,
+): Promise<T> {
+  const context = await auth.$context;
+  return await runWithAdapter(context.adapter, () => operation(context.test));
 }

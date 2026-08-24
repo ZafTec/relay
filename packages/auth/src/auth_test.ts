@@ -10,7 +10,11 @@ import {
   createAuthOptions,
   isDeferredOrganizationMutation,
 } from "./auth.ts";
-import { createTestAuth, TEST_AUTH_CONFIG } from "./test-utils.ts";
+import {
+  createTestAuth,
+  TEST_AUTH_CONFIG,
+  withTestAuthContext,
+} from "./test-utils.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
 const hasDatabase = databaseUrl !== undefined;
@@ -36,17 +40,44 @@ function activeOrganizationId(session: unknown): string | null | undefined {
     .activeOrganizationId;
 }
 
+// Initialize the test-only Better Auth context before any short-lived auth
+// instance is closed. Better Auth 1.7.1's optional OpenTelemetry integration
+// can otherwise retain the first adapter context observed by the test process.
+const sharedTestPool = hasDatabase ? testPool() : undefined;
+const sharedTestAuth = sharedTestPool === undefined
+  ? undefined
+  : createTestAuth(sharedTestPool);
+// Better Auth initializes its adapter asynchronously. Resolve this context before
+// any short-lived auth instance can enter the global adapter context used by its
+// optional OpenTelemetry instrumentation.
+const sharedTestAuthContext = sharedTestAuth === undefined
+  ? undefined
+  : await sharedTestAuth.$context;
+
+function liveTestAuthFixture(): {
+  pool: DatabasePool;
+  auth: ReturnType<typeof createTestAuth>;
+} {
+  if (sharedTestPool === undefined || sharedTestAuth === undefined) {
+    throw new Error("DATABASE_URL is required");
+  }
+  return { pool: sharedTestPool, auth: sharedTestAuth };
+}
+
 async function createTestUser(
   auth: ReturnType<typeof createTestAuth>,
   email: string,
   options: { emailVerified?: boolean } = {},
 ) {
-  const { test } = await auth.$context;
-  return await test.saveUser(test.createUser({
-    email,
-    name: "Test User",
-    emailVerified: options.emailVerified ?? true,
-  }));
+  return await withTestAuthContext(
+    auth,
+    (test) =>
+      test.saveUser(test.createUser({
+        email,
+        name: "Test User",
+        emailVerified: options.emailVerified ?? true,
+      })),
+  );
 }
 
 async function cleanupUser(pool: DatabasePool, userId: string): Promise<void> {
@@ -79,10 +110,14 @@ Deno.test("production auth config contains only Google and GitHub", async () => 
 });
 
 Deno.test("test helpers exist only on the dedicated test auth instance", async () => {
-  const pool = testPool();
+  const fixture = hasDatabase ? liveTestAuthFixture() : (() => {
+    const pool = testPool();
+    return { pool, auth: createTestAuth(pool) };
+  })();
   try {
-    const testAuth = createTestAuth(pool);
-    const context = await testAuth.$context;
+    const context = hasDatabase
+      ? sharedTestAuthContext!
+      : await fixture.auth.$context;
     assertExists(context.test);
     assertExists(context.test.createOrganization);
     assertEquals(
@@ -90,8 +125,9 @@ Deno.test("test helpers exist only on the dedicated test auth instance", async (
       ["organization", "test-utils"],
     );
   } finally {
-    await pool.end();
+    if (!hasDatabase) await fixture.pool.end();
   }
+  if (hasDatabase) assertEquals(sharedTestPool?.ended, false);
 });
 
 Deno.test("single-member MVP organization mutation routes are disabled", async () => {
@@ -241,19 +277,19 @@ Deno.test({
   name: "a session cannot be created for a user with an unverified email",
   ignore: !hasDatabase,
   fn: async () => {
-    const pool = testPool();
+    const { pool, auth } = liveTestAuthFixture();
+    assertEquals(pool.ended, false);
     let userId: string | undefined;
     try {
-      const auth = createTestAuth(pool);
       const user = await createTestUser(
         auth,
         `${unique("unverified")}@example.com`,
         { emailVerified: false },
       );
       userId = user.id;
-      const { test } = await auth.$context;
-
-      await assertRejects(() => test.login({ userId: user.id }));
+      await assertRejects(() =>
+        withTestAuthContext(auth, (test) => test.login({ userId: user.id }))
+      );
 
       const workspaces = await pool.query(
         "select 1 from relay.personal_workspaces where user_id = $1",
@@ -262,7 +298,6 @@ Deno.test({
       assertEquals(workspaces.rowCount, 0);
     } finally {
       if (userId) await cleanupUser(pool, userId);
-      await pool.end();
     }
   },
 });
@@ -271,14 +306,15 @@ Deno.test({
   name: "first session creates one personal workspace with the user as owner",
   ignore: !hasDatabase,
   fn: async () => {
-    const pool = testPool();
+    const { pool, auth } = liveTestAuthFixture();
     let userId: string | undefined;
     try {
-      const auth = createTestAuth(pool);
       const user = await createTestUser(auth, `${unique("owner")}@example.com`);
       userId = user.id;
-      const { test } = await auth.$context;
-      const { session } = await test.login({ userId: user.id });
+      const { session } = await withTestAuthContext(
+        auth,
+        (test) => test.login({ userId: user.id }),
+      );
 
       const organizationId = activeOrganizationId(session);
       assertNotEquals(organizationId, null);
@@ -303,7 +339,6 @@ Deno.test({
       assertEquals(members.rows, [{ role: "owner" }]);
     } finally {
       if (userId) await cleanupUser(pool, userId);
-      await pool.end();
     }
   },
 });
@@ -312,19 +347,22 @@ Deno.test({
   name: "a second session for the same user reuses the same workspace",
   ignore: !hasDatabase,
   fn: async () => {
-    const pool = testPool();
+    const { pool, auth } = liveTestAuthFixture();
     let userId: string | undefined;
     try {
-      const auth = createTestAuth(pool);
       const user = await createTestUser(
         auth,
         `${unique("repeat")}@example.com`,
       );
       userId = user.id;
-      const { test } = await auth.$context;
-
-      const first = await test.login({ userId: user.id });
-      const second = await test.login({ userId: user.id });
+      const first = await withTestAuthContext(
+        auth,
+        (test) => test.login({ userId: user.id }),
+      );
+      const second = await withTestAuthContext(
+        auth,
+        (test) => test.login({ userId: user.id }),
+      );
       assertEquals(
         activeOrganizationId(first.session),
         activeOrganizationId(second.session),
@@ -337,7 +375,6 @@ Deno.test({
       assertEquals(workspaces.rowCount, 1);
     } finally {
       if (userId) await cleanupUser(pool, userId);
-      await pool.end();
     }
   },
 });
@@ -347,19 +384,23 @@ Deno.test({
     "concurrent first sessions for the same user create one organization and owner",
   ignore: !hasDatabase,
   fn: async () => {
-    const pool = testPool();
+    const { pool, auth } = liveTestAuthFixture();
     let userId: string | undefined;
     try {
-      const auth = createTestAuth(pool);
       const user = await createTestUser(
         auth,
         `${unique("concurrent")}@example.com`,
       );
       userId = user.id;
-      const { test } = await auth.$context;
-
       const sessions = await Promise.all(
-        Array.from({ length: 5 }, () => test.login({ userId: user.id })),
+        Array.from(
+          { length: 5 },
+          () =>
+            withTestAuthContext(
+              auth,
+              (test) => test.login({ userId: user.id }),
+            ),
+        ),
       );
       const organizationIds = new Set(
         sessions.map(({ session }) => activeOrganizationId(session)),
@@ -379,7 +420,14 @@ Deno.test({
       assertEquals(members.rowCount, 1);
     } finally {
       if (userId) await cleanupUser(pool, userId);
-      await pool.end();
     }
+  },
+});
+
+Deno.test({
+  name: "auth integration fixture shuts down its shared pool",
+  ignore: !hasDatabase,
+  fn: async () => {
+    await sharedTestPool?.end();
   },
 });
