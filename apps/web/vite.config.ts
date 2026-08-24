@@ -18,7 +18,10 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       proxy: {
         "/api": proxy,
+        "/health": proxy,
         "/mcp": proxy,
+        "^/s/": proxy,
+        "/version": proxy,
         "/.well-known": proxy,
       },
     },
@@ -26,6 +29,14 @@ export default defineConfig(({ mode }) => {
       host: "127.0.0.1",
       port: 4173,
       strictPort: true,
+      proxy: {
+        "/api": proxy,
+        "/health": proxy,
+        "/mcp": proxy,
+        "^/s/": proxy,
+        "/version": proxy,
+        "/.well-known": proxy,
+      },
     },
     build: {
       target: "es2022",

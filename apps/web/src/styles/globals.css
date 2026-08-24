@@ -280,7 +280,7 @@ code {
 
 .inline-notice--error,
 .inline-notice--warning {
-  border-left: 4px solid var(--surface-ink);
+  border-color: var(--surface-ink);
 }
 
 .inline-notice--success {
@@ -592,6 +592,13 @@ code {
 }
 
 .public-nav {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.public-nav__links {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -611,8 +618,68 @@ code {
   transition: color var(--relay-motion-hover) var(--relay-ease-out);
 }
 
+.public-nav__section-link[aria-current="page"] {
+  color: var(--surface-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--surface-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 7px;
+}
+
+.public-nav__menu {
+  display: none;
+}
+
+.public-nav__menu summary,
+.public-nav__menu-panel a {
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--surface-ink);
+  font-family: var(--relay-font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.public-nav__menu summary {
+  border: 1px solid var(--surface-border-strong);
+  padding-inline: 12px;
+  justify-content: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.public-nav__menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.public-nav__menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: min(220px, calc(100vw - 32px));
+  border: 1px solid var(--surface-border-strong);
+  padding: 8px;
+  display: grid;
+  background: var(--surface-bg);
+}
+
+.public-nav__menu-panel a {
+  padding-inline: 12px;
+}
+
+.public-nav__menu-panel a[aria-current="page"] {
+  background: var(--surface-ink);
+  color: var(--surface-bg);
+}
+
 @media (hover: hover) and (pointer: fine) {
-  .public-nav__section-link:hover {
+  .public-nav__section-link:hover,
+  .public-nav__menu-panel a:hover {
     color: var(--surface-accent);
   }
 }
@@ -880,6 +947,7 @@ code {
 }
 
 .public-footer__nav a {
+  min-width: 44px;
   min-height: 44px;
   display: inline-flex;
   align-items: center;
@@ -1221,9 +1289,27 @@ code {
   border-top: 1px solid var(--surface-border);
   padding: 12px;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
   gap: 10px;
+}
+
+.session-profile-link {
+  min-width: 0;
+  min-height: 44px;
+  padding: 5px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
   align-items: center;
+  gap: 10px;
+  color: var(--surface-ink);
+  text-decoration: none;
+  transition:
+    background-color var(--relay-motion-hover) var(--relay-ease-out),
+    color var(--relay-motion-hover) var(--relay-ease-out),
+    transform var(--relay-motion-press) var(--relay-ease-out);
+}
+
+.session-profile-link:active {
+  transform: scale(0.98);
 }
 
 .session-avatar {
@@ -1260,9 +1346,41 @@ code {
 }
 
 .session-sign-out {
-  grid-column: 1 / -1;
   width: 100%;
   border-top: 1px solid var(--surface-border);
+}
+
+.product-mobile-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.product-mobile-profile {
+  min-width: 44px;
+  min-height: 44px;
+  padding-inline: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--surface-muted);
+  font-family: var(--relay-font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: color var(--relay-motion-hover) var(--relay-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .session-profile-link:hover {
+    background: var(--surface-panel);
+    color: var(--surface-accent);
+  }
+
+  .product-mobile-profile:hover {
+    color: var(--surface-accent);
+  }
 }
 
 .product-main {
@@ -1485,8 +1603,12 @@ code {
     min-height: 64px;
   }
 
-  .public-nav__section-link {
+  .public-nav__links {
     display: none;
+  }
+
+  .public-nav__menu {
+    display: block;
   }
 
   .landing-hero h1 {
@@ -1636,6 +1758,9 @@ code {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .session-profile-link:active {
+    transform: none;
+  }
   html {
     scroll-behavior: auto;
   }

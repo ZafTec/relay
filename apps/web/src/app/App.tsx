@@ -5,10 +5,14 @@ import { ProtectedRoute } from "../auth/ProtectedRoute";
 import { ProductLayout } from "../components/layout/ProductLayout";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { SignInPage } from "../features/auth/SignInPage";
+import { ChangelogPage } from "../features/changelog/ChangelogPage";
+import { DocsPage } from "../features/docs/DocsPage";
 import { LandingPage } from "../features/landing/LandingPage";
 import { NotFoundPage } from "../features/not-found/NotFoundPage";
 import { OAuthConsentPage } from "../features/oauth/OAuthConsentPage";
 import { OAuthWorkspacePage } from "../features/oauth/OAuthWorkspacePage";
+import { ProfilePage } from "../features/profile/ProfilePage";
+import { StatusPage } from "../features/status/StatusPage";
 import { RouteErrorPage } from "./RouteErrorPage";
 
 export const relayRoutes = [
@@ -23,6 +27,21 @@ export const relayRoutes = [
     errorElement: <RouteErrorPage />,
   },
   {
+    path: "/changelog",
+    element: <ChangelogPage />,
+    errorElement: <RouteErrorPage />,
+  },
+  {
+    path: "/docs",
+    element: <DocsPage />,
+    errorElement: <RouteErrorPage />,
+  },
+  {
+    path: "/status",
+    element: <StatusPage />,
+    errorElement: <RouteErrorPage />,
+  },
+  {
     element: <ProtectedRoute />,
     errorElement: <RouteErrorPage />,
     children: [
@@ -30,6 +49,10 @@ export const relayRoutes = [
         path: "/dashboard",
         element: <ProductLayout />,
         children: [{ index: true, element: <DashboardPage /> }],
+      },
+      {
+        path: "/profile",
+        element: <ProfilePage />,
       },
       {
         path: "/oauth/consent",

@@ -62,12 +62,12 @@ function sessionFailureMessage(error: unknown): string {
   return "Relay could not verify the session. Check the connection and try again.";
 }
 
-function workspaceFailureMessage(error: unknown): string {
-  if (error instanceof AuthAdapterError && error.status === 401) {
-    return "The session expired while Relay was loading the workspace.";
-  }
+function workspaceFailureMessage(): string {
   return "Relay could not load the active workspace. No workspace was changed.";
 }
+
+const WORKSPACE_CONTEXT_MISMATCH =
+  "The active workspace does not match the current session. Refresh the session and try again.";
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -79,73 +79,109 @@ export function AuthProvider({ children, adapter = betterAuthAdapter }: AuthProv
   const [workspace, setWorkspace] = useState<WorkspaceState>({ status: "idle" });
   const sessionRequest = useRef(0);
   const workspaceRequest = useRef(0);
+  const activeIdentity = useRef<RelayIdentity | null>(null);
 
-  const loadWorkspace = useCallback(async () => {
+  const transitionToAnonymous = useCallback((reason: "auth-required" | "session-expired") => {
+    sessionRequest.current += 1;
+    workspaceRequest.current += 1;
+    activeIdentity.current = null;
+    writeAuthenticatedMarker(false);
+    setWorkspace({ status: "idle" });
+    setSession({ status: "anonymous", reason });
+  }, []);
+
+  const loadWorkspace = useCallback(async (identity = activeIdentity.current) => {
+    if (!identity) {
+      workspaceRequest.current += 1;
+      setWorkspace({ status: "idle" });
+      return;
+    }
+
     const request = ++workspaceRequest.current;
+    const expectedSessionId = identity.session.id;
+    const expectedWorkspaceId = identity.session.activeWorkspaceId;
     setWorkspace({ status: "loading" });
     try {
-      const activeWorkspace = await adapter.getActiveWorkspace();
-      if (request !== workspaceRequest.current) return;
-      setWorkspace(activeWorkspace
-        ? { status: "ready", workspace: activeWorkspace }
-        : { status: "empty" });
+      const currentWorkspace = await adapter.getActiveWorkspace();
+      if (
+        request !== workspaceRequest.current
+        || activeIdentity.current?.session.id !== expectedSessionId
+      ) return;
+
+      if (currentWorkspace === null) {
+        setWorkspace(expectedWorkspaceId === null
+          ? { status: "empty" }
+          : { status: "degraded", message: WORKSPACE_CONTEXT_MISMATCH });
+        return;
+      }
+
+      if (expectedWorkspaceId === null || currentWorkspace.id !== expectedWorkspaceId) {
+        setWorkspace({ status: "degraded", message: WORKSPACE_CONTEXT_MISMATCH });
+        return;
+      }
+
+      setWorkspace({ status: "ready", workspace: currentWorkspace });
     } catch (error) {
       if (request !== workspaceRequest.current) return;
-      setWorkspace({ status: "degraded", message: workspaceFailureMessage(error) });
+      if (error instanceof AuthAdapterError && error.status === 401) {
+        transitionToAnonymous("session-expired");
+        return;
+      }
+      setWorkspace({ status: "degraded", message: workspaceFailureMessage() });
     }
-  }, [adapter]);
+  }, [adapter, transitionToAnonymous]);
 
   const refreshSession = useCallback(async () => {
     const request = ++sessionRequest.current;
+    workspaceRequest.current += 1;
+    activeIdentity.current = null;
+    setWorkspace({ status: "idle" });
     setSession({ status: "loading" });
     try {
       const identity = await adapter.getSession();
       if (request !== sessionRequest.current) return;
       if (!identity) {
         const expired = readAuthenticatedMarker();
-        writeAuthenticatedMarker(false);
-        setWorkspace({ status: "idle" });
-        setSession({
-          status: "anonymous",
-          reason: expired ? "session-expired" : "auth-required",
-        });
+        transitionToAnonymous(expired ? "session-expired" : "auth-required");
         return;
       }
 
+      activeIdentity.current = identity;
       writeAuthenticatedMarker(true);
       setSession({ status: "authenticated", identity });
-      void loadWorkspace();
+      void loadWorkspace(identity);
     } catch (error) {
       if (request !== sessionRequest.current) return;
       if (error instanceof AuthAdapterError && error.status === 401) {
-        writeAuthenticatedMarker(false);
-        setWorkspace({ status: "idle" });
-        setSession({ status: "anonymous", reason: "session-expired" });
+        transitionToAnonymous("session-expired");
         return;
       }
+      activeIdentity.current = null;
+      workspaceRequest.current += 1;
       setSession({ status: "degraded", message: sessionFailureMessage(error) });
       setWorkspace({ status: "idle" });
     }
-  }, [adapter, loadWorkspace]);
+  }, [adapter, loadWorkspace, transitionToAnonymous]);
+
+  const refreshWorkspace = useCallback(async () => {
+    await loadWorkspace();
+  }, [loadWorkspace]);
 
   const signOut = useCallback(async () => {
     await adapter.signOut();
-    writeAuthenticatedMarker(false);
-    setWorkspace({ status: "idle" });
-    setSession({ status: "anonymous", reason: "auth-required" });
-  }, [adapter]);
+    transitionToAnonymous("auth-required");
+  }, [adapter, transitionToAnonymous]);
 
   const expireSession = useCallback(() => {
-    writeAuthenticatedMarker(false);
-    setWorkspace({ status: "idle" });
-    setSession({ status: "anonymous", reason: "session-expired" });
-  }, []);
+    transitionToAnonymous("session-expired");
+  }, [transitionToAnonymous]);
 
   useEffect(() => {
     void refreshSession();
     return () => {
       sessionRequest.current += 1;
       workspaceRequest.current += 1;
+      activeIdentity.current = null;
     };
   }, [refreshSession]);
 
@@ -154,10 +190,10 @@ export function AuthProvider({ children, adapter = betterAuthAdapter }: AuthProv
     session,
     workspace,
     refreshSession,
-    refreshWorkspace: loadWorkspace,
+    refreshWorkspace,
     signOut,
     expireSession,
-  }), [adapter, expireSession, loadWorkspace, refreshSession, session, signOut, workspace]);
+  }), [adapter, expireSession, refreshSession, refreshWorkspace, session, signOut, workspace]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

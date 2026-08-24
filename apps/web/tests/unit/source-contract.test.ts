@@ -45,4 +45,14 @@ describe("v3 production source contract", () => {
     expect(landing).toContain("/relay/assets/hero-agent-to-artifact.svg");
     expect(landing).not.toContain("design/relay/assets");
   });
+
+  it("proxies every backend-owned public path without capturing sign-in", async () => {
+    const config = await read("vite.config.ts");
+    expect(config).toContain('"/api": proxy');
+    expect(config).toContain('"/health": proxy');
+    expect(config).toContain('"/mcp": proxy');
+    expect(config).toContain('"^/s/": proxy');
+    expect(config).toContain('"/version": proxy');
+    expect(config).not.toContain('"/s": proxy');
+  });
 });

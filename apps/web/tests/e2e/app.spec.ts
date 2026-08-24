@@ -52,6 +52,30 @@ async function mockAuthenticatedWorkspace(page: Page) {
   });
 }
 
+async function mockPublicInformation(page: Page) {
+  await page.route("**/api/v1/changelog**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ entries: [], nextCursor: null }),
+    });
+  });
+  await page.route("**/health/ready", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ service: "api", status: "ok", checks: [] }),
+    });
+  });
+  await page.route("**/version", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ version: "test", revision: "browser-revision" }),
+    });
+  });
+}
+
 async function expectNoSeriousAxeViolations(page: Page) {
   const results = await new AxeBuilder({ page }).analyze();
   const violations = results.violations.filter((violation) =>
@@ -215,6 +239,107 @@ test("MCP consent and workspace screens preserve signed-flow behavior", async ({
   await page.goto(workspacePath);
   await page.screenshot({
     path: path.join(process.cwd(), "artifacts", "screenshots", "oauth-workspace-390.png"),
+    fullPage: true,
+  });
+});
+
+test("public information routes stay factual, searchable, and responsive", async ({ page }) => {
+  await mockSession(page, false);
+  await mockPublicInformation(page);
+
+  const routes = [
+    { path: "/changelog", heading: "Changelog" },
+    { path: "/docs", heading: "Quickstart" },
+    { path: "/status", heading: "All reported checks operational" },
+  ] as const;
+
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: width <= 390 ? 844 : 900 });
+    for (const route of routes) {
+      await page.goto(route.path);
+      await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+      await expectNoPageOverflow(page);
+    }
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/changelog");
+  await expect(page.getByText("No releases published yet")).toBeVisible();
+  await expect(page.getByText(/RSS/i)).toHaveCount(0);
+  await page.getByText("Menu", { exact: true }).click();
+  await expect(
+    page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Docs" }),
+  ).toBeVisible();
+
+  await page.goto("/docs");
+  await page.getByRole("searchbox", { name: "Search HTTP paths and MCP tool names" }).fill("runs:cancel");
+  await expect(page.getByRole("link", { name: "relay.runs.cancel" })).toBeVisible();
+  await expect(page.getByText("/api/v1/runs", { exact: true }).first()).toBeVisible();
+
+  await page.goto("/status");
+  await expect(page.getByText("test", { exact: true })).toBeVisible();
+  await expect(page.getByText("browser-revision", { exact: true })).toBeVisible();
+  await page.getByText("What this page can verify", { exact: true }).click();
+  await expect(page.getByText(/historical uptime percentages/i)).toBeVisible();
+
+  for (const route of routes) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(route.path);
+    await waitForFonts(page);
+    await expectNoSeriousAxeViolations(page);
+    await page.screenshot({
+      path: path.join(process.cwd(), "artifacts", "screenshots", `${route.path.slice(1)}-1440.png`),
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(route.path);
+    await page.screenshot({
+      path: path.join(process.cwd(), "artifacts", "screenshots", `${route.path.slice(1)}-390.png`),
+      fullPage: true,
+    });
+  }
+});
+
+test("profile is protected and exposes only current account facts", async ({ page }) => {
+  await mockAuthenticatedWorkspace(page);
+  await page.route("**/api/v1", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ name: "Relay", status: "ok" }),
+    });
+  });
+
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: width <= 390 ? 844 : 900 });
+    await page.goto("/dashboard");
+    const profileLink = width <= 900
+      ? page.getByRole("link", { name: "Profile", exact: true })
+      : page.getByRole("link", { name: "Open profile for Browser Operator" });
+    await expect(profileLink).toBeVisible();
+    await profileLink.click();
+    await expect(page).toHaveURL(/\/profile$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Profile" })).toBeVisible();
+    await expect(page.getByText("Browser Operator")).toBeVisible();
+    await expect(page.getByText("browser.operator@example.test")).toBeVisible();
+    await expect(page.getByText("Browser workspace")).toBeVisible();
+    await expect(page.getByText("ws_browser")).toBeVisible();
+    await expectNoPageOverflow(page);
+  }
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/profile");
+  await waitForFonts(page);
+  await expectNoSeriousAxeViolations(page);
+  await page.screenshot({
+    path: path.join(process.cwd(), "artifacts", "screenshots", "profile-1440.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/profile");
+  await page.screenshot({
+    path: path.join(process.cwd(), "artifacts", "screenshots", "profile-390.png"),
     fullPage: true,
   });
 });

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Link, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { AuthAdapterError } from "../../auth/types";
 import { RelayBrand } from "../brand/RelayBrand";
@@ -96,11 +96,17 @@ export function ProductLayout() {
         <div className="product-rail__workspace"><WorkspaceLabel /></div>
         <SectionNavigation />
         <div className="product-rail__session">
-          <span className="session-avatar" aria-hidden="true">{userInitials}</span>
-          <span className="session-copy">
-            <strong>{session.identity.user.name}</strong>
-            <span>{session.identity.user.email}</span>
-          </span>
+          <Link
+            className="session-profile-link"
+            to="/profile"
+            aria-label={`Open profile for ${session.identity.user.name}`}
+          >
+            <span className="session-avatar" aria-hidden="true">{userInitials}</span>
+            <span className="session-copy">
+              <strong>{session.identity.user.name}</strong>
+              <span>{session.identity.user.email}</span>
+            </span>
+          </Link>
           <Button
             className="session-sign-out"
             variant="quiet"
@@ -116,14 +122,17 @@ export function ProductLayout() {
       <div className="product-main">
         <header className="product-mobile-header">
           <RelayBrand surface="product" compact showParent={false} />
-          <Button
-            variant="quiet"
-            pending={signingOut}
-            pendingLabel="Signing out"
-            onClick={() => void handleSignOut()}
-          >
-            Sign out
-          </Button>
+          <div className="product-mobile-header__actions">
+            <Link className="product-mobile-profile" to="/profile">Profile</Link>
+            <Button
+              variant="quiet"
+              pending={signingOut}
+              pendingLabel="Signing out"
+              onClick={() => void handleSignOut()}
+            >
+              Sign out
+            </Button>
+          </div>
         </header>
         <div className="product-mobile-workspace"><WorkspaceLabel /></div>
         <SectionNavigation mobile />
