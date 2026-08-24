@@ -4,6 +4,27 @@ Status: repository audit\
 Verified: 2026-08-21\
 Design baseline: `1eb7a3d` (`design/v3/` normalized and tracked)
 
+## Current branch update — 2026-08-24
+
+The implementation branch now includes hardened Google/GitHub-only Better Auth,
+atomic personal workspaces, durable audit boundaries, the tool/provider catalog,
+BullMQ execution lifecycle, Redis capacity coordination, weighted fair
+scheduling, S3-compatible storage, artifact/share services, entitlement and
+usage ledgers, changelog/legal governance, and a Deno-native OpenTelemetry
+foundation. The complete PostgreSQL/Redis/MinIO live suite passes from a fresh
+database.
+
+Because Relay has not reached its first deployment, the implementation-phase
+schema history was consolidated into `0001_relay_baseline`. The numbered
+migration filenames mentioned later in this historical audit describe the work
+that produced the baseline; they are no longer separate deployable migrations.
+After the first production deployment, the baseline becomes immutable and all
+changes append new migrations.
+
+Still not production-complete: HTTP/SSE/MCP resource routes, the React/Vite web
+application, concrete image-provider handlers, and final telemetry/deployment
+wiring remain to be implemented and validated.
+
 ## Summary
 
 Relay is currently a small, healthy Deno/Hono process scaffold, a real

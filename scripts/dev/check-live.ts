@@ -6,12 +6,11 @@
  * how a normal `deno task check` run can report "40 passed, 59 ignored"
  * and look green while most of the database/auth/queue/capacity/catalog
  * behavior in the repo goes unexercised. `deno task check:live` is the
- * same check, except it refuses to run at all unless every one of those
- * is set, and then fails loudly (not just a nonzero exit -- a named
- * count of exactly which tests were skipped) if any test still reports
- * itself ignored, since that means one of those env vars pointed
- * somewhere that didn't actually work (unreachable database/Redis, wrong
- * credentials, etc.) rather than a genuine absence of configuration.
+ * same check, except it refuses to run at all unless every required service
+ * is configured, enables the MinIO/artifact contract lanes, and then fails
+ * loudly if any test still reports itself ignored. A skipped test in this
+ * mode means the disposable PostgreSQL/Redis/MinIO stack or one of its
+ * credentials is incomplete, not that infrastructure was intentionally absent.
  */
 
 const REQUIRED_ENV_VARS = [
@@ -39,13 +38,21 @@ if (missing.length > 0) {
 // database as the runtime suite. Deriving this URL keeps one authoritative
 // application database while preserving the separate destructive migrator
 // database used by packages/database/src/migrator_test.ts.
+const runtimeUrl = new URL(Deno.env.get("DATABASE_URL")!);
+const migratorUrl = new URL(Deno.env.get("MIGRATOR_TEST_DATABASE_URL")!);
+
 if (Deno.env.get("AUTH_SECURITY_TEST_DATABASE_URL") === undefined) {
-  const runtimeUrl = new URL(Deno.env.get("DATABASE_URL")!);
-  const migratorUrl = new URL(Deno.env.get("MIGRATOR_TEST_DATABASE_URL")!);
-  runtimeUrl.username = migratorUrl.username;
-  runtimeUrl.password = migratorUrl.password;
-  Deno.env.set("AUTH_SECURITY_TEST_DATABASE_URL", runtimeUrl.toString());
+  const privilegedRuntimeUrl = new URL(runtimeUrl);
+  privilegedRuntimeUrl.username = migratorUrl.username;
+  privilegedRuntimeUrl.password = migratorUrl.password;
+  Deno.env.set(
+    "AUTH_SECURITY_TEST_DATABASE_URL",
+    privilegedRuntimeUrl.toString(),
+  );
 }
+
+Deno.env.set("RUN_MINIO_CONTRACT_TESTS", "1");
+Deno.env.set("RUN_ARTIFACT_CONTRACT_TESTS", "1");
 
 async function run(cmd: string, args: string[]): Promise<void> {
   const command = new Deno.Command(cmd, {
@@ -99,9 +106,8 @@ if (testCode !== 0) {
 if (ignoredCount > 0) {
   console.error(
     `deno task check:live: ${ignoredCount} test(s) were still ignored even ` +
-      `though DATABASE_URL/MIGRATOR_TEST_DATABASE_URL/REDIS_URL were all set. ` +
-      `That means live infrastructure was unreachable, not genuinely absent -- ` +
-      `check the dev stack (compose.dev.yaml) is actually up.`,
+      `though the live PostgreSQL, Redis, and MinIO lanes were enabled. ` +
+      `Check compose.dev.yaml, including the dedicated relay_test database.`,
   );
   Deno.exit(1);
 }

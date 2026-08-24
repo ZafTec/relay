@@ -2,15 +2,20 @@
   "workspace": [
     "./apps/api",
     "./apps/worker",
+    "./packages/artifacts",
     "./packages/audit",
     "./packages/auth",
     "./packages/capacity",
     "./packages/catalog",
+    "./packages/changelog",
     "./packages/config",
     "./packages/contracts",
     "./packages/database",
+    "./packages/metering",
+    "./packages/observability",
     "./packages/queue",
-    "./packages/scheduler"
+    "./packages/scheduler",
+    "./packages/storage"
   ],
   "tasks": {
     "dev:api": "deno run --env-file=.env --allow-env --allow-net --watch src/main.ts api",

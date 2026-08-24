@@ -192,6 +192,18 @@ role tests merely because CI uses containers.
 
 ## Migration format
 
+### Pre-deployment baseline policy
+
+Relay has not yet been deployed. The implementation-phase migration chain was
+therefore squashed into one reviewed `0001_relay_baseline` migration so the MVP
+starts from a clean schema rather than replaying development history. Replacing
+or regenerating that baseline is allowed only until the first production
+deployment.
+
+After the first production deployment, `0001_relay_baseline` is immutable and
+every schema change must be appended as a new migration. Never squash, reorder,
+or rewrite migrations that have reached a persistent environment.
+
 Use an immutable, statically imported manifest:
 
 ```ts
