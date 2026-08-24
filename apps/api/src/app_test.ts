@@ -10,6 +10,7 @@ import {
   createApp,
   type RelayMcpHttpHandler,
 } from "./app.ts";
+import type { PublicChangelogReader } from "./routes/mod.ts";
 import {
   AUTHENTICATED_IDENTITY,
   createStubServices,
@@ -160,6 +161,19 @@ Deno.test("versioned application routes mount into the running app", async () =>
     items: [],
     nextCursor: null,
   });
+});
+
+Deno.test("public changelog routes mount independently of application services", async () => {
+  const reader: PublicChangelogReader = {
+    list: () => Promise.resolve({ entries: [], nextCursor: null }),
+    getBySlug: () => Promise.resolve(null),
+  };
+  const response = await createApp(config, {
+    publicChangelog: { reader },
+  }).request("/api/v1/changelog");
+
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), { entries: [], nextCursor: null });
 });
 
 Deno.test("exact OAuth metadata aliases are forwarded to Better Auth", async () => {

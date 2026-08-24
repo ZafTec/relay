@@ -1,3 +1,9 @@
+export { createPublicChangelogRoutes } from "./changelog.ts";
+export type {
+  PublicChangelogReader,
+  PublicChangelogRouteDependencies,
+} from "./changelog.ts";
+
 export {
   createAuthSessionIdentityResolver,
   createV1Routes,

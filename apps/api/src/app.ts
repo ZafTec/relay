@@ -10,7 +10,12 @@ import {
   type RelayTelemetry,
 } from "@relay/observability";
 import type { RelayMcpHttpHandler } from "./http/mcp.ts";
-import { createV1Routes, type V1RouteDependencies } from "./routes/mod.ts";
+import {
+  createPublicChangelogRoutes,
+  createV1Routes,
+  type PublicChangelogRouteDependencies,
+  type V1RouteDependencies,
+} from "./routes/mod.ts";
 
 export {
   createRelayMcpHttpHandler,
@@ -33,6 +38,8 @@ export interface AppDependencies {
   readonly checkReadiness?: () => Promise<readonly ReadinessCheck[]>;
   /** Omitted in tests that don't need auth; mounts auth and OAuth metadata. */
   readonly auth?: Auth;
+  /** Public, published-only changelog reads. */
+  readonly publicChangelog?: PublicChangelogRouteDependencies;
   /** Versioned HTTP resources and workspace event streaming. */
   readonly v1?: V1RouteDependencies;
   /** OAuth-protected MCP Streamable HTTP boundary. */
@@ -125,6 +132,10 @@ export function createApp(
 
     app.all("/api/auth/*", handleAuth);
     for (const path of AUTH_METADATA_PATHS) app.all(path, handleAuth);
+  }
+
+  if (dependencies.publicChangelog) {
+    app.route("/", createPublicChangelogRoutes(dependencies.publicChangelog));
   }
 
   if (dependencies.v1) {

@@ -1,10 +1,15 @@
 import type { ApplicationServices } from "@relay/application";
+import {
+  getPublishedChangelogBySlug,
+  listPublishedChangelog,
+} from "@relay/changelog";
 import type { RuntimeConfig } from "@relay/config";
 import { loadAuthConfig, loadRuntimeConfig } from "@relay/config";
 import {
   checkDatabaseHealth,
   checkMigrationLedgerHealth,
   createDatabasePool,
+  type DatabasePool,
   MIGRATIONS,
 } from "@relay/database";
 import { createAuth } from "@relay/auth";
@@ -15,7 +20,19 @@ import {
   type RelayTelemetry,
 } from "@relay/observability";
 import { createApp, createRelayMcpHttpHandler } from "./app.ts";
-import { createAuthSessionIdentityResolver } from "./routes/mod.ts";
+import {
+  createAuthSessionIdentityResolver,
+  type PublicChangelogReader,
+} from "./routes/mod.ts";
+
+export function createPostgresPublicChangelogReader(
+  pool: DatabasePool,
+): PublicChangelogReader {
+  return {
+    list: (options) => listPublishedChangelog(pool, options),
+    getBySlug: (slug) => getPublishedChangelogBySlug(pool, slug),
+  };
+}
 
 export interface ApiRuntimeOptions {
   readonly logger?: JsonLogger;
@@ -59,6 +76,9 @@ export function startApi(
       await checkMigrationLedgerHealth(pool, MIGRATIONS),
     ],
     auth,
+    publicChangelog: {
+      reader: createPostgresPublicChangelogReader(pool),
+    },
     ...(runtimeOptions.applicationServices === undefined ? {} : {
       v1: {
         services: runtimeOptions.applicationServices,

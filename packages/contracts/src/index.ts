@@ -29,6 +29,7 @@ export type {
 } from "./schema.ts";
 
 export {
+  changelogEntryPath,
   HTTP_PATHS,
   PUBLIC_NOUNS,
   publicSharePath,

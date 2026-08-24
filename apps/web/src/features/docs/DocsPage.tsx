@@ -48,6 +48,8 @@ const httpContracts = [
   { method: "DELETE", path: "/api/v1/artifacts/:artifactId/share-links/:shareLinkId", description: "Revoke an artifact share link." },
   { method: "GET", path: "/api/v1/usage", description: "Read bounded consumed and reserved usage summaries." },
   { method: "GET", path: "/api/v1/events", description: "Stream workspace events with resumable SSE." },
+  { method: "GET", path: "/api/v1/changelog", description: "List reviewed, published release notes." },
+  { method: "GET", path: "/api/v1/changelog/:slug", description: "Read one published release note." },
   { method: "GET", path: "/s/:token", description: "Resolve an active managed share token." },
 ] as const;
 

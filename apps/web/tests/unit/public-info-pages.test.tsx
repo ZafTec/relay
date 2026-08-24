@@ -74,6 +74,7 @@ describe("public docs", () => {
     expect(container).toHaveTextContent("/api/v1/runs");
     expect(container).toHaveTextContent("/api/v1/artifacts/:artifactId/download");
     expect(container).toHaveTextContent("/api/v1/artifacts/:artifactId/share-links");
+    expect(container).toHaveTextContent("/api/v1/changelog/:slug");
     expect(container).toHaveTextContent("/s/:token");
     expect(container).toHaveTextContent("relay.artifacts.create_share_link");
     expect(container).toHaveTextContent("GET /health/ready");

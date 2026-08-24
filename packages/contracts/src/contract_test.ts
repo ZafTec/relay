@@ -1,5 +1,6 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
+  changelogEntryPath,
   createArtifactUploadRequestSchema,
   errorEnvelopeSchema,
   HTTP_PATHS,
@@ -13,6 +14,12 @@ const HEX_32 = "0123456789abcdef0123456789abcdef";
 
 Deno.test("canonical public routes use run and /s/:token nouns", () => {
   assertEquals(HTTP_PATHS.runs, "/api/v1/runs");
+  assertEquals(HTTP_PATHS.changelog, "/api/v1/changelog");
+  assertEquals(HTTP_PATHS.changelogEntry, "/api/v1/changelog/:slug");
+  assertEquals(
+    changelogEntryPath("release 1"),
+    "/api/v1/changelog/release%201",
+  );
   assertEquals(HTTP_PATHS.publicShareTemplate, "/s/:token");
   assertEquals(publicSharePath("abc_123"), "/s/abc_123");
 });

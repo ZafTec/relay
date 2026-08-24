@@ -22,6 +22,8 @@ export const HTTP_PATHS: Readonly<{
   artifactShareLink: "/api/v1/artifacts/:artifactId/share-links/:shareLinkId";
   usage: "/api/v1/usage";
   events: "/api/v1/events";
+  changelog: "/api/v1/changelog";
+  changelogEntry: "/api/v1/changelog/:slug";
   publicShareTemplate: "/s/:token";
 }> = Object.freeze({
   tools: "/api/v1/tools",
@@ -36,11 +38,17 @@ export const HTTP_PATHS: Readonly<{
   artifactShareLink: "/api/v1/artifacts/:artifactId/share-links/:shareLinkId",
   usage: "/api/v1/usage",
   events: "/api/v1/events",
+  changelog: "/api/v1/changelog",
+  changelogEntry: "/api/v1/changelog/:slug",
   publicShareTemplate: "/s/:token",
 });
 
 export function runPath(runId: string): string {
   return `${HTTP_PATHS.runs}/${encodeURIComponent(runId)}`;
+}
+
+export function changelogEntryPath(slug: string): string {
+  return `${HTTP_PATHS.changelog}/${encodeURIComponent(slug)}`;
 }
 
 export function publicSharePath(token: string): string {
