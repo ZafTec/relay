@@ -1,0 +1,10 @@
+{
+  "name": "@relay/metering",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "imports": {
+    "@std/assert": "jsr:@std/assert@^1.0.19",
+    "pg": "npm:pg@^8.23.0"
+  }
+}
