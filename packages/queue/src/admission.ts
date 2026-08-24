@@ -13,6 +13,10 @@ import {
   resolveWorkspaceSchedulingProfile,
   type WorkspaceSchedulingProfile,
 } from "@relay/scheduler";
+import {
+  injectTraceContext,
+  type TracePropagationApi,
+} from "@relay/observability";
 import { lockQueueCounterMutation } from "./counter-lock.ts";
 import {
   dispatchDeduplicationKey,
@@ -74,6 +78,8 @@ export interface AdmissionUsagePort {
 export interface AdmitRunDependencies {
   readonly handlers: HandlerRegistry;
   readonly usage: AdmissionUsagePort;
+  /** Test seam; production injects through Deno's active global context. */
+  readonly tracePropagation?: TracePropagationApi;
 }
 
 export type AdmitRunResult =
@@ -306,6 +312,12 @@ export async function admitToolRun(
     );
   }
 
+  // Capture the request span before entering the transaction. Trace metadata is
+  // not part of idempotency and never contains baggage or application IDs.
+  const traceContext = injectTraceContext(
+    undefined,
+    dependencies.tracePropagation,
+  );
   let canonicalPayloadHash: string | undefined;
 
   try {
@@ -575,6 +587,7 @@ export async function admitToolRun(
             capacityPoolKey,
             dispatchGeneration: 0,
             policyVersion: job.scheduling_policy_version,
+            ...traceContext,
             workspaceId: input.workspaceId,
             classKey: job.scheduling_class,
             costUnits: persistedCostUnits,

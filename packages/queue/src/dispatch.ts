@@ -678,13 +678,26 @@ async function loadExecutionOutboxPayload(
     estimated_cost_units: string | number;
     fifo_sequence: string | number;
     eligible_at: Date;
+    traceparent: string | null;
+    tracestate: string | null;
   }>(
     `select j.id, j.run_id, cp.key as capacity_pool_key,
             j.dispatch_generation, j.scheduling_policy_version,
             j.workspace_id, j.scheduling_class, j.estimated_cost_units,
-            j.fifo_sequence, j.eligible_at
+            j.fifo_sequence, j.eligible_at,
+            trace_context.traceparent, trace_context.tracestate
        from relay.execution_jobs j
        join relay.capacity_pools cp on cp.id = j.capacity_pool_id
+       left join lateral (
+         select oe.payload->>'traceparent' as traceparent,
+                oe.payload->>'tracestate' as tracestate
+           from relay.outbox_events oe
+          where oe.aggregate_type = 'execution_job'
+            and oe.aggregate_id = j.id::text
+            and jsonb_typeof(oe.payload->'traceparent') = 'string'
+          order by oe.id
+          limit 1
+       ) trace_context on true
       where j.id = $1`,
     [jobId],
   );
@@ -696,6 +709,8 @@ async function loadExecutionOutboxPayload(
     capacityPoolKey: row.capacity_pool_key,
     dispatchGeneration: row.dispatch_generation,
     policyVersion: row.scheduling_policy_version,
+    ...(row.traceparent === null ? {} : { traceparent: row.traceparent }),
+    ...(row.tracestate === null ? {} : { tracestate: row.tracestate }),
     workspaceId: row.workspace_id,
     classKey: row.scheduling_class,
     costUnits: Number(row.estimated_cost_units),

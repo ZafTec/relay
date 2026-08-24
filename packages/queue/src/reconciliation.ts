@@ -121,6 +121,8 @@ interface QueuedDispatchDbRow {
   estimated_cost_units: string | number;
   fifo_sequence: string | number;
   eligible_at: Date;
+  traceparent: string | null;
+  tracestate: string | null;
 }
 
 function queuedPayload(row: QueuedDispatchDbRow): ExecutionOutboxPayload {
@@ -129,6 +131,8 @@ function queuedPayload(row: QueuedDispatchDbRow): ExecutionOutboxPayload {
     runId: row.run_id,
     dispatchGeneration: row.dispatch_generation,
     policyVersion: row.scheduling_policy_version,
+    ...(row.traceparent === null ? {} : { traceparent: row.traceparent }),
+    ...(row.tracestate === null ? {} : { tracestate: row.tracestate }),
     capacityPoolKey: row.capacity_pool_key,
     workspaceId: row.workspace_id,
     classKey: row.scheduling_class,
@@ -153,9 +157,20 @@ export async function reconcileLostTickets(
     `select j.id, j.run_id, j.dispatch_generation,
             j.scheduling_policy_version, cp.key as capacity_pool_key,
             j.workspace_id, j.scheduling_class, j.estimated_cost_units,
-            j.fifo_sequence, j.eligible_at
+            j.fifo_sequence, j.eligible_at, trace_context.traceparent,
+            trace_context.tracestate
        from relay.execution_jobs j
        join relay.capacity_pools cp on cp.id = j.capacity_pool_id
+       left join lateral (
+         select oe.payload->>'traceparent' as traceparent,
+                oe.payload->>'tracestate' as tracestate
+           from relay.outbox_events oe
+          where oe.aggregate_type = 'execution_job'
+            and oe.aggregate_id = j.id::text
+            and jsonb_typeof(oe.payload->'traceparent') = 'string'
+          order by oe.id
+          limit 1
+       ) trace_context on true
       where j.status = 'queued' and j.eligible_at <= now()
         and (j.run_deadline_at is null or j.run_deadline_at > now())
         and (
@@ -180,7 +195,7 @@ export async function reconcileLostTickets(
          (aggregate_type, aggregate_id, aggregate_version, event_type, payload,
           eligible_at, deduplication_key)
        select 'execution_job', j.id::text, j.dispatch_generation, 'job.ready',
-              jsonb_build_object(
+              jsonb_strip_nulls(jsonb_build_object(
                 'domainJobId', j.id::text,
                 'runId', j.run_id,
                 'capacityPoolKey', cp.key,
@@ -190,8 +205,10 @@ export async function reconcileLostTickets(
                 'classKey', j.scheduling_class,
                 'costUnits', j.estimated_cost_units,
                 'fifoSequence', j.fifo_sequence,
-                'eligibleAtMs', floor(extract(epoch from j.eligible_at) * 1000)
-              ),
+                'eligibleAtMs', floor(extract(epoch from j.eligible_at) * 1000),
+                'traceparent', $4::text,
+                'tracestate', $5::text
+              )),
               greatest(j.eligible_at, now()), $3
          from relay.execution_jobs j
          join relay.capacity_pools cp on cp.id = j.capacity_pool_id
@@ -225,6 +242,8 @@ export async function reconcileLostTickets(
         row.id,
         row.dispatch_generation,
         dispatchDeduplicationKey(row.id, row.dispatch_generation),
+        row.traceparent,
+        row.tracestate,
       ],
     );
     if (result.rows.length === 1) rearmed += 1;

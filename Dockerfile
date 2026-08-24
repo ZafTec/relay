@@ -28,6 +28,9 @@ RUN apt-get update && \
 
 WORKDIR /app
 COPY --from=build /out/relay /app/relay
+COPY apps/api/docker-entrypoint.sh /app/relay-entrypoint
+RUN sed -i 's/\r$//' /app/relay-entrypoint && \
+    chmod 0555 /app/relay-entrypoint
 
 # Required OCI labels per
 # docs/implementation-handoff/09-ci-release-deployment.md. VERSION/
@@ -37,6 +40,8 @@ COPY --from=build /out/relay /app/relay
 ARG APP_VERSION=development
 ARG GIT_SHA=unknown
 ARG IMAGE_CREATED=1970-01-01T00:00:00Z
+ENV APP_VERSION="${APP_VERSION}" \
+    GIT_SHA="${GIT_SHA}"
 LABEL org.opencontainers.image.title="Relay" \
       org.opencontainers.image.description="Curated tool and artifact registry for AI agents" \
       org.opencontainers.image.source="https://github.com/ZafTec/relay" \
@@ -59,7 +64,7 @@ EXPOSE 8000
 # 09-ci-release-deployment.md's "Do not publicly expose readiness unless
 # there is a deliberate operational need."
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD ["/app/relay", "healthcheck"]
+  CMD ["/app/relay-entrypoint", "healthcheck"]
 
-ENTRYPOINT ["/app/relay"]
+ENTRYPOINT ["/app/relay-entrypoint"]
 CMD ["api"]

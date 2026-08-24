@@ -1,4 +1,8 @@
 import type { BuildInfo } from "@relay/contracts";
+import {
+  loadObservabilityConfig,
+  type ObservabilityConfig,
+} from "@relay/observability";
 
 export interface DatabaseConfig {
   readonly url: URL;
@@ -18,6 +22,13 @@ export interface RuntimeConfig {
   readonly build: BuildInfo;
   readonly database: DatabaseConfig;
   readonly redis: RedisConfig;
+}
+
+/** Validates native OTel settings only when the Deno provider is enabled. */
+export function loadEnabledObservabilityConfig(
+  env: Record<string, string | undefined> = Deno.env.toObject(),
+): ObservabilityConfig | null {
+  return env.OTEL_DENO === "true" ? loadObservabilityConfig(env) : null;
 }
 
 export interface OAuthProviderConfig {

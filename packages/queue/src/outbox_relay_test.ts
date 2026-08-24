@@ -1,5 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
+import { createJsonLogger } from "@relay/observability";
 import { Redis } from "ioredis";
 import { claimOutboxBatch, relayOutboxBatch } from "./outbox-relay.ts";
 import { createExecutionQueue, createExecutionWorker } from "./bullmq.ts";
@@ -65,11 +66,23 @@ Deno.test({
         return Promise.resolve();
       },
     );
-    worker.on("error", (err) => console.error("WORKER_ERROR", err));
-    worker.on(
-      "failed",
-      (job, err) => console.error("WORKER_FAILED", job?.id, err),
-    );
+    const logger = createJsonLogger();
+    worker.on("error", (error) =>
+      logger.error({
+        eventName: "test.worker.error",
+        message: "Test worker error",
+        operation: "consume",
+        outcome: "failure",
+        error,
+      }));
+    worker.on("failed", (_job, error) =>
+      logger.error({
+        eventName: "test.worker.failed",
+        message: "Test worker ticket failed",
+        operation: "consume",
+        outcome: "failure",
+        error,
+      }));
 
     try {
       const ready = new Promise<void>((resolve) =>

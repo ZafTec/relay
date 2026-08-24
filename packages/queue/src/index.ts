@@ -81,7 +81,7 @@ export type {
   StalledRecoveryResult,
 } from "./dispatch.ts";
 
-export { ExecutionProcessor } from "./processor.ts";
+export { ExecutionProcessor, withExecutionConsumerSpan } from "./processor.ts";
 export type {
   AcquiredCapacityLease,
   CapacityAcquisitionResult,

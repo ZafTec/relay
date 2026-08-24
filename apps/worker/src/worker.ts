@@ -32,10 +32,18 @@ import {
   relayOutboxBatch,
 } from "@relay/queue";
 import {
+  createJsonLogger,
+  createRelayTelemetry,
+  type JsonLogger,
+  type LogRecord,
+  type RelayTelemetry,
+} from "@relay/observability";
+import {
   createExecutionHandlerRegistry,
   createRegistryBackedExecutionHandler,
   type ExecutionHandlerRegistry,
 } from "./handlers.ts";
+import { createWorkerRuntimeMetrics } from "./metrics.ts";
 
 const EXECUTION_OUTBOX_EVENTS = [
   "job.ready",
@@ -73,7 +81,10 @@ export interface WorkerRuntimeOptions {
   readonly schedulerDeficitCapUnits?: number;
   readonly bullmqWaitingLimitPerPool?: number;
   readonly schedulerBufferRetryMs?: number;
-  readonly log?: (record: Readonly<Record<string, unknown>>) => void;
+  readonly logger?: JsonLogger;
+  readonly telemetry?: RelayTelemetry;
+  /** Receives the same sanitized fixed-schema records as JsonLogger. */
+  readonly log?: (record: LogRecord) => void;
 }
 
 interface ResolvedWorkerOptions {
@@ -105,10 +116,26 @@ interface ResolvedWorkerOptions {
   readonly schedulerDeficitCapUnits: number;
   readonly bullmqWaitingLimitPerPool: number;
   readonly schedulerBufferRetryMs: number;
-  readonly log: (record: Readonly<Record<string, unknown>>) => void;
+  readonly logger: JsonLogger;
+  readonly telemetry: RelayTelemetry;
 }
 
-function resolveOptions(options: WorkerRuntimeOptions): ResolvedWorkerOptions {
+function workerLogger(options: WorkerRuntimeOptions): JsonLogger {
+  if (options.logger !== undefined) return options.logger;
+  if (options.log === undefined) return createJsonLogger();
+  return createJsonLogger({
+    sink: {
+      write(line) {
+        options.log?.(JSON.parse(line) as LogRecord);
+      },
+    },
+  });
+}
+
+function resolveOptions(
+  options: WorkerRuntimeOptions,
+  config: RuntimeConfig,
+): ResolvedWorkerOptions {
   const environment = options.environment ?? "development";
   const concurrency = options.concurrency ?? 1;
   const schedulerMaxCostUnits = options.schedulerMaxCostUnits ??
@@ -147,7 +174,11 @@ function resolveOptions(options: WorkerRuntimeOptions): ResolvedWorkerOptions {
     bullmqWaitingLimitPerPool: options.bullmqWaitingLimitPerPool ??
       Math.max(1, concurrency * 2),
     schedulerBufferRetryMs: options.schedulerBufferRetryMs ?? 100,
-    log: options.log ?? ((record) => console.log(JSON.stringify(record))),
+    logger: workerLogger(options),
+    telemetry: options.telemetry ?? createRelayTelemetry({
+      instrumentationName: "relay-worker",
+      instrumentationVersion: config.build.version,
+    }),
   };
 }
 
@@ -426,7 +457,7 @@ export async function startWorker(
   config: RuntimeConfig = loadRuntimeConfig(),
   runtimeOptions: WorkerRuntimeOptions = {},
 ): Promise<void> {
-  const options = resolveOptions(runtimeOptions);
+  const options = resolveOptions(runtimeOptions, config);
   const lifecycle = new AbortController();
   const stop = () => lifecycle.abort("shutdown_requested");
   const externalAbort = () => stop();
@@ -439,6 +470,7 @@ export async function startWorker(
   }
 
   const pool = createDatabasePool(config.database, "relay-worker");
+  const runtimeMetrics = createWorkerRuntimeMetrics(pool, options.telemetry);
   const producerRedis = createRedisConnection(
     config.redis,
     `${options.instanceId}-queue-producer`,
@@ -491,6 +523,7 @@ export async function startWorker(
       retryMaxDelayMs: options.retryMaxDelayMs,
       retryJitterRatio: options.retryJitterRatio,
       maxRetryWaitMs: options.maxRetryWaitMs,
+      telemetry: options.telemetry,
     },
   );
   const schedulerBridge = new ExecutionSchedulerBridge(
@@ -542,31 +575,30 @@ export async function startWorker(
         },
       );
       worker.on("error", (error) =>
-        options.log({
-          level: "error",
-          service: "worker",
+        options.logger.error({
+          eventName: "worker.bullmq.error",
           message: "BullMQ worker error",
-          capacityPoolKey,
-          error: error.message,
+          operation: "consume",
+          outcome: "failure",
+          error,
         }));
-      worker.on("failed", (job, error) =>
-        options.log({
-          level: "error",
-          service: "worker",
+      worker.on("failed", (_job, error) =>
+        options.logger.error({
+          eventName: "worker.ticket.failed",
           message: "BullMQ ticket failed",
-          capacityPoolKey,
-          ticketId: job?.id,
-          error: error.message,
+          operation: "consume",
+          outcome: "failure",
+          error,
         }));
       await worker.waitUntilReady();
       const run = worker.run().catch((error) => {
         if (!lifecycle.signal.aborted) {
-          options.log({
-            level: "error",
-            service: "worker",
+          options.logger.error({
+            eventName: "worker.consumer.stopped",
             message: "BullMQ consumer stopped unexpectedly",
-            capacityPoolKey,
-            error: error instanceof Error ? error.message : String(error),
+            operation: "consume",
+            outcome: "failure",
+            error,
           });
           lifecycle.abort("consumer_failed");
         }
@@ -593,7 +625,7 @@ export async function startWorker(
       await loadSchedulingClassProfiles(pool),
     );
     if (!(await gate.isReady())) {
-      await reconcileRedisReset(
+      const reconciliation = await reconcileRedisReset(
         pool,
         gate,
         {
@@ -618,6 +650,9 @@ export async function startWorker(
           retryWaitMs: options.maxRetryWaitMs,
         },
       );
+      if (reconciliation.kind === "reconciled") {
+        runtimeMetrics.recordReconciledJobs(reconciliation.recoveredJobs);
+      }
     } else {
       const stalled = await recoverExpiredJobLeases(
         pool,
@@ -625,11 +660,16 @@ export async function startWorker(
         100,
         options.maxRetryWaitMs,
       );
+      runtimeMetrics.recordReconciledJobs(
+        stalled.recovered + stalled.cancelled + stalled.failed,
+      );
       await releaseRecoveredLeases(stalled.capacityLeasesToRelease);
       await reconcileQueueCounters(pool);
       await schedulerBridge.rebuildAll();
     }
     await syncConsumers();
+    void runtimeMetrics.refresh();
+    runtimeMetrics.heartbeat();
   };
 
   try {
@@ -673,11 +713,12 @@ export async function startWorker(
             );
           }
         } catch (error) {
-          options.log({
-            level: "error",
-            service: "worker",
+          options.logger.error({
+            eventName: "worker.outbox.failed",
             message: "Outbox relay iteration failed",
-            error: error instanceof Error ? error.message : String(error),
+            operation: "outbox",
+            outcome: "failure",
+            error,
           });
         }
         await wait(options.relayPollIntervalMs, lifecycle.signal);
@@ -695,21 +736,22 @@ export async function startWorker(
               options.instanceId,
             );
             if (dispatch.failed > 0 || dispatch.lostLease > 0) {
-              options.log({
-                level: "warn",
-                service: "worker",
+              options.logger.warn({
+                eventName: "worker.scheduler.degraded",
                 message:
                   "Scheduler dispatch completed with recoverable failures",
-                ...dispatch,
+                operation: "dispatch",
+                outcome: "failure",
               });
             }
           }
         } catch (error) {
-          options.log({
-            level: "error",
-            service: "worker",
+          options.logger.error({
+            eventName: "worker.scheduler.failed",
             message: "Scheduler dispatch iteration failed",
-            error: error instanceof Error ? error.message : String(error),
+            operation: "dispatch",
+            outcome: "failure",
+            error,
           });
         }
         await wait(options.schedulerPollIntervalMs, lifecycle.signal);
@@ -723,24 +765,22 @@ export async function startWorker(
         try {
           await maintain();
         } catch (error) {
-          options.log({
-            level: "error",
-            service: "worker",
+          options.logger.error({
+            eventName: "worker.reconciliation.failed",
             message: "Execution reconciliation failed; dispatch remains closed",
-            error: error instanceof Error ? error.message : String(error),
+            operation: "reconcile",
+            outcome: "failure",
+            error,
           });
         }
       }
     })());
 
-    options.log({
-      level: "info",
-      service: "worker",
+    options.logger.info({
+      eventName: "worker.started",
       message: "Worker started",
-      instanceId: options.instanceId,
-      consumers: workerRecords.size,
-      version: config.build.version,
-      revision: config.build.revision,
+      operation: "startup",
+      outcome: "success",
     });
 
     if (options.signal?.aborted) stop();
@@ -814,11 +854,12 @@ export async function startWorker(
     if (options.installSignalHandlers) {
       for (const signal of signals) Deno.removeSignalListener(signal, stop);
     }
-    options.log({
-      level: "info",
-      service: "worker",
+    runtimeMetrics.dispose();
+    options.logger.info({
+      eventName: "worker.stopped",
       message: "Worker stopped",
-      forced,
+      operation: "shutdown",
+      outcome: forced ? "timeout" : "success",
     });
   }
 }

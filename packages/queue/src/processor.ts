@@ -1,6 +1,15 @@
 import type { Job, Processor } from "bullmq";
 import type { DatabasePool } from "@relay/database";
 import {
+  createRelayTelemetry,
+  extractTraceContext,
+  type RelayTelemetry,
+  type SafeCounter,
+  type SafeHistogram,
+  type SafeSpan,
+  type SafeUpDownCounter,
+} from "@relay/observability";
+import {
   beginJobAttempt,
   type ClaimedJob,
   claimJobForDispatch,
@@ -119,6 +128,7 @@ export interface ExecutionProcessorOptions {
   readonly retryJitterRatio?: number;
   readonly maxRetryWaitMs?: number;
   readonly random?: () => number;
+  readonly telemetry?: RelayTelemetry;
 }
 
 export type ExecutionDisposition =
@@ -141,6 +151,25 @@ const DEFAULT_RETRY_BASE_DELAY_MS = 1_000;
 const DEFAULT_RETRY_MAX_DELAY_MS = 60_000;
 const DEFAULT_RETRY_JITTER_RATIO = 0.2;
 const DEFAULT_MAX_RETRY_WAIT_MS = 5 * 60_000;
+const EXECUTION_QUEUE = "execution";
+const BOUNDED_QUEUE_REASONS = new Set([
+  "capacity_unavailable",
+  "coordination_unavailable",
+  "global_tool_concurrency",
+  "provider_concurrency",
+  "provider_cooldown",
+  "provider_rate_limit",
+  "workspace_concurrency",
+  "workspace_tool_concurrency",
+  "pre_submission_failure",
+  "submission_confirmed",
+  "submission_ambiguous",
+  "retrieval_failure",
+  "storage_failure",
+  "provider_transient",
+  "schema_or_policy_failure",
+  "safety_rejection",
+]);
 
 const RETRYABLE_CLASSIFICATIONS = new Set<RetryClassification>([
   "pre_submission_failure",
@@ -171,11 +200,79 @@ function abortReason(signal: AbortSignal): string | undefined {
   return typeof signal.reason === "string" ? signal.reason : undefined;
 }
 
+function monotonicNow(): number | null {
+  try {
+    const value = performance.now();
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function dispositionOutcome(kind: ExecutionDisposition["kind"]): string {
+  switch (kind) {
+    case "succeeded":
+    case "no_op":
+      return "success";
+    case "cancelled":
+    case "shutdown":
+      return "cancelled";
+    case "deferred":
+      return "deferred";
+    case "retry_scheduled":
+      return "retry";
+    default:
+      return "failure";
+  }
+}
+
+function boundedQueueReason(value: string | undefined): string | undefined {
+  return value !== undefined && BOUNDED_QUEUE_REASONS.has(value)
+    ? value
+    : undefined;
+}
+
+interface AttemptObservation {
+  attemptNumber?: number;
+  startedAt?: number | null;
+  queueReason?: string;
+  recorded?: boolean;
+}
+
+/** Starts one bounded BullMQ consumer span from only persisted W3C metadata. */
+export function withExecutionConsumerSpan<T>(
+  telemetry: Pick<RelayTelemetry, "withSpan">,
+  ticket: ExecutionTicket,
+  work: (span: SafeSpan) => T | Promise<T>,
+  extractParent: typeof extractTraceContext = extractTraceContext,
+): Promise<T> {
+  return telemetry.withSpan(
+    "bullmq.consume",
+    {
+      kind: "consumer",
+      parentContext: extractParent(ticket),
+      attributes: {
+        "messaging.system": "bullmq",
+        "queue.name": EXECUTION_QUEUE,
+      },
+    },
+    work,
+  );
+}
+
 export class ExecutionProcessor {
   readonly processor: Processor<ExecutionTicket>;
   readonly #active = new Map<string, AbortController>();
   readonly #idleWaiters = new Set<() => void>();
   readonly #random: () => number;
+  readonly #telemetry: RelayTelemetry;
+  readonly #attemptDuration: SafeHistogram;
+  readonly #attempts: SafeCounter;
+  readonly #retries: SafeCounter;
+  readonly #cancellations: SafeCounter;
+  readonly #deferrals: SafeCounter;
+  readonly #capacityActive: SafeUpDownCounter;
+  readonly #capacityWaitDuration: SafeHistogram;
 
   constructor(
     private readonly pool: DatabasePool,
@@ -185,6 +282,22 @@ export class ExecutionProcessor {
     private readonly options: ExecutionProcessorOptions,
   ) {
     this.#random = options.random ?? Math.random;
+    this.#telemetry = options.telemetry ?? createRelayTelemetry({
+      instrumentationName: "relay-queue",
+    });
+    this.#attemptDuration = this.#telemetry.histogram(
+      "relay.job.attempt.duration",
+    );
+    this.#attempts = this.#telemetry.counter("relay.job.attempts");
+    this.#retries = this.#telemetry.counter("relay.job.retries");
+    this.#cancellations = this.#telemetry.counter("relay.job.cancellations");
+    this.#deferrals = this.#telemetry.counter("relay.queue.deferrals");
+    this.#capacityActive = this.#telemetry.upDownCounter(
+      "relay.capacity.active",
+    );
+    this.#capacityWaitDuration = this.#telemetry.histogram(
+      "relay.capacity.wait.duration",
+    );
     this.processor = (job) => this.process(job);
   }
 
@@ -212,6 +325,44 @@ export class ExecutionProcessor {
     transportJob: Pick<Job<ExecutionTicket>, "data">,
   ): Promise<ExecutionDisposition> {
     const ticket = parseExecutionTicket(transportJob.data);
+    const observation: AttemptObservation = {};
+    return await withExecutionConsumerSpan(
+      this.#telemetry,
+      ticket,
+      async (span) => {
+        try {
+          const disposition = await this.#processTicket(
+            ticket,
+            span,
+            observation,
+          );
+          const outcome = dispositionOutcome(disposition.kind);
+          span.setAttributes({ outcome });
+          if (
+            disposition.kind === "failed" || disposition.kind === "lost_lease"
+          ) {
+            this.#telemetry.enrichActiveSpan({
+              markError: true,
+              errorType: disposition.kind === "lost_lease"
+                ? "unavailable"
+                : "internal",
+            });
+          }
+          this.#recordDisposition(disposition, observation, outcome);
+          return disposition;
+        } catch (error) {
+          this.#recordAttempt(observation, "failure");
+          throw error;
+        }
+      },
+    );
+  }
+
+  async #processTicket(
+    ticket: ExecutionTicket,
+    span: SafeSpan,
+    observation: AttemptObservation,
+  ): Promise<ExecutionDisposition> {
     // A missing reconciliation marker means Redis may have lost both ticket and
     // capacity state. Never claim PostgreSQL work while that fact is unknown.
     const readinessToken = await this.readiness.readyToken();
@@ -229,25 +380,35 @@ export class ExecutionProcessor {
     );
     if (claim.kind === "no_op") return { kind: "no_op" };
     const job = claim.job;
+    span.setAttributes({ "tool.key": job.toolKey });
     const controller = new AbortController();
     this.#active.set(job.jobId, controller);
     let lease: AcquiredCapacityLease | undefined;
     let attempt: JobAttempt | undefined;
     let heartbeatTask: Promise<void> | undefined;
     let preserveCapacityLease = false;
+    let capacityMetricActive = false;
 
     try {
       // Check again after the durable claim. If Redis reset in the intervening
       // window, return the job to queued without opening an attempt.
       if ((await this.readiness.readyToken()) !== readinessToken) {
+        observation.queueReason = "coordination_unavailable";
         const deferred = await this.#deferForCoordination(job);
         return deferred ? { kind: "deferred" } : { kind: "lost_lease" };
       }
 
+      const capacityStartedAt = monotonicNow();
       let acquisition: CapacityAcquisitionResult;
       try {
         acquisition = await this.capacity.acquire(job);
       } catch (error) {
+        this.#recordCapacityWait(
+          capacityStartedAt,
+          "failure",
+          "coordination_unavailable",
+        );
+        observation.queueReason = "coordination_unavailable";
         const deferred = await this.#deferForCoordination(
           job,
           sanitizeError(error),
@@ -255,6 +416,9 @@ export class ExecutionProcessor {
         return deferred ? { kind: "deferred" } : { kind: "lost_lease" };
       }
       if (acquisition.kind === "deferred") {
+        const reason = boundedQueueReason(acquisition.reason);
+        this.#recordCapacityWait(capacityStartedAt, "deferred", reason);
+        observation.queueReason = reason;
         const eligibleAt = new Date(
           acquisition.retryAt.getTime() + this.#deferralJitter(),
         );
@@ -269,7 +433,10 @@ export class ExecutionProcessor {
         );
         return deferred ? { kind: "deferred" } : { kind: "lost_lease" };
       }
+      this.#recordCapacityWait(capacityStartedAt, "success");
       lease = acquisition.lease;
+      this.#capacityActive.add(1);
+      capacityMetricActive = true;
 
       const durableLeaseId = await persistCapacityLease(
         this.pool,
@@ -287,6 +454,7 @@ export class ExecutionProcessor {
       // Re-check after the Redis lease is durably attached. A reset and complete
       // reconciliation changes the token, so a brief reset cannot slip through.
       if ((await this.readiness.readyToken()) !== readinessToken) {
+        observation.queueReason = "coordination_unavailable";
         const deferred = await this.#deferForCoordination(job);
         return deferred ? { kind: "deferred" } : { kind: "lost_lease" };
       }
@@ -295,6 +463,7 @@ export class ExecutionProcessor {
       try {
         submissionPermit = await this.capacity.acquireSubmissionPermit(job);
       } catch (error) {
+        observation.queueReason = "coordination_unavailable";
         const deferred = await this.#deferForCoordination(
           job,
           sanitizeError(error),
@@ -302,6 +471,7 @@ export class ExecutionProcessor {
         return deferred ? { kind: "deferred" } : { kind: "lost_lease" };
       }
       if (submissionPermit.kind === "deferred") {
+        observation.queueReason = boundedQueueReason(submissionPermit.reason);
         const deferred = await deferJob(
           this.pool,
           job.jobId,
@@ -329,6 +499,9 @@ export class ExecutionProcessor {
         );
         return cancelled ? { kind: "cancelled" } : { kind: "lost_lease" };
       }
+      observation.attemptNumber = attempt.attemptNumber;
+      observation.startedAt = monotonicNow();
+      span.setAttributes({ "attempt.number": attempt.attemptNumber });
       if (
         !(await markAttemptSubmitting(
           this.pool,
@@ -596,6 +769,9 @@ export class ExecutionProcessor {
             result.error,
           );
           if (retried) {
+            observation.queueReason = boundedQueueReason(
+              result.retryClassification,
+            );
             preserveCapacityLease = false;
             return { kind: "retry_scheduled" };
           }
@@ -645,7 +821,69 @@ export class ExecutionProcessor {
           // the bounded fallback when best-effort physical release fails.
         }
       }
+      if (capacityMetricActive) this.#capacityActive.add(-1);
     }
+  }
+
+  #recordDisposition(
+    disposition: ExecutionDisposition,
+    observation: AttemptObservation,
+    outcome: string,
+  ): void {
+    this.#recordAttempt(observation, outcome);
+    const attributes = {
+      "queue.name": EXECUTION_QUEUE,
+      ...(observation.queueReason === undefined
+        ? {}
+        : { "queue.reason": observation.queueReason }),
+    };
+    if (disposition.kind === "deferred") this.#deferrals.add(1, attributes);
+    if (disposition.kind === "retry_scheduled") {
+      this.#retries.add(1, attributes);
+    }
+    if (disposition.kind === "cancelled") {
+      this.#cancellations.add(1, {
+        "queue.name": EXECUTION_QUEUE,
+        outcome: "cancelled",
+      });
+    }
+  }
+
+  #recordAttempt(observation: AttemptObservation, outcome: string): void {
+    if (
+      observation.attemptNumber === undefined || observation.recorded === true
+    ) {
+      return;
+    }
+    observation.recorded = true;
+    const attributes = { "queue.name": EXECUTION_QUEUE, outcome };
+    this.#attempts.add(1, attributes);
+    const finishedAt = monotonicNow();
+    if (
+      observation.startedAt !== null && observation.startedAt !== undefined &&
+      finishedAt !== null
+    ) {
+      this.#attemptDuration.record(
+        Math.max(0, finishedAt - observation.startedAt) / 1_000,
+        attributes,
+      );
+    }
+  }
+
+  #recordCapacityWait(
+    startedAt: number | null,
+    outcome: "deferred" | "failure" | "success",
+    reason?: string,
+  ): void {
+    const finishedAt = monotonicNow();
+    if (startedAt === null || finishedAt === null) return;
+    this.#capacityWaitDuration.record(
+      Math.max(0, finishedAt - startedAt) / 1_000,
+      {
+        outcome,
+        ...(reason === undefined ? {} : { "queue.reason": reason }),
+      },
+    );
   }
 
   async #deferForCoordination(

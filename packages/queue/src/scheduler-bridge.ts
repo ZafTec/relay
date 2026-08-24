@@ -27,6 +27,8 @@ interface ScheduledExecutionRow {
   readonly eligible_at: Date;
   readonly dispatch_generation: number;
   readonly capacity_pool_key: string;
+  readonly traceparent: string | null;
+  readonly tracestate: string | null;
 }
 
 export interface ScheduledExecution {
@@ -52,6 +54,8 @@ function scheduledExecution(row: ScheduledExecutionRow): ScheduledExecution {
     capacityPoolKey: row.capacity_pool_key,
     dispatchGeneration: row.dispatch_generation,
     policyVersion: row.scheduling_policy_version,
+    ...(row.traceparent === null ? {} : { traceparent: row.traceparent }),
+    ...(row.tracestate === null ? {} : { tracestate: row.tracestate }),
     workspaceId: row.workspace_id,
     classKey: row.scheduling_class,
     costUnits,
@@ -97,11 +101,22 @@ export async function loadScheduledExecution(
     `select j.id, j.run_id, j.workspace_id, j.scheduling_class,
             j.scheduling_policy_version, j.estimated_cost_units,
             j.fifo_sequence, j.eligible_at, j.dispatch_generation,
-            cp.key as capacity_pool_key
+            cp.key as capacity_pool_key, trace_context.traceparent,
+            trace_context.tracestate
        from relay.execution_jobs j
        join relay.capacity_pools cp on cp.id = j.capacity_pool_id
        join relay.tool_versions tv on tv.id = j.tool_version_id
        join relay.tools t on t.id = tv.tool_id
+       left join lateral (
+         select oe.payload->>'traceparent' as traceparent,
+                oe.payload->>'tracestate' as tracestate
+           from relay.outbox_events oe
+          where oe.aggregate_type = 'execution_job'
+            and oe.aggregate_id = j.id::text
+            and jsonb_typeof(oe.payload->'traceparent') = 'string'
+          order by oe.id
+          limit 1
+       ) trace_context on true
       where j.id = $1 and j.dispatch_generation = $2
         and ${RUNNABLE_JOB_PREDICATE}`,
     [jobId, dispatchGeneration],
@@ -803,11 +818,22 @@ export class ExecutionSchedulerBridge {
         `select j.id, j.run_id, j.workspace_id, j.scheduling_class,
                 j.scheduling_policy_version, j.estimated_cost_units,
                 j.fifo_sequence, j.eligible_at, j.dispatch_generation,
-                cp.key as capacity_pool_key
+                cp.key as capacity_pool_key, trace_context.traceparent,
+                trace_context.tracestate
            from relay.execution_jobs j
            join relay.capacity_pools cp on cp.id = j.capacity_pool_id
            join relay.tool_versions tv on tv.id = j.tool_version_id
            join relay.tools t on t.id = tv.tool_id
+           left join lateral (
+             select oe.payload->>'traceparent' as traceparent,
+                    oe.payload->>'tracestate' as tracestate
+               from relay.outbox_events oe
+              where oe.aggregate_type = 'execution_job'
+                and oe.aggregate_id = j.id::text
+                and jsonb_typeof(oe.payload->'traceparent') = 'string'
+              order by oe.id
+              limit 1
+           ) trace_context on true
           where ${RUNNABLE_JOB_PREDICATE}
             and j.fifo_sequence > $1
           order by j.fifo_sequence

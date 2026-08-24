@@ -19,7 +19,8 @@ Deno.test("outbox metadata produces the exact generation and policy ticket", () 
     costUnits: 3,
     fifoSequence: 41,
     eligibleAtMs: 1_700_000_000_000,
-    traceparent: "00-trace",
+    traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    tracestate: "relay=test",
   });
   const ticket = ticketFromOutboxPayload(
     payload,
@@ -30,7 +31,8 @@ Deno.test("outbox metadata produces the exact generation and policy ticket", () 
     dispatchGeneration: 7,
     policyVersion: 19,
     schedulerToken: "scheduler-token-1234567890",
-    traceparent: "00-trace",
+    traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    tracestate: "relay=test",
   });
   assertEquals(ticketId(ticket), "job.123.gen.7");
   assertEquals(

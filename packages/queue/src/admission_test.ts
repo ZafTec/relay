@@ -1,10 +1,12 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
+import type { TracePropagationApi } from "@relay/observability";
 import pg from "pg";
 import {
   type AdmitRunInput,
   admitToolRun as admitToolRunWithDependencies,
 } from "./admission.ts";
+import { loadScheduledExecution } from "./scheduler-bridge.ts";
 import {
   type AdmissibleFixture,
   cleanupAdmissibleFixture,
@@ -876,6 +878,54 @@ Deno.test({
       });
       assertEquals(second.kind, "idempotency_conflict");
       assertEquals(reservations, 1);
+    } finally {
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "admission persists only active W3C trace context in its outbox ticket",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    const traceparent =
+      "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+    const tracePropagation: TracePropagationApi = {
+      inject(_source, carrier, setter) {
+        setter.set(carrier, "traceparent", traceparent);
+        setter.set(carrier, "tracestate", "relay=test");
+        setter.set(carrier, "baggage", "prompt=private-canary");
+      },
+      extract(source) {
+        return source;
+      },
+    };
+
+    try {
+      f = await createAdmissibleFixture(pool);
+      const result = await admitToolRunWithDependencies(pool, baseInput(f), {
+        handlers: f.handlers,
+        usage: TEST_USAGE_PORT,
+        tracePropagation,
+      });
+      if (result.kind !== "admitted") {
+        throw new Error("fixture admission failed");
+      }
+      const { rows } = await pool.query<{ payload: Record<string, unknown> }>(
+        "select payload from relay.outbox_events where aggregate_id = $1",
+        [result.jobId],
+      );
+
+      assertEquals(rows[0].payload.traceparent, traceparent);
+      assertEquals(rows[0].payload.tracestate, "relay=test");
+      assertEquals("baggage" in rows[0].payload, false);
+
+      const scheduled = await loadScheduledExecution(pool, result.jobId, 0);
+      assertEquals(scheduled?.payload.traceparent, traceparent);
+      assertEquals(scheduled?.payload.tracestate, "relay=test");
     } finally {
       if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();

@@ -3,12 +3,26 @@ import {
   loadAuthConfig,
   loadBuildInfo,
   loadDatabaseConfig,
+  loadEnabledObservabilityConfig,
   loadRuntimeConfig,
 } from "./index.ts";
 
 const validDatabaseEnv = {
   DATABASE_URL: "postgres://user:pass@localhost:5432/relay",
   REDIS_URL: "redis://:secret@localhost:6379",
+};
+
+const validObservabilityEnv = {
+  OTEL_DENO: "true",
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://alloy:4318",
+  OTEL_SERVICE_NAME: "relay-api",
+  OTEL_RESOURCE_ATTRIBUTES:
+    "service.namespace=relay,deployment.environment.name=production,service.version=1.2.3,relay.build.revision=5a37000,service.instance.id=550e8400-e29b-41d4-a716-446655440000",
+  OTEL_PROPAGATORS: "tracecontext",
+  OTEL_DENO_CONSOLE: "capture",
+  OTEL_METRIC_EXPORT_INTERVAL: "15000",
+  OTEL_TRACES_SAMPLER: "always_on",
 };
 
 const validAuthEnv = {
@@ -20,6 +34,27 @@ const validAuthEnv = {
   GITHUB_CLIENT_ID: "github-id",
   GITHUB_CLIENT_SECRET: "github-secret",
 };
+
+Deno.test("observability validation is optional when native OTel is disabled", () => {
+  assertEquals(loadEnabledObservabilityConfig({}), null);
+  assertEquals(loadEnabledObservabilityConfig({ OTEL_DENO: "false" }), null);
+});
+
+Deno.test("enabled native OTel configuration is validated at application startup", () => {
+  assertEquals(
+    loadEnabledObservabilityConfig(validObservabilityEnv)?.serviceName,
+    "relay-api",
+  );
+  assertThrows(
+    () =>
+      loadEnabledObservabilityConfig({
+        ...validObservabilityEnv,
+        OTEL_PROPAGATORS: "tracecontext,baggage",
+      }),
+    Error,
+    "tracecontext",
+  );
+});
 
 Deno.test("loadRuntimeConfig requires DATABASE_URL", () => {
   assertThrows(

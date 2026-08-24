@@ -7,11 +7,28 @@ import {
   MIGRATIONS,
 } from "@relay/database";
 import { createAuth } from "@relay/auth";
+import {
+  createJsonLogger,
+  createRelayTelemetry,
+  type JsonLogger,
+  type RelayTelemetry,
+} from "@relay/observability";
 import { createApp } from "./app.ts";
+
+export interface ApiRuntimeOptions {
+  readonly logger?: JsonLogger;
+  readonly telemetry?: RelayTelemetry;
+}
 
 export function startApi(
   config: RuntimeConfig = loadRuntimeConfig(),
+  runtimeOptions: ApiRuntimeOptions = {},
 ): Deno.HttpServer {
+  const telemetry = runtimeOptions.telemetry ?? createRelayTelemetry({
+    instrumentationName: "relay-api",
+    instrumentationVersion: config.build.version,
+  });
+  const logger = runtimeOptions.logger ?? createJsonLogger();
   const pool = createDatabasePool(config.database, "relay-api");
   const auth = createAuth(pool, loadAuthConfig());
   const app = createApp(config, {
@@ -20,21 +37,20 @@ export function startApi(
       await checkMigrationLedgerHealth(pool, MIGRATIONS),
     ],
     auth,
+    logger,
+    telemetry,
   });
 
   const server = Deno.serve(
     {
       port: config.port,
-      onListen: ({ hostname, port }) => {
-        console.log(JSON.stringify({
-          level: "info",
-          service: "api",
+      onListen: () => {
+        logger.info({
+          eventName: "api.started",
           message: "API listening",
-          hostname,
-          port,
-          version: config.build.version,
-          revision: config.build.revision,
-        }));
+          operation: "startup",
+          outcome: "success",
+        });
       },
     },
     app.fetch,
@@ -56,12 +72,13 @@ export function startApi(
     try {
       await pool.end();
     } catch (error) {
-      console.error(JSON.stringify({
-        level: "error",
-        service: "api",
-        message: "Error closing database pool",
-        error: error instanceof Error ? error.message : String(error),
-      }));
+      logger.error({
+        eventName: "api.database.close_failed",
+        message: "Database pool close failed",
+        operation: "shutdown",
+        outcome: "failure",
+        error,
+      });
     }
   });
 

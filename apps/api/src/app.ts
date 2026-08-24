@@ -1,9 +1,20 @@
 import { Hono } from "@hono/hono";
-import type { RuntimeConfig } from "@relay/config";
-import { loadRuntimeConfig } from "@relay/config";
+import { type Auth, parseTrustedProxyCidrs } from "@relay/auth";
+import { loadRuntimeConfig, type RuntimeConfig } from "@relay/config";
 import type { ReadinessCheck } from "@relay/contracts";
-import { parseTrustedProxyCidrs } from "@relay/auth";
-import type { Auth } from "@relay/auth";
+import {
+  createHonoRouteEnrichment,
+  createJsonLogger,
+  createRelayTelemetry,
+  type JsonLogger,
+  type RelayTelemetry,
+} from "@relay/observability";
+
+type ApiEnvironment = {
+  Variables: {
+    requestId: string;
+  };
+};
 
 export interface AppDependencies {
   /** Defaults to reporting no checks (always ready) when omitted. */
@@ -12,6 +23,32 @@ export interface AppDependencies {
   readonly auth?: Auth;
   /** Overrides AUTH_TRUSTED_PROXY_CIDRS, primarily for focused tests. */
   readonly trustedProxyCidrs?: readonly string[];
+  readonly telemetry?: Pick<RelayTelemetry, "enrichActiveSpan" | "histogram">;
+  readonly logger?: JsonLogger;
+  /** Deterministic request-ID seam for focused tests. */
+  readonly createRequestId?: () => string;
+}
+
+const REQUEST_ID_PATTERN =
+  /^req_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function requestId(
+  candidate: string | undefined,
+  create: () => string,
+): string {
+  if (candidate !== undefined && REQUEST_ID_PATTERN.test(candidate)) {
+    return candidate.toLowerCase();
+  }
+  try {
+    const generated = create();
+    if (REQUEST_ID_PATTERN.test(generated)) return generated.toLowerCase();
+    if (UUID_PATTERN.test(generated)) return `req_${generated.toLowerCase()}`;
+  } catch {
+    // Request correlation is best effort and must not reject an HTTP request.
+  }
+  return `req_${crypto.randomUUID()}`;
 }
 
 function remoteAddressFromEnvironment(
@@ -27,12 +64,27 @@ function remoteAddressFromEnvironment(
 export function createApp(
   config: RuntimeConfig = loadRuntimeConfig(),
   dependencies: AppDependencies = {},
-): Hono {
-  const app = new Hono();
+): Hono<ApiEnvironment> {
+  const app = new Hono<ApiEnvironment>();
   const checkReadiness = dependencies.checkReadiness ??
     (() => Promise.resolve([]));
+  const telemetry = dependencies.telemetry ?? createRelayTelemetry({
+    instrumentationName: "relay-api",
+    instrumentationVersion: config.build.version,
+  });
+  const logger = dependencies.logger ?? createJsonLogger();
+  const createRequestId = dependencies.createRequestId ??
+    (() => crypto.randomUUID());
 
-  // Mounted before every other route per
+  app.use("*", async (context, next) => {
+    const id = requestId(context.req.header("x-request-id"), createRequestId);
+    context.set("requestId", id);
+    context.header("x-request-id", id);
+    await next();
+  });
+  app.use("*", createHonoRouteEnrichment(telemetry));
+
+  // Mounted before every application route per
   // docs/implementation-handoff/03-auth-workspaces.md "Server
   // configuration" -- Better Auth validates the HTTP method itself, so
   // this can't shadow a legitimate non-auth route under /api/auth/*.
@@ -92,13 +144,15 @@ export function createApp(
   });
 
   app.onError((error, context) => {
-    console.error(JSON.stringify({
-      level: "error",
-      service: "api",
-      message: error.message,
-      stack: error.stack,
-    }));
-
+    logger.error({
+      eventName: "http.request.failed",
+      message: "HTTP request failed",
+      operation: "request",
+      outcome: "failure",
+      error,
+      httpRoute: context.req.routePath,
+      requestId: context.get("requestId"),
+    });
     return context.json(
       {
         error: {

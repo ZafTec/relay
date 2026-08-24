@@ -602,7 +602,7 @@ Deno.test({
       publish: async () => {
         publishCalls += 1;
         signalPublishStarted?.();
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 900));
         waiting += 1;
       },
       cancel: () => Promise.resolve(),
@@ -614,7 +614,7 @@ Deno.test({
       maxBullmqWaitingPerPool: 1,
       maxDispatchesPerIteration: 1,
       bufferRetryDelayMs: 50,
-      poolBufferLockDurationMs: 40,
+      poolBufferLockDurationMs: 300,
     } as const;
     const schedulerWithLostAcknowledgement = {
       enqueue: runtime.scheduler.enqueue.bind(runtime.scheduler),
@@ -655,7 +655,7 @@ Deno.test({
 
       const first = firstBridge.dispatchBatch("slow-publisher-a");
       await publishStarted;
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 600));
       const second = await secondBridge.dispatchBatch("slow-publisher-b");
       const firstResult = await first;
 
