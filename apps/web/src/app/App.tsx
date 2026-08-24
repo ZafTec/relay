@@ -1,9 +1,10 @@
+import { lazy, Suspense, type ReactNode } from "react";
 import { createBrowserRouter, createMemoryRouter, RouterProvider } from "react-router-dom";
 import type { AuthAdapter } from "../auth/types";
 import { AuthProvider } from "../auth/AuthProvider";
 import { ProtectedRoute } from "../auth/ProtectedRoute";
 import { ProductLayout } from "../components/layout/ProductLayout";
-import { ArtifactDetailPage, ArtifactsPage } from "../features/artifacts";
+import { Skeleton } from "../components/ui/Skeleton";
 import { SignInPage } from "../features/auth/SignInPage";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { ChangelogPage } from "../features/changelog/ChangelogPage";
@@ -13,10 +14,47 @@ import { NotFoundPage } from "../features/not-found/NotFoundPage";
 import { OAuthConsentPage } from "../features/oauth/OAuthConsentPage";
 import { OAuthWorkspacePage } from "../features/oauth/OAuthWorkspacePage";
 import { ProfilePage } from "../features/profile/ProfilePage";
-import { SettingsPage } from "../features/settings/SettingsPage";
 import { StatusPage } from "../features/status/StatusPage";
-import { ToolDetailPage, ToolsPage } from "../features/tools";
 import { RouteErrorPage } from "./RouteErrorPage";
+
+const ToolsPage = lazy(() => import("../features/tools").then((module) => ({
+  default: module.ToolsPage,
+})));
+const ToolDetailPage = lazy(() => import("../features/tools").then((module) => ({
+  default: module.ToolDetailPage,
+})));
+const RunsPage = lazy(() => import("../features/runs").then((module) => ({
+  default: module.RunsPage,
+})));
+const RunDetailPage = lazy(() => import("../features/runs").then((module) => ({
+  default: module.RunDetailPage,
+})));
+const ArtifactsPage = lazy(() => import("../features/artifacts").then((module) => ({
+  default: module.ArtifactsPage,
+})));
+const ArtifactDetailPage = lazy(() => import("../features/artifacts").then((module) => ({
+  default: module.ArtifactDetailPage,
+})));
+const UsagePage = lazy(() => import("../features/usage").then((module) => ({
+  default: module.UsagePage,
+})));
+const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((module) => ({
+  default: module.SettingsPage,
+})));
+
+function productRoute(content: ReactNode, loadingLabel: string) {
+  return (
+    <Suspense
+      fallback={(
+        <div className="product-route-loading">
+          <Skeleton label={loadingLabel} lines={5} />
+        </div>
+      )}
+    >
+      {content}
+    </Suspense>
+  );
+}
 
 export const relayRoutes = [
   {
@@ -53,11 +91,29 @@ export const relayRoutes = [
         element: <ProductLayout />,
         children: [
           { index: true, element: <DashboardPage /> },
-          { path: "tools", element: <ToolsPage /> },
-          { path: "tools/:toolKey", element: <ToolDetailPage /> },
-          { path: "artifacts", element: <ArtifactsPage /> },
-          { path: "artifacts/:artifactId", element: <ArtifactDetailPage /> },
-          { path: "settings", element: <SettingsPage /> },
+          { path: "tools", element: productRoute(<ToolsPage />, "Loading tools") },
+          {
+            path: "tools/:toolKey",
+            element: productRoute(<ToolDetailPage />, "Loading tool contract"),
+          },
+          { path: "runs", element: productRoute(<RunsPage />, "Loading runs") },
+          {
+            path: "runs/:runId",
+            element: productRoute(<RunDetailPage />, "Loading run details"),
+          },
+          {
+            path: "artifacts",
+            element: productRoute(<ArtifactsPage />, "Loading artifacts"),
+          },
+          {
+            path: "artifacts/:artifactId",
+            element: productRoute(<ArtifactDetailPage />, "Loading artifact details"),
+          },
+          { path: "usage", element: productRoute(<UsagePage />, "Loading usage") },
+          {
+            path: "settings",
+            element: productRoute(<SettingsPage />, "Loading workspace settings"),
+          },
         ],
       },
       {

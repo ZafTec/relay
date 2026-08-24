@@ -13,6 +13,7 @@ import {
   type RunStatus,
   type RunSummary,
   runSummarySchema,
+  TERMINAL_RUN_STATUSES,
 } from "@relay/contracts";
 import type { DatabasePool } from "@relay/database";
 import {
@@ -330,11 +331,18 @@ export class PostgresRunCancellationService
     const current = await loadRunDetail(this.#pool, context, runId);
     if (current.kind === "not_found") return current;
 
-    const kind = cancellation.kind === "requested"
-      ? cancellation.running ? "cancel_requested" : "cancelled"
-      : cancellation.kind === "already_requested"
+    const kind = current.run.status === "cancel_requested"
       ? "cancel_requested"
-      : "already_terminal";
+      : current.run.status === "cancelled" && cancellation.kind === "requested"
+      ? "cancelled"
+      : TERMINAL_RUN_STATUSES.some((status) => status === current.run.status)
+      ? "already_terminal"
+      : null;
+    if (kind === null) {
+      throw new Error(
+        `Cancellation left run ${runId} in unexpected status ${current.run.status}`,
+      );
+    }
     return cancelRunResultSchema.parse({ kind, run: current.run });
   }
 }

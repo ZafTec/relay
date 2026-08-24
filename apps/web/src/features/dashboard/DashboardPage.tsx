@@ -104,9 +104,9 @@ export function DashboardPage({ overviewAdapter = httpDashboardOverviewAdapter }
           <div className="dashboard-contract__rows">
             {[
               ["Tools", "Catalog and contract views", "Available"],
-              ["Runs", "Run and live-event views", "Soon"],
+              ["Runs", "Run and live-event views", "Available"],
               ["Artifacts", "Registry and share views", "Available"],
-              ["Usage", "Usage summary view", "Soon"],
+              ["Usage", "Usage summary view", "Available"],
               ["Settings", "Workspace context view", "Available"],
             ].map(([name, description, status]) => (
               <div key={name}>

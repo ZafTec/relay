@@ -37,6 +37,7 @@ import {
   RUN_STATUSES,
   type RunResultCompleteness,
   type RunStatus,
+  TERMINAL_RUN_STATUSES,
 } from "./statuses.ts";
 
 export const RUN_QUEUE_REASONS = [
@@ -854,10 +855,52 @@ export const cancelRunResultSchema: ContractSchema<CancelRunResult> =
           additionalProperties: false,
           required: ["kind", "run"],
           properties: {
-            kind: {
-              enum: ["cancelled", "cancel_requested", "already_terminal"],
+            kind: { const: "cancelled" },
+            run: {
+              allOf: [
+                runDetailSchema.jsonSchema,
+                {
+                  type: "object",
+                  properties: { status: { const: "cancelled" } },
+                },
+              ],
             },
-            run: runDetailSchema.jsonSchema,
+          },
+        },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["kind", "run"],
+          properties: {
+            kind: { const: "cancel_requested" },
+            run: {
+              allOf: [
+                runDetailSchema.jsonSchema,
+                {
+                  type: "object",
+                  properties: { status: { const: "cancel_requested" } },
+                },
+              ],
+            },
+          },
+        },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["kind", "run"],
+          properties: {
+            kind: { const: "already_terminal" },
+            run: {
+              allOf: [
+                runDetailSchema.jsonSchema,
+                {
+                  type: "object",
+                  properties: {
+                    status: { type: "string", enum: TERMINAL_RUN_STATUSES },
+                  },
+                },
+              ],
+            },
           },
         },
         {
@@ -884,9 +927,19 @@ export const cancelRunResultSchema: ContractSchema<CancelRunResult> =
         strictObject(value, path, ["kind"]);
         return { kind };
       }
-      return {
-        kind,
-        run: runDetailSchema.parse(required(object, "run", path)),
-      };
+      const run = runDetailSchema.parse(required(object, "run", path));
+      const validStatus = kind === "cancelled"
+        ? run.status === "cancelled"
+        : kind === "cancel_requested"
+        ? run.status === "cancel_requested"
+        : TERMINAL_RUN_STATUSES.some((status) => status === run.status);
+      if (!validStatus) {
+        validationError(
+          `${path}.run.status`,
+          "invalid_value",
+          `does not match cancellation result kind ${kind}`,
+        );
+      }
+      return { kind, run };
     },
   );

@@ -41,6 +41,31 @@ function mockRegistryEndpoints() {
         headers: { "content-type": "application/json" },
       });
     }
+    if (path.startsWith("/api/v1/runs")) {
+      return new Response(JSON.stringify({ kind: "ok", items: [], nextCursor: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (path === "/api/v1/usage") {
+      return new Response(JSON.stringify({
+        kind: "ok",
+        usage: {
+          generatedAt: "2030-01-01T00:00:00.000Z",
+          items: [],
+          truncated: false,
+        },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (path === "/api/v1/events") {
+      return new Response(
+        "event: relay.resynchronized\ndata: {\"lastEventId\":null}\nretry: 60000\n\n",
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      );
+    }
     throw new Error(`Unexpected request: ${path}`);
   }));
 }
@@ -186,7 +211,9 @@ describe("protected routing", () => {
 
   it.each([
     ["/dashboard/tools", "Tools", "Tools"],
+    ["/dashboard/runs", "Runs", "Runs"],
     ["/dashboard/artifacts", "Artifacts", "Artifacts"],
+    ["/dashboard/usage", "Usage", "Usage"],
     ["/dashboard/settings", "Workspace settings", "Settings"],
   ])("renders protected registry route %s", async (path, heading, navigationLabel) => {
     mockRegistryEndpoints();

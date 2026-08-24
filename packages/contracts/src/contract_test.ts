@@ -1,5 +1,6 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
+  cancelRunResultSchema,
   changelogEntryPath,
   createArtifactUploadRequestSchema,
   errorEnvelopeSchema,
@@ -123,6 +124,66 @@ Deno.test("run details enforce status-shaped output items", () => {
           artifactId: null,
         }],
       },
+    })
+  );
+});
+
+Deno.test("cancel run results enforce kind and current status combinations", () => {
+  const run = {
+    id: `run_${HEX_32}`,
+    tool: {
+      key: "image.generate",
+      name: "Image Generate",
+      versionId: `tver_${HEX_32}`,
+      version: 1,
+    },
+    status: "cancelled",
+    resultCompleteness: null,
+    acceptedAt: "2026-08-24T10:00:00.000Z",
+    startedAt: "2026-08-24T10:00:01.000Z",
+    terminalAt: "2026-08-24T10:00:02.000Z",
+    input: { prompt: "A lighthouse" },
+    reservation: null,
+    outputSet: null,
+  } as const;
+
+  assertEquals(
+    cancelRunResultSchema.parse({ kind: "cancelled", run }),
+    { kind: "cancelled", run },
+  );
+  assertEquals(
+    cancelRunResultSchema.parse({
+      kind: "cancel_requested",
+      run: { ...run, status: "cancel_requested", terminalAt: null },
+    }).kind,
+    "cancel_requested",
+  );
+  for (const status of ["succeeded", "failed", "cancelled"] as const) {
+    assertEquals(
+      cancelRunResultSchema.parse({
+        kind: "already_terminal",
+        run: { ...run, status },
+      }).kind,
+      "already_terminal",
+    );
+  }
+
+  assertThrows(() =>
+    cancelRunResultSchema.parse({
+      kind: "cancelled",
+      run: { ...run, status: "succeeded" },
+    })
+  );
+  assertThrows(() =>
+    cancelRunResultSchema.parse({
+      kind: "cancel_requested",
+      run: { ...run, status: "running", terminalAt: null },
+    })
+  );
+  assertThrows(() =>
+    cancelRunResultSchema.parse({
+      kind: "already_terminal",
+      run: { ...run, status: "cancel_requested", terminalAt: null },
     })
   );
 });

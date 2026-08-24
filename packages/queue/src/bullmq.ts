@@ -65,6 +65,10 @@ export type ExecutionOutboxAction =
   | {
     readonly kind: "cancel";
     readonly payload: ExecutionOutboxPayload;
+  }
+  | {
+    readonly kind: "observe";
+    readonly payload: ExecutionOutboxPayload;
   };
 
 export function executionOutboxAction(
@@ -85,8 +89,11 @@ export function executionOutboxAction(
     case "job.ready":
     case "job.deferred":
       return { kind: "dispatch", payload };
+    case "job.started":
+      return { kind: "observe", payload };
     case "job.cancel_requested":
     case "job.cancelled":
+    case "job.terminal":
       return { kind: "cancel", payload };
     default:
       throw new Error(`Unsupported execution outbox event: ${event.eventType}`);

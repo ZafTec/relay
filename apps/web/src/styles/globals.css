@@ -1401,6 +1401,11 @@ code {
   min-width: 0;
 }
 
+.product-route-loading {
+  width: min(100%, 920px);
+  padding: 28px 32px 56px;
+}
+
 .dashboard-header {
   min-height: 84px;
   border-bottom: 1px solid var(--surface-border);
@@ -1682,8 +1687,9 @@ code {
     align-items: flex-start;
   }
 
-  .dashboard-body {
-    padding: 20px 16px;
+  .dashboard-body,
+  .product-route-loading {
+    padding: 20px 16px 40px;
   }
 
   .product-global-notice {

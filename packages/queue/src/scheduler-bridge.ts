@@ -545,6 +545,7 @@ export class ExecutionSchedulerBridge {
 
   async handleOutboxEvent(event: OutboxEventRow): Promise<void> {
     const action = executionOutboxAction(event);
+    if (action.kind === "observe") return;
     if (action.kind === "dispatch") {
       await this.enqueue(action.payload);
       return;

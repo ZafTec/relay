@@ -47,9 +47,11 @@ import { createWorkerRuntimeMetrics } from "./metrics.ts";
 
 const EXECUTION_OUTBOX_EVENTS = [
   "job.ready",
+  "job.started",
   "job.deferred",
   "job.cancel_requested",
   "job.cancelled",
+  "job.terminal",
 ] as const;
 
 export interface WorkerRuntimeOptions {

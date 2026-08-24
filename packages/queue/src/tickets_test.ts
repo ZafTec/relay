@@ -1,4 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
+import { executionOutboxAction } from "./bullmq.ts";
 import {
   dispatchDeduplicationKey,
   parseExecutionOutboxPayload,
@@ -38,6 +39,34 @@ Deno.test("outbox metadata produces the exact generation and policy ticket", () 
   assertEquals(
     dispatchDeduplicationKey("123", 7),
     "execution-job.123.dispatch.7",
+  );
+});
+
+Deno.test("started outbox events are observation-only", () => {
+  const payload = parseExecutionOutboxPayload({
+    domainJobId: "123",
+    runId: "run_123",
+    capacityPoolKey: "images-us-east",
+    dispatchGeneration: 7,
+    policyVersion: 19,
+    workspaceId: "workspace-123",
+    classKey: "paid",
+    costUnits: 3,
+    fifoSequence: 41,
+    eligibleAtMs: 1_700_000_000_000,
+  });
+  assertEquals(
+    executionOutboxAction({
+      id: "42",
+      aggregateType: "execution_job",
+      aggregateId: "123",
+      aggregateVersion: "2",
+      eventType: "job.started",
+      payload,
+      attemptCount: 1,
+      leaseOwner: "worker-test",
+    }),
+    { kind: "observe", payload },
   );
 });
 

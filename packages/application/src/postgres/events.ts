@@ -17,9 +17,11 @@ import { hasCurrentMembership, iso } from "./shared.ts";
 
 const INTERNAL_EVENT_TYPES = [
   "job.ready",
+  "job.started",
   "job.deferred",
   "job.cancel_requested",
   "job.cancelled",
+  "job.terminal",
 ] as const;
 
 interface EventRow {
@@ -38,6 +40,12 @@ function eventFromRow(row: EventRow): WorkspaceEventData {
       return row.aggregate_version === "0"
         ? { type: "run.created", runId: row.run_id }
         : { type: "run.progress_changed", runId: row.run_id };
+    case "job.started":
+      return {
+        type: "run.status_changed",
+        runId: row.run_id,
+        status: "running",
+      };
     case "job.deferred":
       return { type: "run.progress_changed", runId: row.run_id };
     case "job.cancel_requested":
@@ -47,7 +55,12 @@ function eventFromRow(row: EventRow): WorkspaceEventData {
         status: "cancel_requested",
       };
     case "job.cancelled":
-      return { type: "run.completed", runId: row.run_id, status: "cancelled" };
+    case "job.terminal":
+      return {
+        type: "run.completed",
+        runId: row.run_id,
+        status: row.run_status,
+      };
   }
 }
 

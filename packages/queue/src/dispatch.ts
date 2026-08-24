@@ -64,6 +64,7 @@ interface ClaimedJobDbRow {
   tool_version_id: string;
   lease_epoch: string;
   dispatch_generation: number;
+  state_version: string;
   scheduling_policy_version: number;
   tool_id: string;
   tool_key: string;
@@ -190,7 +191,7 @@ export async function claimJobForDispatch(
             and cp.id = j.capacity_pool_id
             and cp.enabled = true
           returning j.id, j.run_id, j.workspace_id, j.tool_version_id,
-                    j.lease_epoch, j.dispatch_generation,
+                    j.lease_epoch, j.dispatch_generation, j.state_version,
                     j.scheduling_policy_version, t.id as tool_id,
                     t.key as tool_key, cp.id as capacity_pool_id,
                     cp.key as capacity_pool_key, j.estimated_cost_units`,
@@ -238,6 +239,12 @@ export async function claimJobForDispatch(
         queuedDelta: -1,
         runningDelta: 1,
       });
+      await insertLifecycleOutbox(
+        client,
+        row.id,
+        row.state_version,
+        "job.started",
+      );
 
       await client.query("commit");
       return {
@@ -746,6 +753,35 @@ async function insertDispatchOutbox(
   );
 }
 
+type LifecycleOutboxEventType = "job.started" | "job.terminal";
+
+async function insertLifecycleOutbox(
+  client: pg.PoolClient,
+  jobId: string,
+  aggregateVersion: string,
+  eventType: LifecycleOutboxEventType,
+): Promise<void> {
+  const payload = await loadExecutionOutboxPayload(client, jobId);
+  const eventName = eventType === "job.started" ? "started" : "terminal";
+  const event = await client.query<{ id: string }>(
+    `insert into relay.outbox_events
+       (aggregate_type, aggregate_id, aggregate_version, event_type, payload,
+        deduplication_key)
+     values ('execution_job', $1, $2, $3, $4, $5)
+     on conflict (deduplication_key) where deduplication_key is not null
+     do nothing
+     returning id`,
+    [
+      jobId,
+      aggregateVersion,
+      eventType,
+      JSON.stringify(payload),
+      `execution-job.${jobId}.${eventName}.${aggregateVersion}`,
+    ],
+  );
+  requireExactlyOne(event.rows, `insert ${eventName} outbox event`);
+}
+
 export async function armSchedulerTicket(
   pool: DatabasePool,
   jobId: string,
@@ -1157,7 +1193,7 @@ async function transitionJobToTerminal(
         requireExactlyOne(attempt.rows, "finish terminal job attempt");
       }
 
-      const job = await client.query<{ id: string }>(
+      const job = await client.query<{ state_version: string }>(
         `update relay.execution_jobs
             set status = $4,
                 terminal_at = now(),
@@ -1168,7 +1204,7 @@ async function transitionJobToTerminal(
                 state_version = state_version + 1
           where id = $1 and lease_epoch = $2 and lease_owner = $3
             and status = any($5::text[])
-          returning id`,
+          returning state_version`,
         [jobId, leaseEpoch, leaseOwner, input.status, [
           ...input.allowedStatuses,
         ]],
@@ -1201,6 +1237,12 @@ async function transitionJobToTerminal(
         queuedDelta: 0,
         runningDelta: -1,
       });
+      await insertLifecycleOutbox(
+        client,
+        jobId,
+        job.rows[0].state_version,
+        "job.terminal",
+      );
       await client.query("commit");
       return true;
     } catch (error) {
@@ -1320,7 +1362,7 @@ export async function requestJobCancellation(
 
       const running = row.status === "running";
       const nextStatus = running ? "cancel_requested" : "cancelled";
-      const job = await client.query<{ id: string }>(
+      const job = await client.query<{ state_version: string }>(
         `update relay.execution_jobs
             set status = $2,
                 cancel_requested_at = now(),
@@ -1328,7 +1370,7 @@ export async function requestJobCancellation(
                 scheduler_ticket_token = null,
                 state_version = state_version + 1
           where id = $1 and status = $3
-          returning id`,
+          returning state_version`,
         [jobId, nextStatus, row.status],
       );
       requireExactlyOne(job.rows, "request execution job cancellation");
@@ -1350,23 +1392,30 @@ export async function requestJobCancellation(
         });
       }
 
-      const payload = await loadExecutionOutboxPayload(client, jobId);
-      const eventType = running ? "job.cancel_requested" : "job.cancelled";
-      await client.query(
-        `insert into relay.outbox_events
-           (aggregate_type, aggregate_id, aggregate_version, event_type, payload,
-            deduplication_key)
-         values ('execution_job', $1, $2, $3, $4, $5)
-         on conflict (deduplication_key) where deduplication_key is not null
-         do nothing`,
-        [
+      if (running) {
+        const payload = await loadExecutionOutboxPayload(client, jobId);
+        await client.query(
+          `insert into relay.outbox_events
+             (aggregate_type, aggregate_id, aggregate_version, event_type,
+              payload, deduplication_key)
+           values ('execution_job', $1, $2, 'job.cancel_requested', $3, $4)
+           on conflict (deduplication_key) where deduplication_key is not null
+           do nothing`,
+          [
+            jobId,
+            job.rows[0].state_version,
+            JSON.stringify(payload),
+            `execution-job.${jobId}.cancel.${job.rows[0].state_version}`,
+          ],
+        );
+      } else {
+        await insertLifecycleOutbox(
+          client,
           jobId,
-          Number(row.state_version) + 1,
-          eventType,
-          JSON.stringify(payload),
-          `execution-job.${jobId}.cancel.${Number(row.state_version) + 1}`,
-        ],
-      );
+          job.rows[0].state_version,
+          "job.terminal",
+        );
+      }
       await client.query("commit");
       return { kind: "requested", running };
     } catch (error) {
@@ -1430,7 +1479,7 @@ export async function expireQueuedJobs(
       );
 
       for (const row of rows) {
-        const job = await client.query<{ id: string }>(
+        const job = await client.query<{ state_version: string }>(
           `update relay.execution_jobs
               set status = 'failed',
                   terminal_at = $2,
@@ -1440,7 +1489,7 @@ export async function expireQueuedJobs(
                   scheduler_ticket_token = null,
                   state_version = state_version + 1
             where id = $1 and status = 'queued'
-            returning id`,
+            returning state_version`,
           [row.id, effectiveNow],
         );
         requireExactlyOne(job.rows, "expire queued execution job");
@@ -1459,6 +1508,12 @@ export async function expireQueuedJobs(
           queuedDelta: -1,
           runningDelta: 0,
         });
+        await insertLifecycleOutbox(
+          client,
+          row.id,
+          job.rows[0].state_version,
+          "job.terminal",
+        );
         expired += 1;
       }
 
@@ -1580,7 +1635,7 @@ export async function recoverExpiredJobLeases(
         const nextGeneration = row.dispatch_generation +
           (target === "queued" ? 1 : 0);
         const retryDeadline = new Date(effectiveNow.getTime() + retryWaitMs);
-        const job = await client.query<{ id: string }>(
+        const job = await client.query<{ state_version: string }>(
           `update relay.execution_jobs
               set status = $2,
                   dispatch_generation = $3,
@@ -1597,7 +1652,7 @@ export async function recoverExpiredJobLeases(
                   scheduler_ticket_token = null,
                   state_version = state_version + 1
             where id = $1 and lease_epoch = $5
-            returning id`,
+            returning state_version`,
           [
             row.id,
             target,
@@ -1672,8 +1727,16 @@ export async function recoverExpiredJobLeases(
             effectiveNow,
           );
           recovered += 1;
-        } else if (target === "cancelled") cancelled += 1;
-        else failed += 1;
+        } else {
+          await insertLifecycleOutbox(
+            client,
+            row.id,
+            job.rows[0].state_version,
+            "job.terminal",
+          );
+          if (target === "cancelled") cancelled += 1;
+          else failed += 1;
+        }
 
         const scopeKeys = parseScopeKeys(row.redis_scope_keys);
         if (

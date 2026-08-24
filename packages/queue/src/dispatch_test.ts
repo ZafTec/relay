@@ -144,6 +144,41 @@ async function assertAllCounters(
   }
 }
 
+async function assertSingleLifecycleOutbox(
+  pool: DatabasePool,
+  jobId: string,
+  eventType: "job.started" | "job.terminal",
+): Promise<void> {
+  const { rows } = await pool.query<{
+    aggregate_version: string;
+    deduplication_key: string;
+    state_version: string;
+  }>(
+    `select event.aggregate_version::text, event.deduplication_key,
+            job.state_version::text
+       from relay.outbox_events event
+       join relay.execution_jobs job on job.id::text = event.aggregate_id
+      where event.aggregate_type = 'execution_job'
+        and event.aggregate_id = $1
+        and event.event_type = $2`,
+    [jobId, eventType],
+  );
+  const eventName = eventType === "job.started" ? "started" : "terminal";
+  assertEquals(rows.length, 1);
+  assertEquals(rows[0].aggregate_version, rows[0].state_version);
+  assertEquals(
+    rows[0].deduplication_key,
+    `execution-job.${jobId}.${eventName}.${rows[0].aggregate_version}`,
+  );
+}
+
+function assertSingleTerminalOutbox(
+  pool: DatabasePool,
+  jobId: string,
+): Promise<void> {
+  return assertSingleLifecycleOutbox(pool, jobId, "job.terminal");
+}
+
 Deno.test({
   name:
     "claimJobForDispatch claims a queued job without opening an attempt before capacity",
@@ -201,6 +236,7 @@ Deno.test({
         1,
         "a claimed job must join the running counter",
       );
+      await assertSingleLifecycleOutbox(pool, jobId, "job.started");
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();
@@ -465,7 +501,7 @@ Deno.test({
       );
       assertEquals(
         outbox.rows.map((row: { event_type: string }) => row.event_type),
-        ["job.ready", "job.deferred"],
+        ["job.ready", "job.started", "job.deferred"],
       );
       assertEquals(
         outbox.rows[1].eligible_at.getTime(),
@@ -608,6 +644,7 @@ Deno.test({
         submission_state: "completed",
       });
       assertEquals(lease.rows[0].released_at !== null, true);
+      await assertSingleTerminalOutbox(pool, admitted.jobId);
       await assertAllCounters(pool, admitted.fixture, 0, 0);
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
@@ -660,6 +697,18 @@ Deno.test({
         ),
         true,
       );
+      assertEquals(
+        await failJob(
+          pool,
+          admitted.jobId,
+          attempt.attemptId,
+          claim.job.leaseEpoch,
+          "worker-failure",
+          "schema_or_policy_failure",
+          "redelivered",
+        ),
+        false,
+      );
       const attemptRow = await pool.query<{
         sanitized_error: string;
         retry_classification: string;
@@ -675,6 +724,7 @@ Deno.test({
         attemptRow.rows[0].sanitized_error.includes("secret-value"),
         false,
       );
+      await assertSingleTerminalOutbox(pool, admitted.jobId);
       await assertAllCounters(pool, admitted.fixture, 0, 0);
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
@@ -697,6 +747,10 @@ Deno.test({
         { kind: "requested", running: false },
       );
       assertEquals(
+        await requestJobCancellation(pool, admitted.jobId),
+        { kind: "terminal_or_missing" },
+      );
+      assertEquals(
         (await claimJobForDispatch(
           pool,
           ticketFor(admitted.jobId),
@@ -705,6 +759,7 @@ Deno.test({
         )).kind,
         "no_op",
       );
+      await assertSingleTerminalOutbox(pool, admitted.jobId);
       await assertAllCounters(pool, admitted.fixture, 0, 0);
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
@@ -748,6 +803,98 @@ Deno.test({
         ),
         true,
       );
+      assertEquals(
+        await completeJobCancellation(
+          pool,
+          admitted.jobId,
+          attempt.attemptId,
+          claim.job.leaseEpoch,
+          "worker-cancel",
+        ),
+        false,
+      );
+      await assertSingleTerminalOutbox(pool, admitted.jobId);
+      await assertAllCounters(pool, admitted.fixture, 0, 0);
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "successful completion wins after cancellation and emits one terminal event",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      const claim = await claimJobForDispatch(
+        pool,
+        ticketFor(admitted.jobId),
+        "worker-completion-wins",
+        30_000,
+      );
+      if (claim.kind !== "claimed") throw new Error("unreachable");
+      const attempt = await attachCapacityAndBeginAttempt(
+        pool,
+        claim.job,
+        "worker-completion-wins",
+      );
+      assertEquals(
+        await requestJobCancellation(pool, admitted.jobId),
+        { kind: "requested", running: true },
+      );
+      assertEquals(
+        await completeJobSuccessfully(
+          pool,
+          admitted.jobId,
+          attempt.attemptId,
+          claim.job.leaseEpoch,
+          "worker-completion-wins",
+        ),
+        true,
+      );
+      assertEquals(
+        await completeJobSuccessfully(
+          pool,
+          admitted.jobId,
+          attempt.attemptId,
+          claim.job.leaseEpoch,
+          "worker-completion-wins",
+        ),
+        false,
+      );
+
+      const job = await pool.query<{ status: string }>(
+        "select status from relay.execution_jobs where id = $1",
+        [admitted.jobId],
+      );
+      const run = await pool.query<{ status: string }>(
+        "select status from relay.tool_runs where id = $1",
+        [admitted.runId],
+      );
+      assertEquals(job.rows[0].status, "succeeded");
+      assertEquals(run.rows[0].status, "succeeded");
+      const events = await pool.query<{ event_type: string }>(
+        `select event_type
+           from relay.outbox_events
+          where aggregate_type = 'execution_job' and aggregate_id = $1
+          order by id`,
+        [admitted.jobId],
+      );
+      assertEquals(
+        events.rows.map((event: { event_type: string }) => event.event_type),
+        [
+          "job.ready",
+          "job.started",
+          "job.cancel_requested",
+          "job.terminal",
+        ],
+      );
+      await assertSingleTerminalOutbox(pool, admitted.jobId);
       await assertAllCounters(pool, admitted.fixture, 0, 0);
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
@@ -1054,6 +1201,7 @@ Deno.test({
       assertEquals(job.rows[0].terminal_at !== null, true);
       assertEquals(run.rows[0].status, "failed");
       assertEquals(run.rows[0].terminal_at !== null, true);
+      await assertSingleTerminalOutbox(pool, admitted.jobId);
       await assertAllCounters(pool, admitted.fixture, 0, 0);
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);

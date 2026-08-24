@@ -8,9 +8,9 @@ import { InlineNotice } from "../ui/InlineNotice";
 
 const sections = [
   { label: "Tools", to: "/dashboard/tools" },
-  { label: "Runs", to: null },
+  { label: "Runs", to: "/dashboard/runs" },
   { label: "Artifacts", to: "/dashboard/artifacts" },
-  { label: "Usage", to: null },
+  { label: "Usage", to: "/dashboard/usage" },
   { label: "Settings", to: "/dashboard/settings" },
 ] as const;
 
@@ -66,12 +66,7 @@ function SectionNavigation({ mobile = false }: { mobile?: boolean }) {
       >
         Overview
       </NavLink>
-      {sections.map((section) => section.to === null ? (
-        <span className="product-nav__item is-disabled" aria-disabled="true" key={section.label}>
-          {section.label}
-          <span className="product-nav__soon">Soon</span>
-        </span>
-      ) : (
+      {sections.map((section) => (
         <NavLink
           className={({ isActive }) => `product-nav__item${isActive ? " is-active" : ""}`}
           key={section.label}

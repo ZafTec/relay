@@ -77,6 +77,59 @@ const browserArtifact = {
   createdAt: "2030-01-01T00:00:00.000Z",
 };
 
+const browserRun = {
+  id: runId,
+  tool: {
+    key: browserTool.key,
+    name: browserTool.name,
+    versionId: toolVersionId,
+    version: 1,
+  },
+  status: "succeeded",
+  resultCompleteness: "complete",
+  acceptedAt: "2030-01-01T00:00:00.000Z",
+  startedAt: "2030-01-01T00:00:01.000Z",
+  terminalAt: "2030-01-01T00:00:02.000Z",
+  input: { prompt: "browser-test input" },
+  reservation: {
+    id: `reservation_${"6".repeat(32)}`,
+    metric: "test.outputs",
+    unit: "output",
+    amount: "1",
+    status: "committed",
+    expiresAt: "2030-01-01T00:05:00.000Z",
+  },
+  outputSet: {
+    id: `outset_${"7".repeat(32)}`,
+    requestedCount: 1,
+    producedCount: 1,
+    completeness: "complete",
+    warnings: [],
+    items: [{
+      ordinal: 0,
+      name: "primary",
+      status: "succeeded",
+      artifactId,
+      artifactVersionId,
+      errorCode: null,
+    }],
+  },
+};
+
+const browserUsage = {
+  generatedAt: "2030-01-01T00:03:00.000Z",
+  items: [{
+    metric: "test.outputs",
+    unit: "output",
+    period: "calendar_month",
+    periodStartsAt: "2030-01-01T00:00:00.000Z",
+    periodEndsAt: "2030-02-01T00:00:00.000Z",
+    consumedAmount: "1",
+    reservedAmount: "0",
+  }],
+  truncated: false,
+};
+
 async function mockSession(page: Page, authenticated: boolean) {
   await page.route("**/api/auth/get-session**", async (route) => {
     await route.fulfill({
@@ -120,6 +173,35 @@ async function mockRegistryResources(page: Page) {
       ? { kind: "ok", items: [browserArtifact], nextCursor: null }
       : { kind: "found", artifact: { ...browserArtifact, versions: [browserArtifactVersion], shares: [] } };
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.route("**/api/v1/runs**", async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    const body = pathname === "/api/v1/runs"
+      ? { kind: "ok", items: [{
+        id: browserRun.id,
+        tool: browserRun.tool,
+        status: browserRun.status,
+        resultCompleteness: browserRun.resultCompleteness,
+        acceptedAt: browserRun.acceptedAt,
+        startedAt: browserRun.startedAt,
+        terminalAt: browserRun.terminalAt,
+      }], nextCursor: null }
+      : { kind: "found", run: browserRun };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.route("**/api/v1/events", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: ': connected\n\nevent: relay.resynchronized\ndata: {"lastEventId":null}\nretry: 60000\n\n',
+    });
+  });
+  await page.route("**/api/v1/usage**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ kind: "ok", usage: browserUsage }),
+    });
   });
 }
 
@@ -277,8 +359,7 @@ test("dashboard uses session, workspace, and API responses without fake counts",
     await expect(page.getByText("Not requested")).toBeVisible();
     if (width <= 900) {
       const mobileSoonLabels = page.locator(".product-tabs .product-nav__soon");
-      await expect(mobileSoonLabels).toHaveCount(2);
-      await expect(mobileSoonLabels.first()).toBeVisible();
+      await expect(mobileSoonLabels).toHaveCount(0);
     }
     await expectNoPageOverflow(page);
   }
@@ -299,8 +380,8 @@ test("dashboard uses session, workspace, and API responses without fake counts",
   });
 });
 
-test("registry routes expose real contract data across required widths", async ({ page }) => {
-  test.setTimeout(75_000);
+test("product resource routes expose real contract data across required widths", async ({ page }) => {
+  test.setTimeout(90_000);
   await mockAuthenticatedWorkspace(page);
   await mockRegistryResources(page);
 
@@ -317,6 +398,16 @@ test("registry routes expose real contract data across required widths", async (
     await expect(page.getByText(/Execution is unavailable until a real provider/i)).toBeVisible();
     await expectNoPageOverflow(page);
 
+    await page.goto("/dashboard/runs");
+    await expect(page.getByRole("heading", { level: 1, name: "Runs" })).toBeVisible();
+    await expect(page.getByRole("link", { name: `Open run ${runId}` })).toBeVisible();
+    await expectNoPageOverflow(page);
+
+    await page.goto(`/dashboard/runs/${runId}`);
+    await expect(page.getByRole("heading", { level: 1, name: runId })).toBeVisible();
+    await expect(page.getByRole("link", { name: artifactId })).toBeVisible();
+    await expectNoPageOverflow(page);
+
     await page.goto("/dashboard/artifacts");
     await expect(page.getByRole("heading", { level: 1, name: "Artifacts" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Open artifact Test-only artifact" })).toBeVisible();
@@ -325,6 +416,14 @@ test("registry routes expose real contract data across required widths", async (
     await page.goto(`/dashboard/artifacts/${artifactId}`);
     await expect(page.getByRole("heading", { level: 1, name: "Test-only artifact" })).toBeVisible();
     await expect(page.getByRole("table", { name: /Immutable versions/ })).toBeVisible();
+    await expectNoPageOverflow(page);
+
+    await page.goto("/dashboard/usage");
+    await expect(page.getByRole("heading", { level: 1, name: "Usage" })).toBeVisible();
+    await expect(page.getByRole("table", { name: /Current consumed and reserved usage/ }))
+      .toBeVisible();
+    await expect(page.getByText("Receipt and breakdown data is not exposed by the current contract."))
+      .toBeVisible();
     await expectNoPageOverflow(page);
 
     await page.goto("/dashboard/settings");
@@ -336,7 +435,7 @@ test("registry routes expose real contract data across required widths", async (
     await expectNoPageOverflow(page);
   }
 
-  for (const route of ["tools", "artifacts", "settings"] as const) {
+  for (const route of ["tools", "runs", "artifacts", "usage", "settings"] as const) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/dashboard/${route}`);
     await waitForFonts(page);
