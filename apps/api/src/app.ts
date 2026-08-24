@@ -1,4 +1,4 @@
-import { Hono } from "@hono/hono";
+import { type Context, Hono } from "@hono/hono";
 import { type Auth, parseTrustedProxyCidrs } from "@relay/auth";
 import { loadRuntimeConfig, type RuntimeConfig } from "@relay/config";
 import type { ReadinessCheck } from "@relay/contracts";
@@ -9,6 +9,7 @@ import {
   type JsonLogger,
   type RelayTelemetry,
 } from "@relay/observability";
+import { createV1Routes, type V1RouteDependencies } from "./routes/mod.ts";
 
 type ApiEnvironment = {
   Variables: {
@@ -19,8 +20,10 @@ type ApiEnvironment = {
 export interface AppDependencies {
   /** Defaults to reporting no checks (always ready) when omitted. */
   readonly checkReadiness?: () => Promise<readonly ReadinessCheck[]>;
-  /** Omitted in tests that don't need auth; mounts /api/auth/* when present. */
+  /** Omitted in tests that don't need auth; mounts auth and OAuth metadata. */
   readonly auth?: Auth;
+  /** Versioned HTTP resources and workspace event streaming. */
+  readonly v1?: V1RouteDependencies;
   /** Overrides AUTH_TRUSTED_PROXY_CIDRS, primarily for focused tests. */
   readonly trustedProxyCidrs?: readonly string[];
   readonly telemetry?: Pick<RelayTelemetry, "enrichActiveSpan" | "histogram">;
@@ -33,6 +36,15 @@ const REQUEST_ID_PATTERN =
   /^req_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export const AUTH_METADATA_PATHS: readonly string[] = Object.freeze(
+  [
+    "/.well-known/oauth-authorization-server/api/auth",
+    "/.well-known/openid-configuration/api/auth",
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/mcp",
+  ] as const,
+);
 
 function requestId(
   candidate: string | undefined,
@@ -92,11 +104,18 @@ export function createApp(
     const auth = dependencies.auth;
     const trustedProxyCidrs = dependencies.trustedProxyCidrs ??
       parseTrustedProxyCidrs(Deno.env.get("AUTH_TRUSTED_PROXY_CIDRS"));
-    app.all("/api/auth/*", (context) =>
+    const handleAuth = (context: Context<ApiEnvironment>) =>
       auth.handler(context.req.raw, {
         remoteAddress: remoteAddressFromEnvironment(context.env),
         trustedProxyCidrs,
-      }));
+      });
+
+    app.all("/api/auth/*", handleAuth);
+    for (const path of AUTH_METADATA_PATHS) app.all(path, handleAuth);
+  }
+
+  if (dependencies.v1) {
+    app.route("/", createV1Routes(dependencies.v1));
   }
 
   app.get("/health/live", (context) => {

@@ -1,4 +1,5 @@
 export {
+  createAuthSessionIdentityResolver,
   createV1Routes,
   POLLING_WORKSPACE_EVENT_SOURCE,
   SSE_RESYNCHRONIZED_EVENT,

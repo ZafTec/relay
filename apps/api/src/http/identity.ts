@@ -2,6 +2,7 @@ import {
   validateWorkspaceActorContext,
   type WorkspaceActorContext,
 } from "@relay/application";
+import { type Auth, getMembership, type Queryable } from "@relay/auth";
 import { authenticationRequired, notFound } from "./errors.ts";
 
 export type WorkspaceMembershipRole = "owner" | "admin" | "member";
@@ -31,6 +32,41 @@ export type SessionIdentityResolution =
 export type SessionIdentityResolver = (
   request: Request,
 ) => Promise<SessionIdentityResolution>;
+
+/**
+ * Builds the production cookie-session resolver. The active organization stored
+ * on the session is treated only as context; every resolution checks current
+ * membership before returning an authenticated workspace identity.
+ */
+export function createAuthSessionIdentityResolver(
+  auth: Pick<Auth, "api">,
+  queryable: Queryable,
+): SessionIdentityResolver {
+  return async (request) => {
+    const current = await auth.api.getSession({ headers: request.headers });
+    if (current === null) return { kind: "unauthenticated" };
+
+    const actorUserId = current.user.id;
+    const workspaceId = current.session.activeOrganizationId;
+    if (typeof workspaceId !== "string" || workspaceId.trim() === "") {
+      return { kind: "workspace_unavailable", actorUserId };
+    }
+
+    const membershipRole = await getMembership(
+      queryable,
+      workspaceId,
+      actorUserId,
+    );
+    if (membershipRole === null) {
+      return { kind: "workspace_unavailable", actorUserId };
+    }
+
+    return {
+      kind: "authenticated",
+      identity: { workspaceId, actorUserId, membershipRole },
+    };
+  };
+}
 
 const MEMBERSHIP_ROLES = new Set<WorkspaceMembershipRole>([
   "owner",

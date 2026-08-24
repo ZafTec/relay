@@ -1,10 +1,15 @@
 import { assertEquals } from "@std/assert";
+import type { Auth } from "@relay/auth";
 import {
   createJsonLogger,
   type LogRecord,
   type TelemetryAttributes,
 } from "@relay/observability";
-import { createApp } from "./app.ts";
+import { AUTH_METADATA_PATHS, createApp } from "./app.ts";
+import {
+  AUTHENTICATED_IDENTITY,
+  createStubServices,
+} from "./routes/test_support.ts";
 
 const config = {
   appName: "Relay Test",
@@ -135,6 +140,40 @@ Deno.test("request IDs are correlated without becoming metric labels", async () 
     "request.id" in (metricAttributes as Record<string, unknown>),
     false,
   );
+});
+
+Deno.test("versioned application routes mount into the running app", async () => {
+  const response = await createApp(config, {
+    v1: {
+      services: createStubServices(),
+      resolveIdentity: AUTHENTICATED_IDENTITY,
+    },
+  }).request("/api/v1/tools");
+
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), {
+    kind: "ok",
+    items: [],
+    nextCursor: null,
+  });
+});
+
+Deno.test("exact OAuth metadata aliases are forwarded to Better Auth", async () => {
+  const seen: string[] = [];
+  const auth = {
+    handler(request: Request) {
+      seen.push(new URL(request.url).pathname);
+      return Response.json({ path: new URL(request.url).pathname });
+    },
+  } as unknown as Auth;
+  const app = createApp(config, { auth, trustedProxyCidrs: [] });
+
+  for (const path of AUTH_METADATA_PATHS) {
+    const response = await app.request(path);
+    assertEquals(response.status, 200);
+    assertEquals(await response.json(), { path });
+  }
+  assertEquals(seen, [...AUTH_METADATA_PATHS]);
 });
 
 Deno.test("API failures use redacted JSON logs with request correlation", async () => {

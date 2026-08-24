@@ -56,6 +56,7 @@ import {
   readOptionalJsonObject,
 } from "../http/request.ts";
 
+export { createAuthSessionIdentityResolver } from "../http/identity.ts";
 export type {
   ActiveWorkspaceIdentity,
   SessionIdentityResolution,
