@@ -69,7 +69,15 @@ await run(Deno.execPath(), ["lint", "apps", "packages", "src"]);
 await run(Deno.execPath(), ["check", "src/main.ts"]);
 
 const testCommand = new Deno.Command(Deno.execPath(), {
-  args: ["test", "--allow-env", "--allow-net"],
+  args: [
+    "test",
+    "--allow-env",
+    "--allow-net",
+    "apps/api",
+    "apps/worker",
+    "packages",
+    "src",
+  ],
   stdout: "piped",
   stderr: "inherit",
 });
