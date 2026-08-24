@@ -1,12 +1,18 @@
 import { useState } from "react";
-import { Link, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { AuthAdapterError } from "../../auth/types";
 import { RelayBrand } from "../brand/RelayBrand";
 import { Button } from "../ui/Button";
 import { InlineNotice } from "../ui/InlineNotice";
 
-const sections = ["Tools", "Runs", "Artifacts", "Usage", "Settings"];
+const sections = [
+  { label: "Tools", to: "/dashboard/tools" },
+  { label: "Runs", to: null },
+  { label: "Artifacts", to: "/dashboard/artifacts" },
+  { label: "Usage", to: null },
+  { label: "Settings", to: "/dashboard/settings" },
+] as const;
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -53,12 +59,26 @@ function WorkspaceLabel() {
 function SectionNavigation({ mobile = false }: { mobile?: boolean }) {
   return (
     <nav className={mobile ? "product-tabs" : "product-nav"} aria-label="Sections">
-      <a className="product-nav__item is-active" href="/dashboard" aria-current="page">Overview</a>
-      {sections.map((section) => (
-        <span className="product-nav__item is-disabled" aria-disabled="true" key={section}>
-          {section}
+      <NavLink
+        className={({ isActive }) => `product-nav__item${isActive ? " is-active" : ""}`}
+        end
+        to="/dashboard"
+      >
+        Overview
+      </NavLink>
+      {sections.map((section) => section.to === null ? (
+        <span className="product-nav__item is-disabled" aria-disabled="true" key={section.label}>
+          {section.label}
           <span className="product-nav__soon">Soon</span>
         </span>
+      ) : (
+        <NavLink
+          className={({ isActive }) => `product-nav__item${isActive ? " is-active" : ""}`}
+          key={section.label}
+          to={section.to}
+        >
+          {section.label}
+        </NavLink>
       ))}
     </nav>
   );

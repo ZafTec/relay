@@ -3,8 +3,9 @@ import type { AuthAdapter } from "../auth/types";
 import { AuthProvider } from "../auth/AuthProvider";
 import { ProtectedRoute } from "../auth/ProtectedRoute";
 import { ProductLayout } from "../components/layout/ProductLayout";
-import { DashboardPage } from "../features/dashboard/DashboardPage";
+import { ArtifactDetailPage, ArtifactsPage } from "../features/artifacts";
 import { SignInPage } from "../features/auth/SignInPage";
+import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { ChangelogPage } from "../features/changelog/ChangelogPage";
 import { DocsPage } from "../features/docs/DocsPage";
 import { LandingPage } from "../features/landing/LandingPage";
@@ -12,7 +13,9 @@ import { NotFoundPage } from "../features/not-found/NotFoundPage";
 import { OAuthConsentPage } from "../features/oauth/OAuthConsentPage";
 import { OAuthWorkspacePage } from "../features/oauth/OAuthWorkspacePage";
 import { ProfilePage } from "../features/profile/ProfilePage";
+import { SettingsPage } from "../features/settings/SettingsPage";
 import { StatusPage } from "../features/status/StatusPage";
+import { ToolDetailPage, ToolsPage } from "../features/tools";
 import { RouteErrorPage } from "./RouteErrorPage";
 
 export const relayRoutes = [
@@ -48,7 +51,14 @@ export const relayRoutes = [
       {
         path: "/dashboard",
         element: <ProductLayout />,
-        children: [{ index: true, element: <DashboardPage /> }],
+        children: [
+          { index: true, element: <DashboardPage /> },
+          { path: "tools", element: <ToolsPage /> },
+          { path: "tools/:toolKey", element: <ToolDetailPage /> },
+          { path: "artifacts", element: <ArtifactsPage /> },
+          { path: "artifacts/:artifactId", element: <ArtifactDetailPage /> },
+          { path: "settings", element: <SettingsPage /> },
+        ],
       },
       {
         path: "/profile",

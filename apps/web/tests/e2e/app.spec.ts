@@ -32,6 +32,51 @@ const workspace = {
   logo: null,
 };
 
+const toolId = `tool_${"1".repeat(32)}`;
+const toolVersionId = `tver_${"2".repeat(32)}`;
+const artifactId = `art_${"3".repeat(32)}`;
+const artifactVersionId = `aver_${"4".repeat(32)}`;
+const runId = `run_${"5".repeat(32)}`;
+
+const browserTool = {
+  id: toolId,
+  key: "test.image.fixture",
+  name: "Test-only image tool",
+  category: "image",
+  summary: "A browser-test contract fixture.",
+  lifecycle: "published",
+  activeVersionId: toolVersionId,
+  version: 1,
+};
+
+const browserArtifactVersion = {
+  id: artifactVersionId,
+  sequence: 1,
+  sha256: "a".repeat(64),
+  contentMd5: `${"A".repeat(22)}==`,
+  sizeBytes: 4096,
+  mimeType: "image/png",
+  width: 64,
+  height: 64,
+  durationMs: null,
+  source: "generated",
+  sourceRunId: runId,
+  parentVersionId: null,
+  metadata: {},
+  verificationStatus: "cryptographically_verified",
+  createdAt: "2030-01-01T00:00:00.000Z",
+};
+
+const browserArtifact = {
+  id: artifactId,
+  name: "Test-only artifact",
+  mediaKind: "image",
+  sourceRunId: runId,
+  currentVersion: browserArtifactVersion,
+  shared: false,
+  createdAt: "2030-01-01T00:00:00.000Z",
+};
+
 async function mockSession(page: Page, authenticated: boolean) {
   await page.route("**/api/auth/get-session**", async (route) => {
     await route.fulfill({
@@ -49,6 +94,32 @@ async function mockAuthenticatedWorkspace(page: Page) {
   });
   await page.route("**/api/auth/organization/list**", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([workspace]) });
+  });
+}
+
+async function mockRegistryResources(page: Page) {
+  await page.route("**/api/v1/tools**", async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    const body = pathname === "/api/v1/tools"
+      ? { kind: "ok", items: [browserTool], nextCursor: null }
+      : {
+        kind: "found",
+        tool: {
+          ...browserTool,
+          executionMode: "async",
+          maxDurationSeconds: 300,
+          inputSchema: { type: "object", properties: { prompt: { type: "string" } } },
+          outputSchema: { type: "object", properties: { artifactIds: { type: "array" } } },
+        },
+      };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.route("**/api/v1/artifacts**", async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    const body = pathname === "/api/v1/artifacts"
+      ? { kind: "ok", items: [browserArtifact], nextCursor: null }
+      : { kind: "found", artifact: { ...browserArtifact, versions: [browserArtifactVersion], shares: [] } };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
 }
 
@@ -95,15 +166,44 @@ async function expectNoPageOverflow(page: Page) {
         right: Math.round(element.getBoundingClientRect().right),
         tagName: element.tagName,
       }));
+    const layout = [
+      "html",
+      "body",
+      "#root",
+      ".product-shell",
+      ".product-main",
+      ".product-content",
+      ".product-tabs",
+      ".artifact-detail-page",
+      ".artifact-detail-body",
+      ".artifact-ledger-section",
+      ".artifact-table-scroll",
+      ".artifact-table",
+    ].flatMap((selector) => {
+      const element = document.querySelector<HTMLElement>(selector);
+      if (!element) return [];
+      const style = getComputedStyle(element);
+      return [{
+        selector,
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        width: Math.round(element.getBoundingClientRect().width),
+        overflowX: style.overflowX,
+        minWidth: style.minWidth,
+        maxWidth: style.maxWidth,
+        gridTemplateColumns: style.gridTemplateColumns,
+      }];
+    });
     return {
       clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
       offenders,
+      layout,
     };
   });
   expect(
     overflow.scrollWidth,
-    `Horizontal overflow: ${JSON.stringify(overflow.offenders)}`,
+    `Horizontal overflow: ${JSON.stringify({ offenders: overflow.offenders, layout: overflow.layout })}`,
   ).toBeLessThanOrEqual(overflow.clientWidth + 1);
 }
 
@@ -177,7 +277,7 @@ test("dashboard uses session, workspace, and API responses without fake counts",
     await expect(page.getByText("Not requested")).toBeVisible();
     if (width <= 900) {
       const mobileSoonLabels = page.locator(".product-tabs .product-nav__soon");
-      await expect(mobileSoonLabels).toHaveCount(5);
+      await expect(mobileSoonLabels).toHaveCount(2);
       await expect(mobileSoonLabels.first()).toBeVisible();
     }
     await expectNoPageOverflow(page);
@@ -197,6 +297,61 @@ test("dashboard uses session, workspace, and API responses without fake counts",
     path: path.join(process.cwd(), "artifacts", "screenshots", "dashboard-390.png"),
     fullPage: true,
   });
+});
+
+test("registry routes expose real contract data across required widths", async ({ page }) => {
+  test.setTimeout(75_000);
+  await mockAuthenticatedWorkspace(page);
+  await mockRegistryResources(page);
+
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: width <= 390 ? 844 : 900 });
+
+    await page.goto("/dashboard/tools");
+    await expect(page.getByRole("heading", { level: 1, name: "Tools" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Test-only image tool/ })).toBeVisible();
+    await expectNoPageOverflow(page);
+
+    await page.goto(`/dashboard/tools/${browserTool.key}`);
+    await expect(page.getByRole("heading", { level: 1, name: browserTool.key })).toBeVisible();
+    await expect(page.getByText(/Execution is unavailable until a real provider/i)).toBeVisible();
+    await expectNoPageOverflow(page);
+
+    await page.goto("/dashboard/artifacts");
+    await expect(page.getByRole("heading", { level: 1, name: "Artifacts" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open artifact Test-only artifact" })).toBeVisible();
+    await expectNoPageOverflow(page);
+
+    await page.goto(`/dashboard/artifacts/${artifactId}`);
+    await expect(page.getByRole("heading", { level: 1, name: "Test-only artifact" })).toBeVisible();
+    await expect(page.getByRole("table", { name: /Immutable versions/ })).toBeVisible();
+    await expectNoPageOverflow(page);
+
+    await page.goto("/dashboard/settings");
+    await expect(page.getByRole("heading", { level: 1, name: "Workspace settings" })).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Active workspace" }).getByText("Browser workspace"),
+    ).toBeVisible();
+    await expect(page.getByText("Contract defined")).toBeVisible();
+    await expectNoPageOverflow(page);
+  }
+
+  for (const route of ["tools", "artifacts", "settings"] as const) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/dashboard/${route}`);
+    await waitForFonts(page);
+    await expectNoSeriousAxeViolations(page);
+    await page.screenshot({
+      path: path.join(process.cwd(), "artifacts", "screenshots", `${route}-1440.png`),
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/dashboard/${route}`);
+    await page.screenshot({
+      path: path.join(process.cwd(), "artifacts", "screenshots", `${route}-390.png`),
+      fullPage: true,
+    });
+  }
 });
 
 test("MCP consent and workspace screens preserve signed-flow behavior", async ({ page }) => {
@@ -244,6 +399,7 @@ test("MCP consent and workspace screens preserve signed-flow behavior", async ({
 });
 
 test("public information routes stay factual, searchable, and responsive", async ({ page }) => {
+  test.setTimeout(75_000);
   await mockSession(page, false);
   await mockPublicInformation(page);
 

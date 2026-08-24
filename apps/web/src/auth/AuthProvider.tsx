@@ -12,6 +12,7 @@ import { betterAuthAdapter } from "./auth-adapter";
 import { AuthAdapterError, type AuthAdapter, type RelayIdentity, type RelayWorkspace } from "./types";
 
 const AUTH_MARKER = "relay.authenticated";
+const MAX_TIMEOUT_DELAY_MS = 2_147_000_000;
 
 export type SessionState =
   | { status: "loading" }
@@ -33,7 +34,7 @@ interface AuthContextValue {
   refreshSession(): Promise<void>;
   refreshWorkspace(): Promise<void>;
   signOut(): Promise<void>;
-  expireSession(): void;
+  expireSession(expectedSessionId?: string): void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -172,7 +173,11 @@ export function AuthProvider({ children, adapter = betterAuthAdapter }: AuthProv
     transitionToAnonymous("auth-required");
   }, [adapter, transitionToAnonymous]);
 
-  const expireSession = useCallback(() => {
+  const expireSession = useCallback((expectedSessionId?: string) => {
+    if (
+      expectedSessionId !== undefined
+      && activeIdentity.current?.session.id !== expectedSessionId
+    ) return;
     transitionToAnonymous("session-expired");
   }, [transitionToAnonymous]);
 
@@ -184,6 +189,36 @@ export function AuthProvider({ children, adapter = betterAuthAdapter }: AuthProv
       activeIdentity.current = null;
     };
   }, [refreshSession]);
+
+  const sessionExpiresAt = session.status === "authenticated"
+    ? session.identity.session.expiresAt
+    : null;
+  useEffect(() => {
+    if (!(sessionExpiresAt instanceof Date) || Number.isNaN(sessionExpiresAt.valueOf())) {
+      return;
+    }
+
+    let timer: number | undefined;
+    const scheduleExpiry = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      const remaining = sessionExpiresAt.getTime() - Date.now();
+      if (remaining <= 0) {
+        expireSession();
+        return;
+      }
+      timer = window.setTimeout(scheduleExpiry, Math.min(remaining, MAX_TIMEOUT_DELAY_MS));
+    };
+    const checkVisibleSession = () => {
+      if (document.visibilityState === "visible") scheduleExpiry();
+    };
+
+    scheduleExpiry();
+    document.addEventListener("visibilitychange", checkVisibleSession);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", checkVisibleSession);
+    };
+  }, [expireSession, sessionExpiresAt]);
 
   const value = useMemo<AuthContextValue>(() => ({
     adapter,

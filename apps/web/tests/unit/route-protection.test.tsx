@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App, createRelayMemoryRouter } from "../../src/app/App";
@@ -26,6 +26,25 @@ const workspace: RelayWorkspace = {
   slug: "workspace-test",
 };
 
+function mockRegistryEndpoints() {
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input) => {
+    const path = String(input);
+    if (path.startsWith("/api/v1/tools")) {
+      return new Response(JSON.stringify({ kind: "ok", items: [], nextCursor: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (path.startsWith("/api/v1/artifacts")) {
+      return new Response(JSON.stringify({ kind: "ok", items: [], nextCursor: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    throw new Error(`Unexpected request: ${path}`);
+  }));
+}
+
 function mockPublicEndpoints() {
   vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input) => {
     const path = String(input);
@@ -52,6 +71,7 @@ function mockPublicEndpoints() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -84,6 +104,41 @@ describe("protected routing", () => {
     render(<App router={router} adapter={adapter} />);
 
     expect(await screen.findByRole("heading", { name: "Sign in to Relay" })).toBeInTheDocument();
+    expect(router.state.location.search).toContain("reason=session-expired");
+  });
+
+  it("expires a protected route at the session's known deadline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
+    const expiringIdentity: RelayIdentity = {
+      ...identity,
+      session: {
+        ...identity.session,
+        expiresAt: new Date("2030-01-01T00:00:01.000Z"),
+      },
+    };
+    const router = createRelayMemoryRouter(["/profile"]);
+
+    render(
+      <App
+        router={router}
+        adapter={createTestAuthAdapter({
+          identity: expiringIdentity,
+          activeWorkspace: workspace,
+        })}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("heading", { level: 1, name: "Profile" })).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(screen.getByRole("heading", { name: "Sign in to Relay" })).toBeInTheDocument();
     expect(router.state.location.search).toContain("reason=session-expired");
   });
 
@@ -126,6 +181,26 @@ describe("protected routing", () => {
     render(<App router={router} adapter={createTestAuthAdapter({ identity: null })} />);
 
     expect(await screen.findByRole("heading", { level: 1, name: heading })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(path);
+  });
+
+  it.each([
+    ["/dashboard/tools", "Tools", "Tools"],
+    ["/dashboard/artifacts", "Artifacts", "Artifacts"],
+    ["/dashboard/settings", "Workspace settings", "Settings"],
+  ])("renders protected registry route %s", async (path, heading, navigationLabel) => {
+    mockRegistryEndpoints();
+    const router = createRelayMemoryRouter([path]);
+
+    render(
+      <App
+        router={router}
+        adapter={createTestAuthAdapter({ identity, activeWorkspace: workspace })}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { level: 1, name: heading })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: navigationLabel })).not.toHaveLength(0);
     expect(router.state.location.pathname).toBe(path);
   });
 

@@ -18,7 +18,8 @@ interface DashboardPageProps {
 
 export function DashboardPage({ overviewAdapter = httpDashboardOverviewAdapter }: DashboardPageProps) {
   usePageMetadata("Overview | Relay", "#141A16");
-  const { workspace, expireSession } = useAuth();
+  const { session, workspace, expireSession } = useAuth();
+  const sessionId = session.status === "authenticated" ? session.identity.session.id : undefined;
   const [state, setState] = useState<DashboardOverviewResult | { kind: "loading" }>({ kind: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -27,7 +28,7 @@ export function DashboardPage({ overviewAdapter = httpDashboardOverviewAdapter }
     setState({ kind: "loading" });
     void overviewAdapter.load(controller.signal).then((result) => {
       if (result.kind === "auth-expired") {
-        expireSession();
+        expireSession(sessionId);
         return;
       }
       setState(result);
@@ -39,7 +40,7 @@ export function DashboardPage({ overviewAdapter = httpDashboardOverviewAdapter }
       });
     });
     return () => controller.abort();
-  }, [expireSession, overviewAdapter, reloadKey]);
+  }, [expireSession, overviewAdapter, reloadKey, sessionId]);
 
   const workspaceId = workspace.status === "ready" ? workspace.workspace.id : null;
 
@@ -97,20 +98,23 @@ export function DashboardPage({ overviewAdapter = httpDashboardOverviewAdapter }
 
         <section className="dashboard-contract" aria-labelledby="dashboard-contract-title">
           <div>
-            <p className="mono-label">Next product contracts</p>
-            <h2 id="dashboard-contract-title">The rail is ready for real resource routes.</h2>
+            <p className="mono-label">Resource views</p>
+            <h2 id="dashboard-contract-title">The rail exposes only implemented web routes.</h2>
           </div>
           <div className="dashboard-contract__rows">
             {[
-              ["Tools", "Catalog API required"],
-              ["Runs", "Run and SSE APIs required"],
-              ["Artifacts", "Artifact API required"],
-              ["Usage", "Meter receipt API required"],
-            ].map(([name, requirement]) => (
+              ["Tools", "Catalog and contract views", "Available"],
+              ["Runs", "Run and live-event views", "Soon"],
+              ["Artifacts", "Registry and share views", "Available"],
+              ["Usage", "Usage summary view", "Soon"],
+              ["Settings", "Workspace context view", "Available"],
+            ].map(([name, description, status]) => (
               <div key={name}>
                 <strong>{name}</strong>
-                <span>{requirement}</span>
-                <StatusBadge tone="pending">Not exposed</StatusBadge>
+                <span>{description}</span>
+                {status === "Available"
+                  ? <StatusBadge>Available</StatusBadge>
+                  : <StatusBadge tone="pending">Soon</StatusBadge>}
               </div>
             ))}
           </div>
