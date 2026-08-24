@@ -664,6 +664,15 @@
       "npm:pg@^8.23.0"
     ],
     "members": {
+      "packages/application": {
+        "dependencies": [
+          "jsr:@std/assert@^1.0.19",
+          "npm:@opentelemetry/api@1",
+          "npm:ioredis@5.11.1",
+          "npm:kysely@~0.29.5",
+          "npm:pg@^8.23.0"
+        ]
+      },
       "packages/artifacts": {
         "dependencies": [
           "jsr:@std/assert@1.0.19",

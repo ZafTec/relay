@@ -1,0 +1,22 @@
+{
+  "name": "@relay/application",
+  "version": "0.0.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "imports": {
+    "@relay/auth": "../auth/src/authorization.ts",
+    "@relay/catalog": "./src/dependency-catalog.ts",
+    "@relay/config": "../config/src/index.ts",
+    "@relay/contracts": "../contracts/src/index.ts",
+    "@relay/database": "../database/src/index.ts",
+    "@relay/observability": "../observability/src/index.ts",
+    "@relay/queue": "./src/dependency-queue.ts",
+    "@relay/scheduler": "../scheduler/src/index.ts",
+    "@opentelemetry/api": "npm:@opentelemetry/api@1",
+    "@std/assert": "jsr:@std/assert@^1.0.19",
+    "ioredis": "npm:ioredis@5.11.1",
+    "kysely": "npm:kysely@^0.29.5",
+    "pg": "npm:pg@^8.23.0"
+  }
+}

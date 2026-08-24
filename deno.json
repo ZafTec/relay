@@ -2,6 +2,7 @@
   "workspace": [
     "./apps/api",
     "./apps/worker",
+    "./packages/application",
     "./packages/artifacts",
     "./packages/audit",
     "./packages/auth",
