@@ -1,0 +1,363 @@
+// RELAY MERGE TEMPLATE — DO NOT DEPLOY OR REPLACE THE LIVE ALLOY FILE AS-IS.
+// Reconcile against the exported live config, pinned Alloy image/digest,
+// stability level, actual memory limit, network names, and audited Tempo config.
+// This fragment intentionally contains no credentials and no debug exporter.
+
+otelcol.receiver.otlp "relay" {
+	http {
+		endpoint              = "0.0.0.0:4318"
+		max_request_body_size = "4MiB"
+		read_header_timeout   = "10s"
+		read_timeout          = "30s"
+		write_timeout         = "30s"
+		include_metadata      = false
+	}
+
+	// Optional only for private telemetrygen smoke tests. Do not publish 4317.
+	// grpc {
+	//   endpoint          = "0.0.0.0:4317"
+	//   max_recv_msg_size = "4MiB"
+	//   include_metadata  = false
+	// }
+
+	output {
+		metrics = [otelcol.processor.memory_limiter.relay.input]
+		logs    = [otelcol.processor.memory_limiter.relay.input]
+		traces  = [otelcol.processor.memory_limiter.relay.input]
+	}
+}
+
+otelcol.processor.memory_limiter "relay" {
+	// Starting values only. Keep the hard limit below the verified container cap
+	// and select final values from a three-signal load test.
+	check_interval = "1s"
+	limit          = "192MiB"
+	spike_limit    = "48MiB"
+
+	output {
+		metrics = [otelcol.processor.transform.relay_redaction.input]
+		logs    = [otelcol.processor.transform.relay_redaction.input]
+		traces  = [otelcol.processor.transform.relay_redaction.input]
+	}
+}
+
+otelcol.processor.transform "relay_redaction" {
+	// Redaction fails closed: a transform error drops the affected payload instead
+	// of forwarding possibly sensitive data. Deno exports asynchronously, and the
+	// downstream queues remain non-blocking. Alert on every processor error.
+	error_mode = "propagate"
+
+	// Resource attributes are validated in Relay before Deno starts, but this
+	// second boundary also protects against a misconfigured or spoofed client.
+	trace_statements {
+		context    = "resource"
+		statements = [
+			`delete_key(attributes, "url.query")`,
+			`delete_key(attributes, "url.full")`,
+			`delete_key(attributes, "url.path")`,
+			`delete_matching_keys(attributes, "(?i)(^http\\.(request|response)\\.headers?\\..+$|^rpc\\.(request|response)\\.metadata\\..+$|^(exception|error)\\.(message|stack|stacktrace)$|authorization|cookie|password|passphrase|secret|token|credential|api[-_.]?key|oauth[-_.]?(code|state)|signed[-_.]?url|object[-_.]?key|prompt|request[-_.]?body|response[-_.]?body|sql[-_.]?(query|parameters?|values?))")`,
+			`keep_keys(attributes, ["service.name", "service.namespace", "service.instance.id", "service.version", "deployment.environment.name", "relay.build.revision", "process.runtime.name", "process.runtime.version", "telemetry.sdk.name", "telemetry.sdk.language", "telemetry.sdk.version"])`,
+			`truncate_all(attributes, 512)`,
+		]
+	}
+
+	log_statements {
+		context    = "resource"
+		statements = [
+			`delete_key(attributes, "url.query")`,
+			`delete_key(attributes, "url.full")`,
+			`delete_key(attributes, "url.path")`,
+			`delete_matching_keys(attributes, "(?i)(^http\\.(request|response)\\.headers?\\..+$|^rpc\\.(request|response)\\.metadata\\..+$|^(exception|error)\\.(message|stack|stacktrace)$|authorization|cookie|password|passphrase|secret|token|credential|api[-_.]?key|oauth[-_.]?(code|state)|signed[-_.]?url|object[-_.]?key|prompt|request[-_.]?body|response[-_.]?body|sql[-_.]?(query|parameters?|values?))")`,
+			`keep_keys(attributes, ["service.name", "service.namespace", "service.instance.id", "service.version", "deployment.environment.name", "relay.build.revision", "process.runtime.name", "process.runtime.version", "telemetry.sdk.name", "telemetry.sdk.language", "telemetry.sdk.version"])`,
+			`truncate_all(attributes, 512)`,
+		]
+	}
+
+	metric_statements {
+		context    = "resource"
+		statements = [
+			`delete_key(attributes, "url.query")`,
+			`delete_key(attributes, "url.full")`,
+			`delete_key(attributes, "url.path")`,
+			`delete_matching_keys(attributes, "(?i)(^http\\.(request|response)\\.headers?\\..+$|^rpc\\.(request|response)\\.metadata\\..+$|^(exception|error)\\.(message|stack|stacktrace)$|authorization|cookie|password|passphrase|secret|token|credential|api[-_.]?key|oauth[-_.]?(code|state)|signed[-_.]?url|object[-_.]?key|prompt|request[-_.]?body|response[-_.]?body|sql[-_.]?(query|parameters?|values?))")`,
+			`keep_keys(attributes, ["service.name", "service.namespace", "service.instance.id", "service.version", "deployment.environment.name", "relay.build.revision", "process.runtime.name", "process.runtime.version", "telemetry.sdk.name", "telemetry.sdk.language", "telemetry.sdk.version"])`,
+			`truncate_all(attributes, 512)`,
+		]
+	}
+
+	trace_statements {
+		context    = "span"
+		statements = [
+			`delete_key(attributes, "url.query")`,
+			`delete_key(attributes, "url.full")`,
+			`delete_key(attributes, "url.path")`,
+			`delete_matching_keys(attributes, "(?i)(^http\\.(request|response)\\.headers?\\..+$|^rpc\\.(request|response)\\.metadata\\..+$|^(exception|error)\\.(message|stack|stacktrace)$|authorization|cookie|password|passphrase|secret|token|credential|api[-_.]?key|oauth[-_.]?(code|state)|signed[-_.]?url|object[-_.]?key|prompt|request[-_.]?body|response[-_.]?body|sql[-_.]?(query|parameters?|values?))")`,
+			`delete_key(attributes, "db.statement")`,
+			`delete_key(attributes, "db.query.text")`,
+			`delete_key(attributes, "db.operation.parameter")`,
+			`delete_key(attributes, "messaging.message.body")`,
+			`delete_key(attributes, "messaging.message.id")`,
+			`delete_key(attributes, "user.id")`,
+			`delete_key(attributes, "workspace.id")`,
+			`delete_key(attributes, "request.id")`,
+			`delete_key(attributes, "run.id")`,
+			`delete_key(attributes, "job.id")`,
+			`delete_key(attributes, "artifact.id")`,
+			`delete_key(attributes, "session.id")`,
+			`delete_key(attributes, "object.key")`,
+			`delete_key(attributes, "prompt")`,
+			`keep_keys(attributes, ["attempt.number", "db.system.name", "error.type", "http.request.method", "http.response.status_code", "http.response.status_class", "http.route", "http.status_code", "http.request.resend_count", "job.handler", "job.state", "messaging.system", "model", "network.protocol.name", "network.protocol.version", "operation", "outcome", "provider", "queue.name", "queue.reason", "scheduling.class", "storage.system", "tool.key", "tool.version", "url.scheme"])`,
+			`replace_all_patterns(attributes, "value", "(?i)(authorization|bearer[[:space:]]|cookie|password|passphrase|secret|token|credential|api[-_ ]?key|oauth[-_ ]?(code|state)|x-amz-|signed[-_ ]?url|object[-_ ]?key|prompt|(?:https?|s3|postgres(?:ql)?|redis)://|eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+|AKIA[0-9A-Z]{16}|github_pat_|gh[pousr]_)", "[redacted by alloy]")`,
+			`set(attributes["error.type"], "internal") where attributes["error.type"] != nil and not IsMatch(attributes["error.type"], "^(aborted|authentication|authorization|conflict|dependency|internal|invalid_input|not_found|rate_limited|timeout|unavailable)$")`,
+			`set(status.message, "") where status.message != ""`,
+			`truncate_all(attributes, 512)`,
+		]
+	}
+
+	trace_statements {
+		context    = "spanevent"
+		statements = [
+			`delete_key(attributes, "url.query")`,
+			`delete_key(attributes, "url.full")`,
+			`delete_key(attributes, "url.path")`,
+			`delete_matching_keys(attributes, "(?i)(^http\\.(request|response)\\.headers?\\..+$|^rpc\\.(request|response)\\.metadata\\..+$|^(exception|error)\\.(message|stack|stacktrace)$|authorization|cookie|password|passphrase|secret|token|credential|api[-_.]?key|oauth[-_.]?(code|state)|signed[-_.]?url|object[-_.]?key|prompt|request[-_.]?body|response[-_.]?body|sql[-_.]?(query|parameters?|values?))")`,
+			`delete_key(attributes, "exception.escaped")`,
+			`keep_keys(attributes, ["attempt.number", "error.type", "exception.type", "job.handler", "job.state", "model", "operation", "outcome", "provider", "queue.name", "queue.reason", "scheduling.class", "storage.system", "tool.key", "tool.version"])`,
+			`replace_all_patterns(attributes, "value", "(?i)(authorization|bearer[[:space:]]|cookie|password|passphrase|secret|token|credential|api[-_ ]?key|oauth[-_ ]?(code|state)|x-amz-|signed[-_ ]?url|object[-_ ]?key|prompt|(?:https?|s3|postgres(?:ql)?|redis)://|eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+|AKIA[0-9A-Z]{16}|github_pat_|gh[pousr]_)", "[redacted by alloy]")`,
+			`set(attributes["exception.type"], "internal") where attributes["exception.type"] != nil and not IsMatch(attributes["exception.type"], "^(aborted|authentication|authorization|conflict|dependency|internal|invalid_input|not_found|rate_limited|timeout|unavailable)$")`,
+			`truncate_all(attributes, 512)`,
+		]
+	}
+
+	log_statements {
+		context    = "log"
+		statements = [
+			// Parse object-shaped console bodies, but never promote fields outside the
+			// fixed JsonLogger schema. Invalid JSON fails closed under error_mode.
+			`merge_maps(cache, ParseJSON(body), "upsert") where IsString(body) and IsMatch(body, "^\\{")`,
+			`keep_keys(cache, ["schema.version", "event.name", "message", "operation", "outcome", "error.type", "http.route", "tool.key", "tool.version", "provider", "model", "attempt.number", "queue.reason", "request.id"])`,
+			`set(cache["relay.logger"], false) where cache["schema.version"] == 1`,
+			`set(cache["relay.logger"], true) where cache["schema.version"] == 1 and IsString(cache["event.name"]) and IsMatch(cache["event.name"], "^[a-z][a-z0-9]*([._-][a-z0-9]+)*$") and IsString(cache["message"]) and Len(cache["message"]) > 0 and Len(cache["message"]) <= 512`,
+			`set(attributes["event.name"], cache["event.name"]) where cache["relay.logger"] == true`,
+			`set(attributes["operation"], cache["operation"]) where cache["relay.logger"] == true and IsString(cache["operation"]) and IsMatch(cache["operation"], "^[A-Za-z][-A-Za-z0-9._:/{}*]{0,95}$")`,
+			`set(attributes["outcome"], cache["outcome"]) where cache["relay.logger"] == true and IsString(cache["outcome"]) and IsMatch(cache["outcome"], "^(accepted|cancelled|deferred|denied|failure|other|rejected|retry|success|timeout)$")`,
+			`set(attributes["error.type"], cache["error.type"]) where cache["relay.logger"] == true and IsString(cache["error.type"]) and IsMatch(cache["error.type"], "^(aborted|authentication|authorization|conflict|dependency|internal|invalid_input|not_found|rate_limited|timeout|unavailable)$")`,
+			`set(attributes["http.route"], cache["http.route"]) where cache["relay.logger"] == true and IsString(cache["http.route"]) and IsMatch(cache["http.route"], "^/$|^/__unknown__$|^/([A-Za-z.][A-Za-z0-9._-]{0,63}|:[A-Za-z][A-Za-z0-9_]{0,63}\\??|\\{[A-Za-z][A-Za-z0-9_]{0,63}\\}|\\*)(/([A-Za-z.][A-Za-z0-9._-]{0,63}|:[A-Za-z][A-Za-z0-9_]{0,63}\\??|\\{[A-Za-z][A-Za-z0-9_]{0,63}\\}|\\*))*$")`,
+			`set(attributes["tool.key"], cache["tool.key"]) where cache["relay.logger"] == true and IsString(cache["tool.key"]) and IsMatch(cache["tool.key"], "^[A-Za-z][-A-Za-z0-9._:/{}*]{0,95}$")`,
+			`set(attributes["tool.version"], cache["tool.version"]) where cache["relay.logger"] == true and IsString(cache["tool.version"]) and IsMatch(cache["tool.version"], "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$")`,
+			`set(attributes["provider"], cache["provider"]) where cache["relay.logger"] == true and IsString(cache["provider"]) and IsMatch(cache["provider"], "^[A-Za-z][-A-Za-z0-9._:/{}*]{0,95}$")`,
+			`set(attributes["model"], cache["model"]) where cache["relay.logger"] == true and IsString(cache["model"]) and IsMatch(cache["model"], "^[A-Za-z][-A-Za-z0-9._:/{}*]{0,95}$")`,
+			`set(attributes["attempt.number"], cache["attempt.number"]) where cache["relay.logger"] == true and IsDouble(cache["attempt.number"]) and Int(cache["attempt.number"]) == cache["attempt.number"] and cache["attempt.number"] >= 0 and cache["attempt.number"] <= 100`,
+			`set(attributes["queue.reason"], cache["queue.reason"]) where cache["relay.logger"] == true and IsString(cache["queue.reason"]) and IsMatch(cache["queue.reason"], "^[A-Za-z][-A-Za-z0-9._:/{}*]{0,95}$")`,
+			`set(attributes["request.id"], cache["request.id"]) where cache["relay.logger"] == true and IsString(cache["request.id"]) and IsMatch(cache["request.id"], "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")`,
+			// Replace valid structured JSON with its bounded message so IDs and any
+			// unexpected top-level keys cannot survive in the Loki body.
+			`set(body, cache["message"]) where cache["relay.logger"] == true`,
+			`set(body, "[redacted by alloy]") where cache["relay.logger"] == false`,
+			`delete_key(attributes, "url.query")`,
+			`delete_key(attributes, "url.full")`,
+			`delete_key(attributes, "url.path")`,
+			`delete_matching_keys(attributes, "(?i)(^http\\.(request|response)\\.headers?\\..+$|^rpc\\.(request|response)\\.metadata\\..+$|^(exception|error)\\.(message|stack|stacktrace)$|authorization|cookie|password|passphrase|secret|token|credential|api[-_.]?key|oauth[-_.]?(code|state)|signed[-_.]?url|object[-_.]?key|prompt|request[-_.]?body|response[-_.]?body|sql[-_.]?(query|parameters?|values?))")`,
+			`delete_key(attributes, "db.statement")`,
+			`delete_key(attributes, "db.query.text")`,
+			`delete_key(attributes, "user.id")`,
+			`delete_key(attributes, "workspace.id")`,
+			`delete_key(attributes, "run.id")`,
+			`delete_key(attributes, "job.id")`,
+			`delete_key(attributes, "artifact.id")`,
+			`delete_key(attributes, "session.id")`,
+			`delete_key(attributes, "object.key")`,
+			`delete_key(attributes, "prompt")`,
+			`keep_keys(attributes, ["attempt.number", "error.type", "event.name", "http.route", "model", "operation", "outcome", "provider", "queue.reason", "request.id", "tool.key", "tool.version"])`,
+			`replace_all_patterns(attributes, "value", "(?i)(authorization|bearer[[:space:]]|cookie|password|passphrase|secret|token|credential|api[-_ ]?key|oauth[-_ ]?(code|state)|x-amz-|signed[-_ ]?url|object[-_ ]?key|prompt|(?:https?|s3|postgres(?:ql)?|redis)://|eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+|AKIA[0-9A-Z]{16}|github_pat_|gh[pousr]_)", "[redacted by alloy]")`,
+			`set(body, "[redacted by alloy]") where IsMatch(body, "(?i)(authorization|bearer[[:space:]]|cookie|password|passphrase|secret|token|credential|api[-_ ]?key|oauth[-_ ]?(code|state)|x-amz-|signed[-_ ]?url|object[-_ ]?key|prompt|db[._ ]?statement|sql[-_ ]?(query|parameter)|provider[-_ ]?(payload|result)|request[-_. ]?body|response[-_. ]?body|(?:https?|s3|postgres(?:ql)?|redis)://|eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+|(?:error|exception)[[:space:]]*:|-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|github_pat_|gh[pousr]_)")`,
+			`truncate_all(attributes, 512)`,
+		]
+	}
+
+	metric_statements {
+		context    = "datapoint"
+		statements = [
+			`delete_key(attributes, "url.query")`,
+			`delete_key(attributes, "url.full")`,
+			`delete_key(attributes, "url.path")`,
+			`delete_matching_keys(attributes, "(?i)(^http\\.(request|response)\\.headers?\\..+$|^rpc\\.(request|response)\\.metadata\\..+$|^(exception|error)\\.(message|stack|stacktrace)$|authorization|cookie|password|passphrase|secret|token|credential|api[-_.]?key|oauth[-_.]?(code|state)|signed[-_.]?url|object[-_.]?key|prompt|request[-_.]?body|response[-_.]?body|sql[-_.]?(query|parameters?|values?))")`,
+			`delete_key(attributes, "user.id")`,
+			`delete_key(attributes, "workspace.id")`,
+			`delete_key(attributes, "request.id")`,
+			`delete_key(attributes, "run.id")`,
+			`delete_key(attributes, "job.id")`,
+			`delete_key(attributes, "artifact.id")`,
+			`delete_key(attributes, "session.id")`,
+			`delete_key(attributes, "object.key")`,
+			`delete_key(attributes, "prompt")`,
+			`keep_keys(attributes, ["attempt.number", "db.system.name", "error.type", "http.request.method", "http.response.status_code", "http.response.status_class", "http.route", "http.status_code", "job.handler", "job.state", "messaging.system", "model", "network.protocol.name", "network.protocol.version", "operation", "outcome", "provider", "queue.name", "queue.reason", "scheduling.class", "server.port", "storage.system", "tool.key", "tool.version", "url.scheme", "v8js.gc.type", "v8js.heap.space.name"])`,
+			`replace_all_patterns(attributes, "value", "(?i)(authorization|bearer[[:space:]]|cookie|password|passphrase|secret|token|credential|api[-_ ]?key|oauth[-_ ]?(code|state)|x-amz-|signed[-_ ]?url|object[-_ ]?key|prompt|(?:https?|s3|postgres(?:ql)?|redis)://|eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+|AKIA[0-9A-Z]{16}|github_pat_|gh[pousr]_)", "[redacted by alloy]")`,
+			`set(attributes["error.type"], "internal") where attributes["error.type"] != nil and not IsMatch(attributes["error.type"], "^(aborted|authentication|authorization|conflict|dependency|internal|invalid_input|not_found|rate_limited|timeout|unavailable)$")`,
+			`truncate_all(attributes, 256)`,
+		]
+	}
+
+	output {
+		metrics = [otelcol.processor.filter.relay_only.input]
+		logs    = [otelcol.processor.filter.relay_only.input]
+		traces  = [otelcol.processor.filter.relay_only.input]
+	}
+}
+
+otelcol.processor.filter "relay_only" {
+	// A malformed resource must be dropped rather than bypass this routing gate.
+	error_mode = "propagate"
+
+	// This receiver is dedicated to Relay. Require both the namespace and one of
+	// the two bounded service names before routing anything to shared backends.
+	trace_conditions {
+		context    = "resource"
+		conditions = [
+			`attributes["service.namespace"] != "relay" or (attributes["service.name"] != "relay-api" and attributes["service.name"] != "relay-worker")`,
+		]
+	}
+
+	metric_conditions {
+		context    = "resource"
+		conditions = [
+			`attributes["service.namespace"] != "relay" or (attributes["service.name"] != "relay-api" and attributes["service.name"] != "relay-worker")`,
+		]
+	}
+
+	log_conditions {
+		context    = "resource"
+		conditions = [
+			`attributes["service.namespace"] != "relay" or (attributes["service.name"] != "relay-api" and attributes["service.name"] != "relay-worker")`,
+		]
+	}
+
+	output {
+		metrics = [otelcol.processor.batch.relay_metrics.input]
+		logs    = [otelcol.processor.batch.relay_logs.input]
+		traces  = [otelcol.processor.batch.relay_traces.input]
+	}
+}
+
+// Per-signal batches and exporter queues isolate backend outages.
+otelcol.processor.batch "relay_metrics" {
+	timeout             = "1s"
+	send_batch_size     = 512
+	send_batch_max_size = 1024
+
+	output {
+		metrics = [otelcol.exporter.otlphttp.relay_prometheus.input]
+	}
+}
+
+otelcol.processor.batch "relay_logs" {
+	timeout             = "1s"
+	send_batch_size     = 512
+	send_batch_max_size = 1024
+
+	output {
+		logs = [otelcol.exporter.otlphttp.relay_loki.input]
+	}
+}
+
+otelcol.processor.batch "relay_traces" {
+	timeout             = "1s"
+	send_batch_size     = 512
+	send_batch_max_size = 1024
+
+	output {
+		traces = [otelcol.exporter.otlphttp.relay_tempo.input]
+	}
+}
+
+otelcol.exporter.otlphttp "relay_prometheus" {
+	metrics_endpoint = "http://prometheus:9090/api/v1/otlp/v1/metrics"
+	encoding         = "proto"
+
+	client {
+		endpoint    = "http://prometheus:9090/api/v1/otlp"
+		compression = "gzip"
+		timeout     = "10s"
+
+		tls {
+			insecure = true
+		}
+	}
+
+	sending_queue {
+		enabled           = true
+		queue_size        = 256
+		num_consumers     = 2
+		block_on_overflow = false
+		wait_for_result   = false
+	}
+
+	retry_on_failure {
+		enabled          = true
+		initial_interval = "1s"
+		max_interval     = "10s"
+		max_elapsed_time = "1m"
+	}
+}
+
+otelcol.exporter.otlphttp "relay_loki" {
+	logs_endpoint = "http://loki:3100/otlp/v1/logs"
+	encoding      = "proto"
+
+	client {
+		endpoint    = "http://loki:3100/otlp"
+		compression = "gzip"
+		timeout     = "10s"
+
+		tls {
+			insecure = true
+		}
+	}
+
+	sending_queue {
+		enabled           = true
+		queue_size        = 256
+		num_consumers     = 2
+		block_on_overflow = false
+		wait_for_result   = false
+	}
+
+	retry_on_failure {
+		enabled          = true
+		initial_interval = "1s"
+		max_interval     = "10s"
+		max_elapsed_time = "1m"
+	}
+}
+
+otelcol.exporter.otlphttp "relay_tempo" {
+	// Tempo is preferred only after its live config and persistent storage pass
+	// audit and restart-retention testing.
+	traces_endpoint = "http://tempo:4318/v1/traces"
+	encoding        = "proto"
+
+	client {
+		endpoint    = "http://tempo:4318"
+		compression = "gzip"
+		timeout     = "10s"
+
+		tls {
+			insecure = true
+		}
+	}
+
+	sending_queue {
+		enabled           = true
+		queue_size        = 256
+		num_consumers     = 2
+		block_on_overflow = false
+		wait_for_result   = false
+	}
+
+	retry_on_failure {
+		enabled          = true
+		initial_interval = "1s"
+		max_interval     = "10s"
+		max_elapsed_time = "1m"
+	}
+}
