@@ -1,3 +1,4 @@
+import type { ApplicationServices } from "@relay/application";
 import type { RuntimeConfig } from "@relay/config";
 import { loadAuthConfig, loadRuntimeConfig } from "@relay/config";
 import {
@@ -13,11 +14,14 @@ import {
   type JsonLogger,
   type RelayTelemetry,
 } from "@relay/observability";
-import { createApp } from "./app.ts";
+import { createApp, createRelayMcpHttpHandler } from "./app.ts";
+import { createAuthSessionIdentityResolver } from "./routes/mod.ts";
 
 export interface ApiRuntimeOptions {
   readonly logger?: JsonLogger;
   readonly telemetry?: RelayTelemetry;
+  /** Mounts the v1 and MCP adapters when the composition root supplies them. */
+  readonly applicationServices?: ApplicationServices;
 }
 
 export function startApi(
@@ -30,13 +34,38 @@ export function startApi(
   });
   const logger = runtimeOptions.logger ?? createJsonLogger();
   const pool = createDatabasePool(config.database, "relay-api");
-  const auth = createAuth(pool, loadAuthConfig());
+  const authConfig = loadAuthConfig();
+  const auth = createAuth(pool, authConfig);
+  const mcp = runtimeOptions.applicationServices === undefined
+    ? undefined
+    : createRelayMcpHttpHandler({
+      auth,
+      services: runtimeOptions.applicationServices,
+      allowedHostnames: [authConfig.baseUrl.hostname],
+      allowedOrigins: authConfig.trustedOrigins,
+      serverInfo: { name: "relay", version: config.build.version },
+      onerror: (error) =>
+        logger.error({
+          eventName: "mcp.request.failed",
+          message: "MCP request failed",
+          operation: "mcp.request",
+          outcome: "failure",
+          error,
+        }),
+    });
   const app = createApp(config, {
     checkReadiness: async () => [
       await checkDatabaseHealth(pool),
       await checkMigrationLedgerHealth(pool, MIGRATIONS),
     ],
     auth,
+    ...(runtimeOptions.applicationServices === undefined ? {} : {
+      v1: {
+        services: runtimeOptions.applicationServices,
+        resolveIdentity: createAuthSessionIdentityResolver(auth, pool),
+      },
+      mcp,
+    }),
     logger,
     telemetry,
   });
@@ -67,6 +96,18 @@ export function startApi(
   server.finished.finally(async () => {
     for (const signal of signals) {
       Deno.removeSignalListener(signal, requestShutdown);
+    }
+
+    try {
+      await mcp?.close();
+    } catch (error) {
+      logger.error({
+        eventName: "api.mcp.close_failed",
+        message: "MCP handler close failed",
+        operation: "shutdown",
+        outcome: "failure",
+        error,
+      });
     }
 
     try {

@@ -9,7 +9,18 @@ import {
   type JsonLogger,
   type RelayTelemetry,
 } from "@relay/observability";
+import type { RelayMcpHttpHandler } from "./http/mcp.ts";
 import { createV1Routes, type V1RouteDependencies } from "./routes/mod.ts";
+
+export {
+  createRelayMcpHttpHandler,
+  DEFAULT_MAX_MCP_BODY_BYTES,
+} from "./http/mcp.ts";
+export type {
+  McpHttpAuth,
+  RelayMcpHttpHandler,
+  RelayMcpHttpHandlerOptions,
+} from "./http/mcp.ts";
 
 type ApiEnvironment = {
   Variables: {
@@ -24,6 +35,8 @@ export interface AppDependencies {
   readonly auth?: Auth;
   /** Versioned HTTP resources and workspace event streaming. */
   readonly v1?: V1RouteDependencies;
+  /** OAuth-protected MCP Streamable HTTP boundary. */
+  readonly mcp?: RelayMcpHttpHandler;
   /** Overrides AUTH_TRUSTED_PROXY_CIDRS, primarily for focused tests. */
   readonly trustedProxyCidrs?: readonly string[];
   readonly telemetry?: Pick<RelayTelemetry, "enrichActiveSpan" | "histogram">;
@@ -116,6 +129,17 @@ export function createApp(
 
   if (dependencies.v1) {
     app.route("/", createV1Routes(dependencies.v1));
+  }
+
+  if (dependencies.mcp) {
+    const mcp = dependencies.mcp;
+    const trustedProxyCidrs = dependencies.trustedProxyCidrs ??
+      parseTrustedProxyCidrs(Deno.env.get("AUTH_TRUSTED_PROXY_CIDRS"));
+    app.all("/mcp", (context) =>
+      mcp.fetch(context.req.raw, {
+        remoteAddress: remoteAddressFromEnvironment(context.env),
+        trustedProxyCidrs,
+      }));
   }
 
   app.get("/health/live", (context) => {

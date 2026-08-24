@@ -1,5 +1,6 @@
 import type { McpOptions } from "@better-auth/mcp";
 import { APIError } from "better-auth/api";
+import { createInsufficientScopeError } from "better-auth/oauth2";
 import { RELAY_MCP_RESOURCE_SCOPES } from "@relay/contracts";
 import { getMembership, type Queryable } from "./authorization.ts";
 
@@ -19,6 +20,99 @@ export const RELAY_OAUTH_SCOPES = [
 
 export const RELAY_WORKSPACE_ID_CLAIM =
   "https://relay.zaftech.co/claims/workspace_id";
+
+export interface AuthorizedMcpPrincipal {
+  readonly actorUserId: string;
+  readonly workspaceId: string;
+  readonly clientId: string;
+  readonly scopes: readonly string[];
+}
+
+const MAX_MCP_CLAIM_LENGTH = 255;
+const OAUTH_SCOPE_PATTERN = /^[\x21\x23-\x5B\x5D-\x7E]{1,128}$/;
+
+function claimIdentity(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 &&
+      value.length <= MAX_MCP_CLAIM_LENGTH && value.trim() === value &&
+      !/[\r\n\0]/.test(value)
+    ? value
+    : null;
+}
+
+function claimScopes(value: unknown): readonly string[] | null {
+  if (typeof value !== "string" || value.length === 0 || value.length > 8_192) {
+    return null;
+  }
+  const scopes = value.split(" ");
+  if (
+    scopes.length > 64 ||
+    scopes.some((scope) => !OAUTH_SCOPE_PATTERN.test(scope))
+  ) {
+    return null;
+  }
+  return [...new Set(scopes)];
+}
+
+export function parseMcpAccessTokenClaims(
+  claims: unknown,
+): AuthorizedMcpPrincipal | null {
+  if (claims === null || typeof claims !== "object" || Array.isArray(claims)) {
+    return null;
+  }
+  const payload = claims as Record<string, unknown>;
+  const actorUserId = claimIdentity(payload.sub);
+  const workspaceId = claimIdentity(payload[RELAY_WORKSPACE_ID_CLAIM]);
+  const clientId = claimIdentity(payload.client_id);
+  const scopes = claimScopes(payload.scope);
+  if (
+    actorUserId === null || workspaceId === null || clientId === null ||
+    scopes === null
+  ) {
+    return null;
+  }
+  return { actorUserId, workspaceId, clientId, scopes };
+}
+
+export function requireMcpScopes(
+  grantedScopes: readonly string[],
+  requiredScopes: readonly string[],
+): void {
+  const granted = new Set(grantedScopes);
+  const missing = requiredScopes.filter((scope) => !granted.has(scope));
+  if (missing.length > 0) throw createInsufficientScopeError(missing);
+}
+
+export async function authorizeMcpAccessTokenClaims(
+  queryable: Queryable,
+  resource: string,
+  claims: unknown,
+): Promise<AuthorizedMcpPrincipal | null> {
+  const principal = parseMcpAccessTokenClaims(claims);
+  if (principal === null) return null;
+  const result = await queryable.query<{ authorized: boolean }>(
+    `select exists (
+       select 1
+         from auth."oauthClient" client
+         join auth."oauthClientResource" client_resource
+           on client_resource."clientId" = client."clientId"
+         join auth."oauthResource" resource
+           on resource.id = client_resource."resourceId"
+         join auth.member member
+           on member."organizationId" = $2 and member."userId" = $3
+        where client."clientId" = $1
+          and client.disabled is not true
+          and resource.identifier = $4
+          and resource.disabled is not true
+     ) as authorized`,
+    [
+      principal.clientId,
+      principal.workspaceId,
+      principal.actorUserId,
+      resource,
+    ],
+  );
+  return result.rows[0]?.authorized === true ? principal : null;
+}
 
 const RELAY_MCP_RESOURCE_SCOPE_SET: ReadonlySet<string> = new Set(
   RELAY_MCP_RESOURCE_SCOPES,

@@ -14,10 +14,13 @@ import { github, google } from "npm:better-auth@1.7.1/social-providers";
 import type { AuthConfig } from "@relay/config";
 import type { DatabasePool } from "@relay/database";
 import {
+  type AuthorizedMcpPrincipal,
+  authorizeMcpAccessTokenClaims,
   createMcpOAuthOptions,
   RELAY_MCP_RESOURCE_SCOPES,
   relayMcpResource,
   requireCurrentVerifiedEmail,
+  requireMcpScopes,
 } from "./oauth.ts";
 import {
   type AuthConnectionInfo,
@@ -74,6 +77,13 @@ export interface Auth {
     ): Promise<{ session: AuthSession; user: AuthUser } | null>;
   };
   readonly mcpResource: string;
+  readonly authorizeMcpClaims: (
+    claims: unknown,
+  ) => Promise<AuthorizedMcpPrincipal | null>;
+  readonly requireMcpScopes: (
+    grantedScopes: readonly string[],
+    requiredScopes: readonly string[],
+  ) => void;
   readonly protectMcp: (
     handler: McpRequestHandler,
     options?: ProtectMcpOptions,
@@ -241,6 +251,9 @@ export function createAuth(pool: DatabasePool, config: AuthConfig): Auth {
       getSession: (args) => auth.api.getSession(args),
     },
     mcpResource,
+    authorizeMcpClaims: (claims) =>
+      authorizeMcpAccessTokenClaims(pool, mcpResource, claims),
+    requireMcpScopes,
     protectMcp: (handler, options) => {
       const protectedHandler = requireMcpAuth(auth, handler, {
         ...options,

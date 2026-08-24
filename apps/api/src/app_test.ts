@@ -5,7 +5,11 @@ import {
   type LogRecord,
   type TelemetryAttributes,
 } from "@relay/observability";
-import { AUTH_METADATA_PATHS, createApp } from "./app.ts";
+import {
+  AUTH_METADATA_PATHS,
+  createApp,
+  type RelayMcpHttpHandler,
+} from "./app.ts";
 import {
   AUTHENTICATED_IDENTITY,
   createStubServices,
@@ -174,6 +178,23 @@ Deno.test("exact OAuth metadata aliases are forwarded to Better Auth", async () 
     assertEquals(await response.json(), { path });
   }
   assertEquals(seen, [...AUTH_METADATA_PATHS]);
+});
+
+Deno.test("the exact MCP path delegates every method to its boundary", async () => {
+  const seen: string[] = [];
+  const mcp: RelayMcpHttpHandler = {
+    fetch(request) {
+      seen.push(`${request.method} ${new URL(request.url).pathname}`);
+      return Promise.resolve(new Response(null, { status: 202 }));
+    },
+    close: () => Promise.resolve(),
+  };
+  const app = createApp(config, { mcp, trustedProxyCidrs: [] });
+
+  assertEquals((await app.request("/mcp", { method: "POST" })).status, 202);
+  assertEquals((await app.request("/mcp", { method: "GET" })).status, 202);
+  assertEquals((await app.request("/mcp/", { method: "POST" })).status, 404);
+  assertEquals(seen, ["POST /mcp", "GET /mcp"]);
 });
 
 Deno.test("API failures use redacted JSON logs with request correlation", async () => {

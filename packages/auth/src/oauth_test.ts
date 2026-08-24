@@ -1,16 +1,19 @@
 import { mcp } from "@better-auth/mcp";
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins/jwt";
 import type { Queryable, WorkspaceRole } from "./authorization.ts";
 import {
+  authorizeMcpAccessTokenClaims,
   createMcpOAuthOptions,
+  parseMcpAccessTokenClaims,
   RELAY_AUTHORIZATION_SCOPES,
   RELAY_MCP_RESOURCE_SCOPES,
   RELAY_OAUTH_SCOPES,
   RELAY_WORKSPACE_ID_CLAIM,
   relayMcpResource,
   requireCurrentVerifiedEmail,
+  requireMcpScopes,
 } from "./oauth.ts";
 
 function membershipFixture(role: WorkspaceRole | null): {
@@ -107,6 +110,60 @@ Deno.test("Relay MCP OAuth constants and resource policy are exact", () => {
     identifier: resource,
     allowedScopes: [...RELAY_MCP_RESOURCE_SCOPES],
   }]);
+});
+
+Deno.test("MCP access-token claims are strict and current authorization is rechecked", async () => {
+  const claims = {
+    sub: "user_1",
+    client_id: "client_1",
+    scope: "tools:read runs:read tools:read",
+    [RELAY_WORKSPACE_ID_CLAIM]: "workspace_1",
+  };
+  assertEquals(parseMcpAccessTokenClaims(claims), {
+    actorUserId: "user_1",
+    workspaceId: "workspace_1",
+    clientId: "client_1",
+    scopes: ["tools:read", "runs:read"],
+  });
+  assertEquals(
+    parseMcpAccessTokenClaims({ ...claims, scope: ["tools:read"] }),
+    null,
+  );
+  assertEquals(parseMcpAccessTokenClaims({ ...claims, client_id: "" }), null);
+  requireMcpScopes(["tools:read", "runs:read"], ["runs:read"]);
+  assertThrows(() => requireMcpScopes(["tools:read"], ["runs:read"]));
+
+  const calls: Array<{ text: string; params?: unknown[] }> = [];
+  const queryable: Queryable = {
+    query<T>(text: string, params?: unknown[]) {
+      calls.push({ text, params });
+      return Promise.resolve({ rows: [{ authorized: true }] as T[] });
+    },
+  };
+  const resource = "https://relay.zaftech.co/mcp";
+  assertEquals(
+    await authorizeMcpAccessTokenClaims(queryable, resource, claims),
+    parseMcpAccessTokenClaims(claims),
+  );
+  assertEquals(calls[0].params, [
+    "client_1",
+    "workspace_1",
+    "user_1",
+    resource,
+  ]);
+  assertEquals(calls[0].text.includes("client.disabled is not true"), true);
+  assertEquals(calls[0].text.includes("resource.disabled is not true"), true);
+  assertEquals(calls[0].text.includes("auth.member"), true);
+
+  const denied: Queryable = {
+    query<T>() {
+      return Promise.resolve({ rows: [{ authorized: false }] as T[] });
+    },
+  };
+  assertEquals(
+    await authorizeMcpAccessTokenClaims(denied, resource, claims),
+    null,
+  );
 });
 
 Deno.test("pinned MCP discovery disables DCR and the legacy token route", async () => {
