@@ -76,6 +76,11 @@ deno task compile
 (cd apps/web && npm run check && npm run build && npm run test:e2e)
 ```
 
+`deno task check` enforces at least 55% backend line, branch, and function
+coverage. `npm run check` enforces at least 60% web statement, branch, function,
+and line coverage. Both commands write ignored LCOV reports under their local
+`coverage/` directories.
+
 Run the disposable PostgreSQL, Redis, MinIO, backend-image, and web-image gate
 without production credentials:
 

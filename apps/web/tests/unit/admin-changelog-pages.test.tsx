@@ -299,7 +299,7 @@ describe("admin changelog access boundary", () => {
 
     expect(await screen.findByRole("heading", { name: "Checking admin access" })).toBeInTheDocument();
     expect(screen.queryByText("Allowed admin content")).not.toBeInTheDocument();
-    expect(list).toHaveBeenCalledWith({ limit: 1 }, expect.any(AbortSignal));
+    await waitFor(() => expect(list).toHaveBeenCalledWith({ limit: 1 }, expect.any(AbortSignal)));
 
     await act(async () => probe.resolve({ kind: "ok", releases: [] }));
     expect(await screen.findByRole("heading", { name: "Allowed admin content" })).toBeInTheDocument();

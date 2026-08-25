@@ -28,6 +28,14 @@ jobs:
           deno-version: 2.9.4
       - name: Check backend and shared source
         run: deno task check
+      - name: Upload backend coverage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-coverage
+          path: coverage/backend/lcov.info
+          if-no-files-found: ignore
+          retention-days: 7
 
   web:
     name: web
@@ -49,6 +57,14 @@ jobs:
         run: npm ci
       - name: Check web source and unit tests
         run: npm run check
+      - name: Upload web coverage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: web-coverage
+          path: apps/web/coverage/lcov.info
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Build production web assets
         run: npm run build
       - name: Install Chromium
@@ -135,10 +151,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Review dependency changes
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && (github.event.repository.private == false || vars.RELAY_DEPENDENCY_REVIEW_ENABLED == 'true')
         uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
         with:
           fail-on-severity: high
+      - name: Explain private-repository dependency review
+        if: github.event_name == 'pull_request' && github.event.repository.private == true && vars.RELAY_DEPENDENCY_REVIEW_ENABLED != 'true'
+        run: echo "Dependency review requires GitHub Advanced Security for private repositories; set RELAY_DEPENDENCY_REVIEW_ENABLED=true after enabling it. The required Trivy scan still inspects lockfiles."
       - name: Scan source, lockfiles, secrets, and configuration
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
@@ -147,7 +166,7 @@ jobs:
           scanners: vuln,secret,misconfig
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          skip-dirs: .git,apps/web/node_modules,apps/web/dist,dist,design,.superdesign,.ci-artifacts
+          skip-dirs: .git,apps/web/node_modules,apps/web/dist,coverage,dist,design,.superdesign,.ci-artifacts
           timeout: 15m
           exit-code: "1"
           format: table
