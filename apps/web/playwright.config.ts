@@ -20,9 +20,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --port 4173",
+    command: process.env.CI === "true"
+      ? "npm run preview -- --port 4173"
+      : "npm run dev -- --port 4173",
     url: "http://127.0.0.1:4173",
-    reuseExistingServer: true,
+    reuseExistingServer: process.env.CI !== "true",
     timeout: 120_000,
   },
 });

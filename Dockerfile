@@ -1,4 +1,6 @@
-FROM denoland/deno:2.9.4 AS build
+FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40 AS certificates
+
+FROM denoland/deno:2.9.4@sha256:c777b4b225501a61074837e90a826a58f99124837824023cd60334b1e2374498 AS build
 
 WORKDIR /src
 
@@ -20,13 +22,28 @@ RUN mkdir -p /out && \
       --output /out/relay \
       src/main.ts
 
-FROM debian:bookworm-slim AS runtime
+FROM build AS test
 
-RUN apt-get update && \
-    apt-get install --yes --no-install-recommends ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+COPY scripts ./scripts
+RUN deno test \
+      --frozen \
+      --no-run \
+      --allow-env \
+      --allow-net \
+      apps/api apps/worker packages src && \
+    deno cache \
+      --frozen \
+      scripts/dev/check-live.ts \
+      scripts/ci/api-container-smoke.ts \
+      scripts/ci/web-container-smoke.ts
+
+ENTRYPOINT ["deno"]
+CMD ["task", "check:live"]
+
+FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS runtime
 
 WORKDIR /app
+COPY --from=certificates /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/relay /app/relay
 COPY apps/api/docker-entrypoint.sh /app/relay-entrypoint
 RUN sed -i 's/\r$//' /app/relay-entrypoint && \

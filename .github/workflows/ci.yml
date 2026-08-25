@@ -1,0 +1,178 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  source:
+    name: source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: 2.9.4
+      - name: Check backend and shared source
+        run: deno task check
+
+  web:
+    name: web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check web source and unit tests
+        run: npm run check
+      - name: Build production web assets
+        run: npm run build
+      - name: Install Chromium
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Run browser tests against the production preview
+        run: npm run test:e2e
+        env:
+          CI: "true"
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-diagnostics
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+            apps/web/artifacts
+          if-no-files-found: ignore
+          retention-days: 7
+
+  integration:
+    name: integration and containers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      COMPOSE_PROJECT_NAME: relay-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      RELAY_CI_BACKEND_IMAGE: relay-ci-backend:${{ github.sha }}
+      RELAY_CI_TEST_IMAGE: relay-ci-tests:${{ github.sha }}
+      RELAY_CI_WEB_IMAGE: relay-ci-web:${{ github.sha }}
+      RELAY_CI_GIT_SHA: ${{ github.sha }}
+      CI_ARTIFACT_DIR: .ci-artifacts
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: 2.9.4
+      - name: Record the image creation time
+        run: echo "RELAY_CI_IMAGE_CREATED=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      - name: Report container tooling
+        run: |
+          docker version
+          docker compose version
+      - name: Run isolated live and container checks
+        run: deno task check:containers
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.RELAY_CI_BACKEND_IMAGE }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          timeout: 10m
+          exit-code: "1"
+          format: table
+      - name: Scan web image
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.RELAY_CI_WEB_IMAGE }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          timeout: 10m
+          exit-code: "1"
+          format: table
+      - name: Upload container diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: container-diagnostics
+          path: .ci-artifacts
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
+
+  security:
+    name: security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high
+      - name: Scan source, lockfiles, secrets, and configuration
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          skip-dirs: .git,apps/web/node_modules,apps/web/dist,dist,design,.superdesign,.ci-artifacts
+          timeout: 15m
+          exit-code: "1"
+          format: table
+
+  required:
+    name: required
+    if: always()
+    needs:
+      - source
+      - web
+      - integration
+      - security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every CI lane
+        env:
+          SOURCE_RESULT: ${{ needs.source.result }}
+          WEB_RESULT: ${{ needs.web.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+        run: |
+          for result in "$SOURCE_RESULT" "$WEB_RESULT" "$INTEGRATION_RESULT" "$SECURITY_RESULT"; do
+            if [ "$result" != "success" ]; then
+              echo "A required CI lane did not succeed." >&2
+              exit 1
+            fi
+          done

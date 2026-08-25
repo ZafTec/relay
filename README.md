@@ -72,7 +72,19 @@ fresh-session administration boundary.
 ```sh
 deno task check
 deno task compile
+(cd apps/web && npm ci && npx --no-install playwright install chromium)
+(cd apps/web && npm run check && npm run build && npm run test:e2e)
 ```
+
+Run the disposable PostgreSQL, Redis, MinIO, backend-image, and web-image gate
+without production credentials:
+
+```sh
+deno task check:containers
+```
+
+The container gate publishes no host ports and removes its isolated volumes on
+exit. Diagnostic logs are written to the ignored `.ci-artifacts/` directory.
 
 ## Repository structure
 

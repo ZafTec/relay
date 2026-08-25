@@ -64,9 +64,22 @@ async function run(cmd: string, args: string[]): Promise<void> {
   if (code !== 0) Deno.exit(code);
 }
 
-await run(Deno.execPath(), ["fmt", "--check", "apps", "packages", "src"]);
-await run(Deno.execPath(), ["lint", "apps", "packages", "src"]);
-await run(Deno.execPath(), ["check", "src/main.ts"]);
+await run(Deno.execPath(), [
+  "fmt",
+  "--check",
+  "apps",
+  "packages",
+  "scripts",
+  "src",
+]);
+await run(Deno.execPath(), ["lint", "apps", "packages", "scripts", "src"]);
+await run(Deno.execPath(), [
+  "check",
+  "src/main.ts",
+  "scripts/dev/check-live.ts",
+  "scripts/ci/api-container-smoke.ts",
+  "scripts/ci/web-container-smoke.ts",
+]);
 
 const testCommand = new Deno.Command(Deno.execPath(), {
   args: [
