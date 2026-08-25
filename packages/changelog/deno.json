@@ -1,0 +1,6 @@
+{
+  "name": "@relay/changelog",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

@@ -325,7 +325,8 @@ exact approved OAuth/OIDC and protected-resource metadata paths -> relay-api
 /api/v1/events                                                   -> relay-api, SSE settings
 /api/                                                            -> relay-api
 approved /s/ or /share/ prefix                                  -> relay-api
-/health/live and /version if intentionally public               -> relay-api
+/health/ready and /version for the public status page           -> relay-api
+/health/live only if intentionally public                       -> relay-api
 /                                                               -> relay-web
 ```
 
@@ -334,8 +335,11 @@ only the exact additional metadata aliases emitted by the pinned Better Auth
 configuration; do not proxy all `/.well-known/` traffic because ACME and
 unrelated well-known resources belong elsewhere.
 
-Do not publicly expose readiness unless there is a deliberate operational need.
-Compose healthchecks can use the backend command internally.
+Relay's factual public `/status` page is the deliberate operational need for
+exposing `/health/ready` and `/version`. Keep both responses sanitized and free
+of secrets, internal addresses, and raw dependency errors. Compose healthchecks
+continue to use the backend command internally; do not expose liveness merely
+because readiness is public.
 
 Common proxy requirements:
 

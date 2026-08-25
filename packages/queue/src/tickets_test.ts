@@ -1,0 +1,97 @@
+import { assertEquals, assertThrows } from "@std/assert";
+import { executionOutboxAction } from "./bullmq.ts";
+import {
+  dispatchDeduplicationKey,
+  parseExecutionOutboxPayload,
+  parseExecutionTicket,
+  ticketFromOutboxPayload,
+  ticketId,
+} from "./tickets.ts";
+
+Deno.test("outbox metadata produces the exact generation and policy ticket", () => {
+  const payload = parseExecutionOutboxPayload({
+    domainJobId: "123",
+    runId: "run_123",
+    capacityPoolKey: "images-us-east",
+    dispatchGeneration: 7,
+    policyVersion: 19,
+    workspaceId: "workspace-123",
+    classKey: "paid",
+    costUnits: 3,
+    fifoSequence: 41,
+    eligibleAtMs: 1_700_000_000_000,
+    traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    tracestate: "relay=test",
+  });
+  const ticket = ticketFromOutboxPayload(
+    payload,
+    "scheduler-token-1234567890",
+  );
+  assertEquals(ticket, {
+    domainJobId: "123",
+    dispatchGeneration: 7,
+    policyVersion: 19,
+    schedulerToken: "scheduler-token-1234567890",
+    traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    tracestate: "relay=test",
+  });
+  assertEquals(ticketId(ticket), "job.123.gen.7");
+  assertEquals(
+    dispatchDeduplicationKey("123", 7),
+    "execution-job.123.dispatch.7",
+  );
+});
+
+Deno.test("started outbox events are observation-only", () => {
+  const payload = parseExecutionOutboxPayload({
+    domainJobId: "123",
+    runId: "run_123",
+    capacityPoolKey: "images-us-east",
+    dispatchGeneration: 7,
+    policyVersion: 19,
+    workspaceId: "workspace-123",
+    classKey: "paid",
+    costUnits: 3,
+    fifoSequence: 41,
+    eligibleAtMs: 1_700_000_000_000,
+  });
+  assertEquals(
+    executionOutboxAction({
+      id: "42",
+      aggregateType: "execution_job",
+      aggregateId: "123",
+      aggregateVersion: "2",
+      eventType: "job.started",
+      payload,
+      attemptCount: 1,
+      leaseOwner: "worker-test",
+    }),
+    { kind: "observe", payload },
+  );
+});
+
+Deno.test("ticket validation rejects missing or malformed durable metadata", () => {
+  assertThrows(() =>
+    parseExecutionTicket({
+      domainJobId: "123",
+      dispatchGeneration: -1,
+      policyVersion: 1,
+      schedulerToken: "scheduler-token-1234567890",
+    })
+  );
+  assertThrows(() =>
+    parseExecutionTicket({
+      domainJobId: "123",
+      dispatchGeneration: 0,
+      policyVersion: 1,
+    })
+  );
+  assertThrows(() =>
+    parseExecutionOutboxPayload({
+      domainJobId: "123",
+      dispatchGeneration: 0,
+      policyVersion: 1,
+      runId: "run_123",
+    })
+  );
+});

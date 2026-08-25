@@ -1,3 +1,13 @@
+x-relay-observability: &relay-observability
+  OTEL_DENO: "${OTEL_DENO:-true}"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://alloy:4318}"
+  OTEL_PROPAGATORS: "tracecontext"
+  OTEL_DENO_CONSOLE: "capture"
+  OTEL_METRIC_EXPORT_INTERVAL: "${OTEL_METRIC_EXPORT_INTERVAL:-15000}"
+  OTEL_TRACES_SAMPLER: "${OTEL_TRACES_SAMPLER:-always_on}"
+  DEPLOYMENT_ENVIRONMENT_NAME: "${DEPLOYMENT_ENVIRONMENT_NAME:-production}"
+
 services:
   api:
     image: ${APP_IMAGE:-relay:local}
@@ -6,6 +16,9 @@ services:
     command: ["api"]
     env_file:
       - .env
+    environment:
+      <<: *relay-observability
+      OTEL_SERVICE_NAME: relay-api
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
     init: true
@@ -19,6 +32,9 @@ services:
     command: ["worker"]
     env_file:
       - .env
+    environment:
+      <<: *relay-observability
+      OTEL_SERVICE_NAME: relay-worker
     init: true
     restart: unless-stopped
     stop_grace_period: 2m

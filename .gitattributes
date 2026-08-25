@@ -1,0 +1,17 @@
+# `deno fmt`/`deno lint` (and Deno's formatter generally) require LF line
+# endings and fail `deno task check` on a file that has CRLF -- which a
+# Windows checkout gets by default unless something here says otherwise.
+# `text=auto` lets Git decide what's text; `eol=lf` pins every text file's
+# working-tree line endings to LF regardless of platform or a developer's
+# local core.autocrlf setting, so every checkout matches what the
+# formatter expects.
+* text=auto eol=lf
+
+# Binary assets: never touched by line-ending normalization.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

@@ -1,0 +1,218 @@
+name: ${COMPOSE_PROJECT_NAME:-relay-ci}
+
+x-backend-image: &backend-image
+  image: ${RELAY_CI_BACKEND_IMAGE:-relay-ci-backend:local}
+  pull_policy: never
+
+x-test-image: &test-image
+  image: ${RELAY_CI_TEST_IMAGE:-relay-ci-tests:local}
+  pull_policy: never
+
+x-hardened-process: &hardened-process
+  read_only: true
+  init: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  networks:
+    - relay-test
+
+x-runtime-environment: &runtime-environment
+  DATABASE_URL: postgres://relay_app:relay_dev_only@postgres:5432/relay
+  REDIS_URL: redis://:relay_dev_only@redis:6379
+  APP_VERSION: 0.0.0-ci
+  GIT_SHA: ${RELAY_CI_GIT_SHA:-ci-local}
+  OTEL_DENO: "false"
+  DEPLOYMENT_ENVIRONMENT_NAME: ci
+
+services:
+  postgres:
+    image: postgres@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941
+    environment:
+      POSTGRES_DB: relay
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: relay_dev_only
+    volumes:
+      - relay-test-postgres:/var/lib/postgresql
+      - ./scripts/dev/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+            pg_isready -U postgres -d relay &&
+            psql -U postgres -d relay -tAc "select 1 from pg_roles where rolname = 'relay_app'" | grep -q 1 &&
+            psql -U postgres -d postgres -tAc "select 1 from pg_database where datname = 'relay_test'" | grep -q 1
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    networks:
+      - relay-test
+
+  redis:
+    image: redis@sha256:69549d08c5a19b8c28214dea5dfe3b6afa7ac1ad7ea61d66c29a8454b875df40
+    command:
+      - redis-server
+      - --requirepass
+      - relay_dev_only
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - relay-test-redis:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - REDISCLI_AUTH=relay_dev_only redis-cli ping | grep -q PONG
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+    networks:
+      - relay-test
+
+  minio:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    command:
+      - server
+      - /data
+    environment:
+      MINIO_ROOT_USER: relay_dev_only
+      MINIO_ROOT_PASSWORD: relay_dev_only
+    volumes:
+      - relay-test-minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+    networks:
+      - relay-test
+
+  migrate:
+    <<: [*backend-image, *hardened-process]
+    command: ["migrate", "up"]
+    environment:
+      DATABASE_URL: postgres://relay_migrator:relay_dev_only@postgres:5432/relay
+      APP_VERSION: 0.0.0-ci
+      GIT_SHA: ${RELAY_CI_GIT_SHA:-ci-local}
+      OTEL_DENO: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend-tests:
+    <<: [*test-image, *hardened-process]
+    entrypoint: ["deno"]
+    command: ["task", "check:live"]
+    environment:
+      DATABASE_URL: postgres://relay_app:relay_dev_only@postgres:5432/relay
+      MIGRATOR_TEST_DATABASE_URL: postgres://relay_migrator:relay_dev_only@postgres:5432/relay_test
+      AUTH_SECURITY_TEST_DATABASE_URL: postgres://relay_migrator:relay_dev_only@postgres:5432/relay
+      REDIS_URL: redis://:relay_dev_only@redis:6379
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: relay_dev_only
+      MINIO_SECRET_KEY: relay_dev_only
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  api:
+    <<: [*backend-image, *hardened-process]
+    command: ["api"]
+    environment:
+      <<: *runtime-environment
+      PORT: "8000"
+      BETTER_AUTH_URL: https://relay.test
+      BETTER_AUTH_SECRET: ci-only-better-auth-secret-0000000000000000
+      AUTH_TRUSTED_ORIGINS: https://relay.test,http://web:8080
+      GOOGLE_CLIENT_ID: ci-google-client
+      GOOGLE_CLIENT_SECRET: ci-google-secret-not-used
+      GITHUB_CLIENT_ID: ci-github-client
+      GITHUB_CLIENT_SECRET: ci-github-secret-not-used
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    <<: [*backend-image, *hardened-process]
+    command: ["worker"]
+    environment:
+      <<: *runtime-environment
+    stop_grace_period: 30s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  backend-probe:
+    <<: [*test-image, *hardened-process]
+    entrypoint: ["deno"]
+    command:
+      - run
+      - --cached-only
+      - --allow-env
+      - --allow-net
+      - scripts/ci/api-container-smoke.ts
+    environment:
+      RELAY_API_BASE_URL: http://api:8000
+      RELAY_EXPECTED_VERSION: 0.0.0-ci
+      RELAY_EXPECTED_REVISION: ${RELAY_CI_GIT_SHA:-ci-local}
+      RELAY_EXPECTED_ISSUER: https://relay.test/api/auth
+      RELAY_EXPECTED_MCP_RESOURCE: https://relay.test/mcp
+    depends_on:
+      api:
+        condition: service_healthy
+
+  web:
+    image: ${RELAY_CI_WEB_IMAGE:-relay-ci-web:local}
+    pull_policy: never
+    read_only: true
+    init: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/cache/nginx:size=16m,mode=0755
+    networks:
+      - relay-test
+
+  web-probe:
+    <<: [*test-image, *hardened-process]
+    entrypoint: ["deno"]
+    command:
+      - run
+      - --cached-only
+      - --allow-env
+      - --allow-net
+      - scripts/ci/web-container-smoke.ts
+    environment:
+      RELAY_WEB_BASE_URL: http://web:8080
+    depends_on:
+      web:
+        condition: service_healthy
+
+networks:
+  relay-test:
+    internal: true
+
+volumes:
+  relay-test-postgres:
+  relay-test-redis:
+  relay-test-minio:

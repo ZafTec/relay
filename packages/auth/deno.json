@@ -1,0 +1,9 @@
+{
+  "name": "@relay/auth",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "imports": {
+    "@better-auth/core/context": "npm:@better-auth/core@1.7.1/context"
+  }
+}

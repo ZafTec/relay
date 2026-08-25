@@ -1,7 +1,7 @@
 # Relay changelog architecture
 
-Status: recommended design; implementation deferred until identity, database,
-and superadmin authorization exist
+Status: public and admin HTTP boundaries implemented; release automation and
+revision-history pagination remain deferred
 
 ## Decision
 
@@ -168,13 +168,20 @@ Superadmin:
 ```text
 GET    /api/v1/admin/changelog
 POST   /api/v1/admin/changelog
-PATCH  /api/v1/admin/changelog/:id
-POST   /api/v1/admin/changelog/:id/publish
-POST   /api/v1/admin/changelog/:id/unpublish
+GET    /api/v1/admin/changelog/:releaseId
+PATCH  /api/v1/admin/changelog/:releaseId
+POST   /api/v1/admin/changelog/:releaseId/publish
+POST   /api/v1/admin/changelog/:releaseId/unpublish
 ```
 
-Public endpoints return published entries only. Draft endpoints require a fresh
-authenticated superadmin session and produce audit events.
+Public endpoints return published entries only. The implemented admin boundary
+supports release listing, detail, creation, revision, publication, and
+unpublication. Every route requires a fresh authenticated superadmin session;
+mutations produce audit events with request-ID correlation.
+
+A revision-history HTTP endpoint is intentionally deferred until it has a
+bounded pagination contract; the admin API does not currently expose unbounded
+revision history.
 
 ## Landing-page integration
 
@@ -229,7 +236,8 @@ Every publish, unpublish, and edit records:
 - Timestamp
 - Previous snapshot
 - New snapshot
-- Request trace ID
+- Request ID
+- Trace ID when a trusted active-span identifier is available
 
 Unpublishing hides an entry but does not delete its audit history. A release
 linked to an actually deployed image should normally be corrected or annotated

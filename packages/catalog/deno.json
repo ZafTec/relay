@@ -1,0 +1,6 @@
+{
+  "name": "@relay/catalog",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

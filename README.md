@@ -33,18 +33,63 @@ The initial API endpoints are:
 - `GET /version`
 - `GET /api/v1`
 
-Start the placeholder worker in another terminal:
+Start the worker in another terminal:
 
 ```sh
 deno task dev:worker
 ```
+
+## Initial superadmin bootstrap
+
+The first system superadmin is granted by a one-shot operator command, never by
+email matching or an HTTP endpoint. The target user must sign in once so an
+immutable Better Auth user ID exists.
+
+Run the command with these values injected by the deployment secret mechanism:
+
+```text
+DATABASE_URL                         dedicated relay_migrator login
+RELAY_BOOTSTRAP_USER_ID              immutable Better Auth user ID
+RELAY_BOOTSTRAP_IDEMPOTENCY_KEY      16-128 governance-safe characters
+```
+
+Do not place migrator credentials in the API or worker environment, and do not
+put bootstrap values on the command line where task output, shell history, or
+process inspection can expose them.
+
+```sh
+deno task admin:bootstrap-superadmin
+```
+
+The command refuses runtime database credentials, scopes `relay_owner` to one
+transaction, and records the grant and audit event atomically. Keep and reuse
+the exact idempotency key until the command reports success; a matching replay
+is safe. After the first grant, later superadmin changes use the authenticated,
+fresh-session administration boundary.
 
 ## Validation
 
 ```sh
 deno task check
 deno task compile
+(cd apps/web && npm ci && npx --no-install playwright install chromium)
+(cd apps/web && npm run check && npm run build && npm run test:e2e)
 ```
+
+`deno task check` enforces at least 55% backend line, branch, and function
+coverage. `npm run check` enforces at least 60% web statement, branch, function,
+and line coverage. Both commands write ignored LCOV reports under their local
+`coverage/` directories.
+
+Run the disposable PostgreSQL, Redis, MinIO, backend-image, and web-image gate
+without production credentials:
+
+```sh
+deno task check:containers
+```
+
+The container gate publishes no host ports and removes its isolated volumes on
+exit. Diagnostic logs are written to the ignored `.ci-artifacts/` directory.
 
 ## Repository structure
 

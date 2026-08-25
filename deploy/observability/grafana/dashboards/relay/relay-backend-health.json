@@ -1,0 +1,166 @@
+{
+  "annotations": { "list": [] },
+  "description": "TEMPLATE ONLY. Reconcile scrape jobs and pinned Prometheus, Loki, Tempo, node-exporter, and cAdvisor metrics with the audited VPS topology.",
+  "editable": false,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "content": "# Backend health template\nTempo panels are meaningful only after persistent storage, retention, WAL/live-store, and restart survival are proven. In-memory Jaeger is excluded.",
+        "mode": "markdown"
+      },
+      "title": "Persistent trace backend required",
+      "type": "text"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "relay-prometheus" },
+      "fieldConfig": {
+        "defaults": { "min": 0, "max": 1, "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 3 },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "up{job=~\"prometheus|loki|tempo|alloy\"}",
+          "instant": false,
+          "legendFormat": "{{job}} {{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Backend scrape health",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "relay-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 3 },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "prometheus_tsdb_storage_blocks_bytes",
+          "instant": false,
+          "legendFormat": "Prometheus blocks",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "prometheus_tsdb_wal_storage_size_bytes",
+          "instant": false,
+          "legendFormat": "Prometheus WAL",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Prometheus storage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "relay-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 11 },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (reason) (rate(loki_discarded_samples_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "samples {{reason}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum by (reason) (rate(loki_discarded_bytes_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "bytes {{reason}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Loki discarded data",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "relay-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 11 },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (reason) (rate(tempo_discarded_spans_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "discarded {{reason}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(tempo_ingester_failed_flushes_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "failed flushes",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Tempo ingestion and persistence",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": ["relay", "template", "backend-health"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Relay Observability Backend Health (Template)",
+  "uid": "relay-backend-health",
+  "version": 1,
+  "weekStart": ""
+}

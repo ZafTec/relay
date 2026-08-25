@@ -66,7 +66,12 @@ most convenient source.
 
 ## Current repository reality
 
-Implemented now:
+Status at research time (2026-08-20); superseded by
+[`../implementation-status.md`](../implementation-status.md), which an
+implementation agent updates with observed evidence as work lands -- read that
+file for current state, this section for the starting point.
+
+Implemented at research time:
 
 - Deno workspace
 - Hono shell
@@ -74,7 +79,7 @@ Implemented now:
 - Basic live/readiness/version/root API routes
 - Three API tests
 
-Not implemented:
+Not implemented at research time:
 
 - PostgreSQL or migrations
 - Better Auth or OAuth
@@ -85,7 +90,7 @@ Not implemented:
 - React/Vite frontend
 - CI/CD or release automation
 
-Known blockers:
+Known blockers at research time:
 
 - `Dockerfile` is syntactically invalid around `deno compile`.
 - `/health/ready` performs no dependency checks.

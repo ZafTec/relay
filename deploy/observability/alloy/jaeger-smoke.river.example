@@ -1,0 +1,34 @@
+// DISCONNECTED SMOKE-TEST EXAMPLE ONLY.
+// The supplied Jaeger is memory-backed and loses traces on restart. Never merge
+// this as a permanent fan-out beside Tempo. During an approved bounded smoke
+// window, point the trace batch output at this exporter INSTEAD OF Tempo, verify
+// one canary, then remove the route.
+
+otelcol.exporter.otlphttp "relay_jaeger_smoke" {
+	traces_endpoint = "http://jaeger:4318/v1/traces"
+	encoding        = "proto"
+
+	client {
+		endpoint = "http://jaeger:4318"
+		timeout  = "5s"
+
+		tls {
+			insecure = true
+		}
+	}
+
+	sending_queue {
+		enabled           = true
+		queue_size        = 32
+		num_consumers     = 1
+		block_on_overflow = false
+		wait_for_result   = false
+	}
+
+	retry_on_failure {
+		enabled          = true
+		initial_interval = "1s"
+		max_interval     = "5s"
+		max_elapsed_time = "15s"
+	}
+}
