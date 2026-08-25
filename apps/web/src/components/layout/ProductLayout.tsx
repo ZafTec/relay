@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { lazy, type ReactNode, Suspense, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { AuthAdapterError } from "../../auth/types";
 import { RelayBrand } from "../brand/RelayBrand";
 import { Button } from "../ui/Button";
 import { InlineNotice } from "../ui/InlineNotice";
+
+const AdminAccessLink = lazy(() =>
+  import("../../features/admin-changelog/AdminAccessLink").then((module) => ({
+    default: module.AdminAccessLink,
+  }))
+);
 
 const sections = [
   { label: "Tools", to: "/dashboard/tools" },
@@ -56,7 +62,13 @@ function WorkspaceLabel() {
   );
 }
 
-function SectionNavigation({ mobile = false }: { mobile?: boolean }) {
+function SectionNavigation({
+  mobile = false,
+  children,
+}: {
+  readonly mobile?: boolean;
+  readonly children?: ReactNode;
+}) {
   return (
     <nav className={mobile ? "product-tabs" : "product-nav"} aria-label="Sections">
       <NavLink
@@ -75,6 +87,7 @@ function SectionNavigation({ mobile = false }: { mobile?: boolean }) {
           {section.label}
         </NavLink>
       ))}
+      {children}
     </nav>
   );
 }
@@ -109,7 +122,11 @@ export function ProductLayout() {
       <aside className="product-rail" aria-label="Workspace navigation">
         <div className="product-rail__brand"><RelayBrand surface="product" compact showParent={false} /></div>
         <div className="product-rail__workspace"><WorkspaceLabel /></div>
-        <SectionNavigation />
+        <SectionNavigation>
+          <Suspense fallback={null}>
+            <AdminAccessLink className="product-nav__item" />
+          </Suspense>
+        </SectionNavigation>
         <div className="product-rail__session">
           <Link
             className="session-profile-link"
@@ -150,7 +167,11 @@ export function ProductLayout() {
           </div>
         </header>
         <div className="product-mobile-workspace"><WorkspaceLabel /></div>
-        <SectionNavigation mobile />
+        <SectionNavigation mobile>
+          <Suspense fallback={null}>
+            <AdminAccessLink className="product-nav__item" />
+          </Suspense>
+        </SectionNavigation>
         {workspace.status === "degraded" ? (
           <div className="product-global-notice">
             <InlineNotice

@@ -29,6 +29,12 @@ const workspace: RelayWorkspace = {
 function mockRegistryEndpoints() {
   vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input) => {
     const path = String(input);
+    if (path.startsWith("/api/v1/admin/changelog")) {
+      return new Response(JSON.stringify({ releases: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
     if (path.startsWith("/api/v1/tools")) {
       return new Response(JSON.stringify({ kind: "ok", items: [], nextCursor: null }), {
         status: 200,
@@ -108,6 +114,19 @@ describe("protected routing", () => {
     expect(await screen.findByRole("heading", { name: "Sign in to Relay" })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/sign-in");
     expect(router.state.location.search).toContain("returnTo=%2Fdashboard%3Fview%3Dcurrent");
+  });
+
+  it("protects admin routes before the superadmin capability probe", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+    const router = createRelayMemoryRouter(["/admin/changelog"]);
+    render(<App router={router} adapter={createTestAuthAdapter({ identity: null })} />);
+
+    expect(await screen.findByRole("heading", { name: "Sign in to Relay" }))
+      .toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/sign-in");
+    expect(router.state.location.search).toContain("returnTo=%2Fadmin%2Fchangelog");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("protects profile and preserves it as the return path", async () => {
@@ -215,7 +234,9 @@ describe("protected routing", () => {
     ["/dashboard/artifacts", "Artifacts", "Artifacts"],
     ["/dashboard/usage", "Usage", "Usage"],
     ["/dashboard/settings", "Workspace settings", "Settings"],
-  ])("renders protected registry route %s", async (path, heading, navigationLabel) => {
+    ["/admin/changelog", "Releases", "Changelog"],
+    ["/admin/changelog/new", "New changelog draft", "Changelog"],
+  ])("renders protected application route %s", async (path, heading, navigationLabel) => {
     mockRegistryEndpoints();
     const router = createRelayMemoryRouter([path]);
 
@@ -226,16 +247,37 @@ describe("protected routing", () => {
       />,
     );
 
-    expect(await screen.findByRole("heading", { level: 1, name: heading })).toBeInTheDocument();
+    expect(await screen.findByRole(
+      "heading",
+      { level: 1, name: heading },
+      { timeout: 5_000 },
+    )).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: navigationLabel })).not.toHaveLength(0);
     expect(router.state.location.pathname).toBe(path);
   });
 
   it("renders the protected dashboard with real adapter data and no invented counts", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
-      JSON.stringify({ name: "Relay", status: "ok" }),
-      { status: 200, headers: { "content-type": "application/json" } },
-    )));
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input) => {
+      const path = String(input);
+      if (path.startsWith("/api/v1/admin/changelog")) {
+        return new Response(JSON.stringify({
+          error: {
+            code: "authorization_denied",
+            message: "You are not authorized to perform this action.",
+            retryable: false,
+            requestId: "req_dashboard-admin-probe",
+            details: {},
+          },
+        }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(
+        JSON.stringify({ name: "Relay", status: "ok" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }));
     const router = createRelayMemoryRouter(["/dashboard"]);
     render(
       <App

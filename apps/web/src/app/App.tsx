@@ -1,9 +1,15 @@
 import { lazy, Suspense, type ReactNode } from "react";
-import { createBrowserRouter, createMemoryRouter, RouterProvider } from "react-router-dom";
+import {
+  createBrowserRouter,
+  createMemoryRouter,
+  Navigate,
+  RouterProvider,
+} from "react-router-dom";
 import type { AuthAdapter } from "../auth/types";
 import { AuthProvider } from "../auth/AuthProvider";
 import { ProtectedRoute } from "../auth/ProtectedRoute";
 import { ProductLayout } from "../components/layout/ProductLayout";
+import { LoadingPageState } from "../components/ui/PageState";
 import { Skeleton } from "../components/ui/Skeleton";
 import { SignInPage } from "../features/auth/SignInPage";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
@@ -41,6 +47,21 @@ const UsagePage = lazy(() => import("../features/usage").then((module) => ({
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((module) => ({
   default: module.SettingsPage,
 })));
+const AdminChangelogRouteBoundary = lazy(() => import("../features/admin-changelog").then((module) => ({
+  default: module.AdminChangelogRouteBoundary,
+})));
+const AdminLayout = lazy(() => import("../features/admin-changelog").then((module) => ({
+  default: module.AdminLayout,
+})));
+const AdminChangelogListPage = lazy(() => import("../features/admin-changelog").then((module) => ({
+  default: module.AdminChangelogListPage,
+})));
+const AdminChangelogEditorPage = lazy(() => import("../features/admin-changelog").then((module) => ({
+  default: module.AdminChangelogEditorPage,
+})));
+const AdminChangelogPreviewPage = lazy(() => import("../features/admin-changelog").then((module) => ({
+  default: module.AdminChangelogPreviewPage,
+})));
 
 function productRoute(content: ReactNode, loadingLabel: string) {
   return (
@@ -51,6 +72,14 @@ function productRoute(content: ReactNode, loadingLabel: string) {
         </div>
       )}
     >
+      {content}
+    </Suspense>
+  );
+}
+
+function protectedLazyRoute(content: ReactNode, loadingLabel: string) {
+  return (
+    <Suspense fallback={<LoadingPageState label={loadingLabel} />}>
       {content}
     </Suspense>
   );
@@ -113,6 +142,49 @@ export const relayRoutes = [
           {
             path: "settings",
             element: productRoute(<SettingsPage />, "Loading workspace settings"),
+          },
+        ],
+      },
+      {
+        path: "/admin",
+        element: protectedLazyRoute(
+          <AdminChangelogRouteBoundary />,
+          "Checking admin access",
+        ),
+        children: [
+          {
+            element: protectedLazyRoute(<AdminLayout />, "Loading admin console"),
+            children: [
+              { index: true, element: <Navigate to="changelog" replace /> },
+              {
+                path: "changelog",
+                element: productRoute(
+                  <AdminChangelogListPage />,
+                  "Loading changelog releases",
+                ),
+              },
+              {
+                path: "changelog/new",
+                element: productRoute(
+                  <AdminChangelogEditorPage createNew />,
+                  "Loading release editor",
+                ),
+              },
+              {
+                path: "changelog/:releaseId",
+                element: productRoute(
+                  <AdminChangelogEditorPage />,
+                  "Loading release editor",
+                ),
+              },
+              {
+                path: "changelog/:releaseId/preview",
+                element: productRoute(
+                  <AdminChangelogPreviewPage />,
+                  "Loading release preview",
+                ),
+              },
+            ],
           },
         ],
       },

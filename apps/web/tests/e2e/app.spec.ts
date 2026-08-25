@@ -130,6 +130,37 @@ const browserUsage = {
   truncated: false,
 };
 
+const adminReleaseId = "42";
+const browserAdminSnapshot = {
+  version: "1.2.3-test",
+  slug: "browser-test-release",
+  title: "Browser test release",
+  summary: "A test-only stored release snapshot.",
+  gitTag: "v1.2.3-test",
+  commitSha: "b".repeat(40),
+  releasedAt: "2030-01-01T00:00:00.000Z",
+  items: [{
+    category: "improved",
+    area: "Web",
+    title: "Admin changelog browser coverage",
+    description: "The browser test exercises stored release state.",
+    sortOrder: 0,
+  }],
+  contentSha256: "c".repeat(64),
+};
+
+const browserAdminRelease = {
+  releaseId: adminReleaseId,
+  status: "draft",
+  latestRevision: 1,
+  publishedRevision: null,
+  hasUnpublishedChanges: true,
+  firstPublishedAt: null,
+  lastPublishedAt: null,
+  latest: browserAdminSnapshot,
+  published: null,
+};
+
 async function mockSession(page: Page, authenticated: boolean) {
   await page.route("**/api/auth/get-session**", async (route) => {
     await route.fulfill({
@@ -140,8 +171,64 @@ async function mockSession(page: Page, authenticated: boolean) {
   });
 }
 
-async function mockAuthenticatedWorkspace(page: Page) {
+async function mockAuthenticatedWorkspace(
+  page: Page,
+  options: { readonly adminAccess?: boolean } = {},
+) {
   await mockSession(page, true);
+  await page.route("**/api/v1/admin/changelog**", async (route) => {
+    if (!options.adminAccess) {
+      await route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        headers: { "x-request-id": "req_browser-admin-denied" },
+        body: JSON.stringify({
+          error: {
+            code: "authorization_denied",
+            message: "You are not authorized to perform this action.",
+            retryable: false,
+            requestId: "req_browser-admin-denied",
+            details: {},
+          },
+        }),
+      });
+      return;
+    }
+
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() === "GET" && pathname === "/api/v1/admin/changelog") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          releases: [{
+            releaseId: browserAdminRelease.releaseId,
+            version: browserAdminRelease.latest.version,
+            slug: browserAdminRelease.latest.slug,
+            status: browserAdminRelease.status,
+            latestRevision: browserAdminRelease.latestRevision,
+            publishedRevision: browserAdminRelease.publishedRevision,
+            hasUnpublishedChanges: browserAdminRelease.hasUnpublishedChanges,
+            updatedAt: "2030-01-01T00:01:00.000Z",
+          }],
+        }),
+      });
+      return;
+    }
+    if (
+      request.method() === "GET"
+      && pathname === `/api/v1/admin/changelog/${adminReleaseId}`
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(browserAdminRelease),
+      });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
+  });
   await page.route("**/api/auth/organization/get-organization**", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(workspace) });
   });
@@ -261,6 +348,13 @@ async function expectNoPageOverflow(page: Page) {
       ".artifact-ledger-section",
       ".artifact-table-scroll",
       ".artifact-table",
+      ".admin-shell",
+      ".admin-main",
+      ".admin-content",
+      ".admin-changelog-table-region",
+      ".admin-changelog-table",
+      ".admin-editor-layout",
+      ".admin-preview-paper",
     ].flatMap((selector) => {
       const element = document.querySelector<HTMLElement>(selector);
       if (!element) return [];
@@ -453,6 +547,62 @@ test("product resource routes expose real contract data across required widths",
   }
 });
 
+test("admin changelog routes stay platform-scoped and responsive", async ({ page }) => {
+  test.setTimeout(120_000);
+  await mockAuthenticatedWorkspace(page, { adminAccess: true });
+
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: width <= 390 ? 844 : 900 });
+
+    await page.goto("/admin/changelog");
+    await expect(page.getByRole("heading", { level: 1, name: "Releases" }))
+      .toBeVisible();
+    await expect(page.getByRole("table", {
+      name: "Admin changelog releases, newest first",
+    })).toBeVisible();
+    await expect(page.getByText("Browser test release")).toHaveCount(0);
+    const visibleScope = page.locator(".admin-scope:visible, .admin-mobile-scope:visible");
+    await expect(visibleScope.getByText(/No workspace/)).toBeVisible();
+    await expectNoPageOverflow(page);
+
+    await page.goto(`/admin/changelog/${adminReleaseId}`);
+    await expect(page.getByRole("heading", { level: 1, name: "Edit 1.2.3-test" }))
+      .toBeVisible();
+    await expect(page.getByRole("textbox", { name: /^Title/ }))
+      .toHaveValue("Browser test release");
+    await expectNoPageOverflow(page);
+
+    await page.goto(`/admin/changelog/${adminReleaseId}/preview`);
+    await expect(page.getByRole("heading", { level: 1, name: "1.2.3-test" }))
+      .toBeVisible();
+    await expect(page.getByText("This preview is not a public page.")).toBeVisible();
+    await expectNoPageOverflow(page);
+  }
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/admin/changelog/${adminReleaseId}`);
+  await waitForFonts(page);
+  await page.getByRole("button", { name: "Publish" }).click();
+  await expect(page.getByRole("dialog", {
+    name: "Publish 1.2.3-test to the public changelog?",
+  })).toBeVisible();
+  await expectNoSeriousAxeViolations(page);
+  await page.screenshot({
+    path: path.join(process.cwd(), "artifacts", "screenshots", "admin-changelog-editor-1440.png"),
+    fullPage: true,
+  });
+
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/admin/changelog/${adminReleaseId}/preview`);
+  await waitForFonts(page);
+  await expectNoSeriousAxeViolations(page);
+  await page.screenshot({
+    path: path.join(process.cwd(), "artifacts", "screenshots", "admin-changelog-preview-390.png"),
+    fullPage: true,
+  });
+});
+
 test("MCP consent and workspace screens preserve signed-flow behavior", async ({ page }) => {
   await mockAuthenticatedWorkspace(page);
   await page.route("**/api/auth/oauth2/public-client**", async (route) => {
@@ -600,7 +750,7 @@ test("profile is protected and exposes only current account facts", async ({ pag
 });
 
 test("reduced motion, forced colors, and 200 percent zoom remain usable", async ({ page }) => {
-  await mockSession(page, false);
+  await mockAuthenticatedWorkspace(page, { adminAccess: true });
   await page.emulateMedia({ reducedMotion: "reduce", forcedColors: "active" });
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto("/");
@@ -609,10 +759,27 @@ test("reduced motion, forced colors, and 200 percent zoom remain usable", async 
   );
   expect(animationName).toBe("none");
 
+  await page.goto(`/admin/changelog/${adminReleaseId}`);
+  await expect(page.getByRole("heading", { name: "Edit 1.2.3-test" })).toBeVisible();
+  await page.getByRole("button", { name: "Publish" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  const transitionDuration = await dialog.evaluate((element) =>
+    getComputedStyle(element).transitionDuration
+  );
+  expect(Number.parseFloat(transitionDuration)).toBeLessThanOrEqual(0.00001);
+  await expectNoSeriousAxeViolations(page);
+  await page.keyboard.press("Escape");
+
+  await page.goto(`/admin/changelog/${adminReleaseId}/preview`);
+  await expect(page.getByText("This preview is not a public page.")).toBeVisible();
+  await expectNoPageOverflow(page);
+
   // Browser automation does not expose toolbar zoom. Halving the CSS viewport
   // exercises the same 200% reflow condition without the inaccurate CSS zoom property.
   await page.setViewportSize({ width: 512, height: 450 });
   await page.reload();
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "1.2.3-test" }))
+    .toBeVisible();
   await expectNoPageOverflow(page);
 });
