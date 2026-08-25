@@ -225,7 +225,10 @@ relay.system_role_assignments
 Rules:
 
 - Never grant by email match at ordinary sign-in.
-- Initial grant uses an audited operator command.
+- Initial grant uses the audited one-shot command
+  `relay admin bootstrap-superadmin` with deployment-only `relay_migrator`
+  credentials plus `RELAY_BOOTSTRAP_USER_ID` and
+  `RELAY_BOOTSTRAP_IDEMPOTENCY_KEY` from the operator secret environment.
 - Every privileged request queries a current unrevoked grant.
 - Workspace owner/admin does not imply system permission.
 - System superadmin does not imply membership in every workspace.

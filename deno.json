@@ -26,6 +26,7 @@
     "start:worker": "deno run --env-file=.env --allow-env --allow-net src/main.ts worker",
     "migrate:up": "deno run --env-file=.env --allow-env --allow-net src/main.ts migrate up",
     "migrate:status": "deno run --env-file=.env --allow-env --allow-net src/main.ts migrate status",
+    "admin:bootstrap-superadmin": "deno run --allow-env --allow-net src/main.ts admin bootstrap-superadmin",
     "compile": "deno compile --allow-env --allow-net --output dist/relay src/main.ts",
     "test": "deno test --allow-env --allow-net apps/api apps/worker packages src",
     "check": "deno fmt --check apps packages src && deno lint apps packages src && deno check src/main.ts && deno test --allow-env --allow-net apps/api apps/worker packages src",

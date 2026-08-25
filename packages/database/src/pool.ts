@@ -7,7 +7,8 @@ export type ProcessName =
   | "relay-api"
   | "relay-worker"
   | "relay-migrate"
-  | "relay-healthcheck";
+  | "relay-healthcheck"
+  | "relay-admin";
 
 /**
  * One pool per process. Pool lifetime belongs to process bootstrap;

@@ -10,6 +10,12 @@ case "$command_name" in
   worker)
     expected_service="relay-worker"
     ;;
+  admin)
+    # One-shot admin commands reuse the API image and may inherit its service
+    # label from Compose. The explicit command name is authoritative here.
+    expected_service="relay-admin"
+    OTEL_SERVICE_NAME=""
+    ;;
   migrate | healthcheck)
     expected_service="${OTEL_SERVICE_NAME:-}"
     ;;

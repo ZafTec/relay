@@ -33,11 +33,39 @@ The initial API endpoints are:
 - `GET /version`
 - `GET /api/v1`
 
-Start the placeholder worker in another terminal:
+Start the worker in another terminal:
 
 ```sh
 deno task dev:worker
 ```
+
+## Initial superadmin bootstrap
+
+The first system superadmin is granted by a one-shot operator command, never by
+email matching or an HTTP endpoint. The target user must sign in once so an
+immutable Better Auth user ID exists.
+
+Run the command with these values injected by the deployment secret mechanism:
+
+```text
+DATABASE_URL                         dedicated relay_migrator login
+RELAY_BOOTSTRAP_USER_ID              immutable Better Auth user ID
+RELAY_BOOTSTRAP_IDEMPOTENCY_KEY      16-128 governance-safe characters
+```
+
+Do not place migrator credentials in the API or worker environment, and do not
+put bootstrap values on the command line where task output, shell history, or
+process inspection can expose them.
+
+```sh
+deno task admin:bootstrap-superadmin
+```
+
+The command refuses runtime database credentials, scopes `relay_owner` to one
+transaction, and records the grant and audit event atomically. Keep and reuse
+the exact idempotency key until the command reports success; a matching replay
+is safe. After the first grant, later superadmin changes use the authenticated,
+fresh-session administration boundary.
 
 ## Validation
 

@@ -14,11 +14,19 @@ import {
   MIGRATIONS,
 } from "@relay/database";
 import { createJsonLogger } from "@relay/observability";
+import {
+  BOOTSTRAP_SUPERADMIN_USAGE,
+  BootstrapSuperadminCommandError,
+  type BootstrapSuperadminCommandOptions,
+  bootstrapSuperadminFailureMessage,
+  loadBootstrapSuperadminOptions,
+  runBootstrapSuperadminCommand,
+} from "./commands/bootstrap-superadmin.ts";
 
 const logger = createJsonLogger();
 
 async function run(): Promise<void> {
-  const [service, subcommand] = Deno.args;
+  const [service, subcommand, ...subcommandArguments] = Deno.args;
   loadEnabledObservabilityConfig();
 
   switch (service) {
@@ -88,6 +96,67 @@ async function run(): Promise<void> {
       await pool.end();
       break;
     }
+    case "admin": {
+      if (
+        subcommand !== "bootstrap-superadmin" ||
+        subcommandArguments.length !== 0
+      ) {
+        logger.warn({
+          eventName: "process.usage.invalid",
+          message: BOOTSTRAP_SUPERADMIN_USAGE,
+          operation: "admin.bootstrap_superadmin",
+          outcome: "rejected",
+        });
+        Deno.exit(64);
+      }
+
+      let options: BootstrapSuperadminCommandOptions;
+      try {
+        options = loadBootstrapSuperadminOptions();
+      } catch {
+        logger.warn({
+          eventName: "process.usage.invalid",
+          message: BOOTSTRAP_SUPERADMIN_USAGE,
+          operation: "admin.bootstrap_superadmin",
+          outcome: "rejected",
+        });
+        Deno.exit(64);
+      }
+
+      try {
+        const result = await runBootstrapSuperadminCommand(
+          loadDatabaseConfig(),
+          options,
+        );
+        logger.info({
+          eventName: "admin.bootstrap_superadmin.completed",
+          message: result.kind === "changed"
+            ? "Initial superadmin grant completed"
+            : "Initial superadmin grant replay confirmed",
+          operation: "admin.bootstrap_superadmin",
+          outcome: "success",
+        });
+      } catch (error) {
+        if (error instanceof BootstrapSuperadminCommandError) {
+          logger.error({
+            eventName: `admin.bootstrap_superadmin.${error.reason}`,
+            message: bootstrapSuperadminFailureMessage(error.reason),
+            operation: "admin.bootstrap_superadmin",
+            outcome: "failure",
+          });
+        } else {
+          logger.error({
+            eventName: "admin.bootstrap_superadmin.failed",
+            message: "Initial superadmin grant failed",
+            operation: "admin.bootstrap_superadmin",
+            outcome: "failure",
+            error,
+          });
+        }
+        Deno.exit(1);
+      }
+      break;
+    }
     case "healthcheck": {
       // Runs as its own short-lived invocation of this same binary. The Docker
       // healthcheck goes through the launcher so native OTel sees a fresh
@@ -128,7 +197,7 @@ async function run(): Promise<void> {
     default:
       logger.warn({
         eventName: "process.usage.invalid",
-        message: "Usage: relay <api|worker|migrate|healthcheck>",
+        message: "Usage: relay <api|worker|migrate|admin|healthcheck>",
         operation: "startup",
         outcome: "rejected",
       });
