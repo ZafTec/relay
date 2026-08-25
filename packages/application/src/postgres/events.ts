@@ -20,7 +20,6 @@ const INTERNAL_EVENT_TYPES = [
   "job.started",
   "job.deferred",
   "job.cancel_requested",
-  "job.cancelled",
   "job.terminal",
 ] as const;
 
@@ -54,7 +53,6 @@ function eventFromRow(row: EventRow): WorkspaceEventData {
         runId: row.run_id,
         status: "cancel_requested",
       };
-    case "job.cancelled":
     case "job.terminal":
       return {
         type: "run.completed",

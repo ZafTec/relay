@@ -504,7 +504,7 @@ Deno.test({
         ["job.ready", "job.started", "job.deferred"],
       );
       assertEquals(
-        outbox.rows[1].eligible_at.getTime(),
+        outbox.rows[2].eligible_at.getTime(),
         eligibleAt.getTime(),
         "the deferred outbox event must not be eligible for relay before the job itself is",
       );

@@ -1392,23 +1392,26 @@ export async function requestJobCancellation(
         });
       }
 
-      if (running) {
-        const payload = await loadExecutionOutboxPayload(client, jobId);
-        await client.query(
-          `insert into relay.outbox_events
-             (aggregate_type, aggregate_id, aggregate_version, event_type,
-              payload, deduplication_key)
-           values ('execution_job', $1, $2, 'job.cancel_requested', $3, $4)
-           on conflict (deduplication_key) where deduplication_key is not null
-           do nothing`,
-          [
-            jobId,
-            job.rows[0].state_version,
-            JSON.stringify(payload),
-            `execution-job.${jobId}.cancel.${job.rows[0].state_version}`,
-          ],
-        );
-      } else {
+      const payload = await loadExecutionOutboxPayload(client, jobId);
+      const cancellationEvent = running
+        ? "job.cancel_requested"
+        : "job.cancelled";
+      await client.query(
+        `insert into relay.outbox_events
+           (aggregate_type, aggregate_id, aggregate_version, event_type,
+            payload, deduplication_key)
+         values ('execution_job', $1, $2, $3, $4, $5)
+         on conflict (deduplication_key) where deduplication_key is not null
+         do nothing`,
+        [
+          jobId,
+          job.rows[0].state_version,
+          cancellationEvent,
+          JSON.stringify(payload),
+          `execution-job.${jobId}.cancel.${job.rows[0].state_version}`,
+        ],
+      );
+      if (!running) {
         await insertLifecycleOutbox(
           client,
           jobId,

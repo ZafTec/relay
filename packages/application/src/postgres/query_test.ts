@@ -214,9 +214,12 @@ Deno.test("terminal job outbox rows project to run.completed events", async () =
       nextCursor: null,
     },
   );
+  const publicEventTypes = pool.calls[1].params[2] as string[];
+  assertEquals(publicEventTypes.includes("job.terminal"), true);
   assertEquals(
-    (pool.calls[1].params[2] as string[]).includes("job.terminal"),
-    true,
+    publicEventTypes.includes("job.cancelled"),
+    false,
+    "scheduler-control cancellation events must not duplicate run.completed",
   );
 });
 
