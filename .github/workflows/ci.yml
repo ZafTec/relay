@@ -112,7 +112,7 @@ jobs:
       - name: Run isolated live and container checks
         run: deno task check:containers
       - name: Scan backend image
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           scan-type: image
           image-ref: ${{ env.RELAY_CI_BACKEND_IMAGE }}
@@ -123,7 +123,7 @@ jobs:
           exit-code: "1"
           format: table
       - name: Scan web image
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           scan-type: image
           image-ref: ${{ env.RELAY_CI_WEB_IMAGE }}
@@ -159,7 +159,7 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.repository.private == true && vars.RELAY_DEPENDENCY_REVIEW_ENABLED != 'true'
         run: echo "Dependency review requires GitHub Advanced Security for private repositories; set RELAY_DEPENDENCY_REVIEW_ENABLED=true after enabling it. The required Trivy scan still inspects lockfiles."
       - name: Scan source, lockfiles, secrets, and configuration
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           scan-type: fs
           scan-ref: .
