@@ -13,6 +13,7 @@ import { LoadingPageState } from "../components/ui/PageState";
 import { Skeleton } from "../components/ui/Skeleton";
 import { SignInPage } from "../features/auth/SignInPage";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
+import { ChangelogEntryPage } from "../features/changelog/ChangelogEntryPage";
 import { ChangelogPage } from "../features/changelog/ChangelogPage";
 import { DocsPage } from "../features/docs/DocsPage";
 import { LandingPage } from "../features/landing/LandingPage";
@@ -99,6 +100,11 @@ export const relayRoutes = [
   {
     path: "/changelog",
     element: <ChangelogPage />,
+    errorElement: <RouteErrorPage />,
+  },
+  {
+    path: "/changelog/:slug",
+    element: <ChangelogEntryPage />,
     errorElement: <RouteErrorPage />,
   },
   {

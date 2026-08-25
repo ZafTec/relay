@@ -914,9 +914,9 @@ code {
 }
 
 .public-footer {
-  border-top: 1px solid var(--relay-product-border);
-  background: var(--relay-product-bg);
-  color: var(--relay-product-ink-muted);
+  border-top: 1px solid var(--surface-border);
+  background: var(--surface-bg);
+  color: var(--surface-muted);
 }
 
 .public-footer__inner {
@@ -931,7 +931,7 @@ code {
 .public-footer__brand p {
   max-width: 48ch;
   margin: 10px 0 0;
-  color: var(--relay-product-ink-secondary);
+  color: var(--surface-copy);
   font-size: 0.86rem;
   line-height: 1.6;
 }
@@ -951,7 +951,7 @@ code {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
-  color: var(--relay-product-ink-muted);
+  color: var(--surface-muted);
 }
 
 
@@ -1791,6 +1791,22 @@ code {
 }
 
 @media (forced-colors: active) {
+  .public-surface,
+  .product-surface {
+    --surface-bg: Canvas;
+    --surface-bg-alt: Canvas;
+    --surface-panel: Canvas;
+    --surface-border: CanvasText;
+    --surface-border-strong: CanvasText;
+    --surface-ink: CanvasText;
+    --surface-copy: CanvasText;
+    --surface-muted: CanvasText;
+    --surface-accent: LinkText;
+    --surface-accent-hover: LinkText;
+    --surface-accent-ink: Canvas;
+    --surface-focus: Highlight;
+  }
+
   :focus-visible {
     outline-color: Highlight;
   }

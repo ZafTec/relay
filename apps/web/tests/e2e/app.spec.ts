@@ -161,6 +161,25 @@ const browserAdminRelease = {
   published: null,
 };
 
+const browserPublicRelease = {
+  ...browserAdminSnapshot,
+  slug: "browser-public-release",
+  title: "Browser public release",
+  summary: "A test-only published release used for responsive browser coverage.",
+  items: [
+    ...browserAdminSnapshot.items,
+    {
+      category: "security",
+      area: "Web",
+      title: "Forced-colors category coverage",
+      description: "A test-only item verifies non-color category treatment.",
+      sortOrder: 1,
+    },
+  ],
+  revision: 1,
+  publishedAt: "2030-01-01T00:05:00.000Z",
+};
+
 async function mockSession(page: Page, authenticated: boolean) {
   await page.route("**/api/auth/get-session**", async (route) => {
     await route.fulfill({
@@ -294,10 +313,15 @@ async function mockRegistryResources(page: Page) {
 
 async function mockPublicInformation(page: Page) {
   await page.route("**/api/v1/changelog**", async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ entries: [], nextCursor: null }),
+      body: JSON.stringify(
+        pathname === `/api/v1/changelog/${browserPublicRelease.slug}`
+          ? browserPublicRelease
+          : { entries: [], nextCursor: null },
+      ),
     });
   });
   await page.route("**/health/ready", async (route) => {
@@ -654,6 +678,7 @@ test("public information routes stay factual, searchable, and responsive", async
 
   const routes = [
     { path: "/changelog", heading: "Changelog" },
+    { path: `/changelog/${browserPublicRelease.slug}`, heading: "1.2.3-test" },
     { path: "/docs", heading: "Quickstart" },
     { path: "/status", heading: "All reported checks operational" },
   ] as const;
@@ -751,6 +776,7 @@ test("profile is protected and exposes only current account facts", async ({ pag
 
 test("reduced motion, forced colors, and 200 percent zoom remain usable", async ({ page }) => {
   await mockAuthenticatedWorkspace(page, { adminAccess: true });
+  await mockPublicInformation(page);
   await page.emulateMedia({ reducedMotion: "reduce", forcedColors: "active" });
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto("/");
@@ -758,6 +784,13 @@ test("reduced motion, forced colors, and 200 percent zoom remain usable", async 
     getComputedStyle(element).animationName
   );
   expect(animationName).toBe("none");
+
+  await page.goto(`/changelog/${browserPublicRelease.slug}`);
+  await expect(page.getByRole("heading", { level: 1, name: "1.2.3-test" }))
+    .toBeVisible();
+  await expect(page.getByText("Security", { exact: true }).first()).toBeVisible();
+  await expectNoPageOverflow(page);
+  await expectNoSeriousAxeViolations(page);
 
   await page.goto(`/admin/changelog/${adminReleaseId}`);
   await expect(page.getByRole("heading", { name: "Edit 1.2.3-test" })).toBeVisible();

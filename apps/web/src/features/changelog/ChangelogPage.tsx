@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { usePageMetadata } from "../../app/usePageMetadata";
 import { PublicLayout } from "../../components/layout/PublicLayout";
 import { Button } from "../../components/ui/Button";
@@ -14,8 +15,11 @@ import {
   type ChangelogRelease,
   httpChangelogAdapter,
 } from "../../lib/api/changelog";
+import {
+  CHANGELOG_CATEGORY_LABELS,
+  changelogDateLabel,
+} from "./presenter";
 import "./changelog.css";
-
 
 type ChangelogFilter = "all" | ChangelogCategory;
 type ChangelogPageState = ChangelogLoadResult | { readonly kind: "loading" };
@@ -23,11 +27,7 @@ type ChangelogPageState = ChangelogLoadResult | { readonly kind: "loading" };
 const FILTERS: readonly ChangelogFilter[] = ["all", ...CHANGELOG_CATEGORIES];
 const FILTER_LABELS: Record<ChangelogFilter, string> = {
   all: "All",
-  added: "Added",
-  improved: "Improved",
-  fixed: "Fixed",
-  security: "Security",
-  breaking: "Breaking",
+  ...CHANGELOG_CATEGORY_LABELS,
 };
 
 interface ChangelogPageProps {
@@ -39,10 +39,6 @@ interface VisibleRelease {
   readonly items: readonly ChangelogItem[];
 }
 
-function dateLabel(value: string): string {
-  const parsed = new Date(value);
-  return Number.isFinite(parsed.getTime()) ? parsed.toISOString().slice(0, 10) : value;
-}
 
 function sourceMetadata(release: ChangelogRelease) {
   if (release.gitTag === null && release.commitSha === null) return null;
@@ -80,16 +76,20 @@ function ReleaseItem({ item }: { item: ChangelogItem }) {
   );
 }
 
-function ReleaseArticle({ release, items, index }: VisibleRelease & { index: number }) {
-  const headingId = `changelog-release-${index}`;
+function ReleaseArticle({ release, items }: VisibleRelease) {
+  const headingId = `changelog-release-${release.slug}`;
 
   return (
     <article className="changelog-release" aria-labelledby={headingId}>
       <header className="changelog-release__metadata">
-        <h2 id={headingId}>{release.version}</h2>
+        <h2 id={headingId}>
+          <Link className="changelog-release__link" to={`/changelog/${release.slug}`}>
+            {release.version}
+          </Link>
+        </h2>
         <p className="changelog-release__title">{release.title}</p>
         {release.releasedAt !== null ? (
-          <time dateTime={release.releasedAt}>{dateLabel(release.releasedAt)}</time>
+          <time dateTime={release.releasedAt}>{changelogDateLabel(release.releasedAt)}</time>
         ) : null}
         {sourceMetadata(release)}
       </header>
@@ -226,9 +226,8 @@ export function ChangelogPage({
 
             {state.kind === "populated" && visibleReleases.length > 0 ? (
               <div className="changelog-release-list">
-                {visibleReleases.map(({ release, items }, index) => (
+                {visibleReleases.map(({ release, items }) => (
                   <ReleaseArticle
-                    index={index}
                     items={items}
                     key={release.slug}
                     release={release}
