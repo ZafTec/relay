@@ -1,13 +1,9 @@
-import { startApi } from "../apps/api/src/server.ts";
-import { createExecutionHandlerRegistry, startWorker } from "@relay/worker";
 import {
   loadBuildInfo,
   loadDatabaseConfig,
   loadEnabledObservabilityConfig,
 } from "@relay/config";
 import {
-  checkDatabaseHealth,
-  checkMigrationLedgerHealth,
   createDatabasePool,
   migrateStatus,
   migrateUp,
@@ -31,13 +27,14 @@ async function run(): Promise<void> {
 
   switch (service) {
     case "api": {
-      const server = startApi(undefined, { logger });
+      const { startMvpApi } = await import("@relay/api/composition");
+      const server = await startMvpApi({ logger });
       await server.finished;
       break;
     }
     case "worker": {
-      const handlers = createExecutionHandlerRegistry();
-      await startWorker(undefined, { handlerRegistry: handlers, logger });
+      const { startMvpWorker } = await import("@relay/worker/composition");
+      await startMvpWorker({ logger });
       break;
     }
     case "migrate": {
@@ -158,28 +155,22 @@ async function run(): Promise<void> {
       break;
     }
     case "healthcheck": {
-      // Runs as its own short-lived invocation of this same binary. The Docker
-      // healthcheck goes through the launcher so native OTel sees a fresh
-      // process instance ID before this module loads.
-      const databaseConfig = loadDatabaseConfig();
-      const pool = createDatabasePool(databaseConfig, "relay-healthcheck");
-
+      // Dynamically loaded so migrate remains a database-only command and does
+      // not initialize the Redis/S3 health-check dependency graph.
+      const { runContainerHealthcheck } = await import("./healthcheck.ts");
       try {
-        const checks = [
-          await checkDatabaseHealth(pool),
-          await checkMigrationLedgerHealth(pool, MIGRATIONS),
-        ];
-        const healthy = checks.every((check) => check.status === "ok");
+        const result = await runContainerHealthcheck();
         const event = {
           eventName: "healthcheck.completed",
-          message: healthy ? "Health check passed" : "Health check failed",
+          message: result.healthy
+            ? "Health check passed"
+            : "Health check failed",
           operation: "healthcheck",
-          outcome: healthy ? "success" as const : "failure" as const,
+          outcome: result.healthy ? "success" as const : "failure" as const,
         };
-        if (healthy) logger.info(event);
+        if (result.healthy) logger.info(event);
         else logger.error({ ...event, errorType: "dependency" });
-        await pool.end();
-        Deno.exit(healthy ? 0 : 1);
+        Deno.exit(result.healthy ? 0 : 1);
       } catch (error) {
         logger.error({
           eventName: "healthcheck.failed",
@@ -189,7 +180,6 @@ async function run(): Promise<void> {
           error,
           errorType: "dependency",
         });
-        await pool.end();
         Deno.exit(1);
       }
       break;

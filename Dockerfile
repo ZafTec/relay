@@ -72,14 +72,11 @@ LABEL org.opencontainers.image.title="Relay" \
 USER 65532:65532
 EXPOSE 8000
 
-# Execs the compiled binary's own `healthcheck` command rather than
-# curling the api process's /health/ready over the network -- works
-# identically for the api and worker images (both depend on PostgreSQL
-# reachability and migration state, neither dependency needs an HTTP
-# round trip to check), needs no extra tooling in this image, and never
-# exposes readiness on the network for a container-local check per
-# 09-ci-release-deployment.md's "Do not publicly expose readiness unless
-# there is a deliberate operational need."
+# Execs the compiled binary's own role-aware `healthcheck` command rather than
+# curling the API process over the network. RELAY_PROCESS_ROLE is set explicitly
+# by Compose for API/worker containers; each probe checks PostgreSQL and the
+# migration ledger, Redis, and its role-scoped MinIO credentials/bucket
+# versioning. The one-shot migration service disables this image healthcheck.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["/app/relay-entrypoint", "healthcheck"]
 
