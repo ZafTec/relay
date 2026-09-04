@@ -1,8 +1,9 @@
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals, assertExists, assertMatch } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import type { TracePropagationApi } from "@relay/observability";
 import pg from "pg";
 import {
+  type AdmissionUsagePort,
   type AdmitRunInput,
   admitToolRun as admitToolRunWithDependencies,
 } from "./admission.ts";
@@ -811,12 +812,21 @@ Deno.test({
       const result = await admitToolRunWithDependencies(pool, input, {
         handlers: f.handlers,
         usage: {
-          quote: () =>
-            Promise.resolve({
+          quote: (_client, request) => {
+            assertEquals(request.runIdempotencyKey, input.idempotencyKey);
+            return Promise.resolve({
               estimatedCostUnits: 3,
               policyKey: "test-meter-policy:v1",
-            }),
-          reserve: () => Promise.resolve(null),
+              measures: {
+                requested_units: {
+                  minimum: "1",
+                  expected: "1",
+                  maximum: "1",
+                },
+              },
+            });
+          },
+          reserve: TEST_USAGE_PORT.reserve,
         },
       });
       assertEquals(result.kind, "admitted");
@@ -839,7 +849,52 @@ Deno.test({
         "select reservation_id from relay.tool_runs where id = $1",
         [result.runId],
       );
-      assertEquals(run.rows[0].reservation_id, null);
+      assertMatch(
+        run.rows[0].reservation_id!,
+        /^reservation_[0-9a-f]{32}$/,
+      );
+    } finally {
+      if (f) await cleanupAdmissibleFixture(pool, f);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "admission fails closed when usage returns no reservation",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let f: AdmissibleFixture | undefined;
+    try {
+      f = await createAdmissibleFixture(pool);
+      const result = await admitToolRunWithDependencies(pool, baseInput(f), {
+        handlers: f.handlers,
+        usage: {
+          quote: () =>
+            Promise.resolve({
+              estimatedCostUnits: 1,
+              policyKey: "invalid-null-reservation",
+              measures: {
+                requested_units: {
+                  minimum: "1",
+                  expected: "1",
+                  maximum: "1",
+                },
+              },
+            }),
+          reserve: () => Promise.resolve(null),
+        },
+      });
+      assertEquals(result, {
+        kind: "usage_unavailable",
+        reason: "invalid_configuration",
+      });
+      const runs = await pool.query(
+        "select id from relay.tool_runs where workspace_id = $1",
+        [f.workspaceId],
+      );
+      assertEquals(runs.rows.length, 0);
     } finally {
       if (f) await cleanupAdmissibleFixture(pool, f);
       await pool.end();
@@ -859,11 +914,22 @@ Deno.test({
       const input = baseInput(f, { idempotencyKey: unique("idem-usage") });
       let policyKey = "usage-policy:v1";
       let reservations = 0;
-      const usage = {
-        quote: () => Promise.resolve({ estimatedCostUnits: 2, policyKey }),
-        reserve: () => {
+      const usage: AdmissionUsagePort = {
+        quote: () =>
+          Promise.resolve({
+            estimatedCostUnits: 2,
+            policyKey,
+            measures: {
+              requested_units: {
+                minimum: "1",
+                expected: "1",
+                maximum: "1",
+              },
+            },
+          }),
+        reserve: (client, request, quote) => {
           reservations += 1;
-          return Promise.resolve(null);
+          return TEST_USAGE_PORT.reserve(client, request, quote);
         },
       };
       const first = await admitToolRunWithDependencies(pool, input, {

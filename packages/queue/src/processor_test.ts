@@ -263,6 +263,8 @@ Deno.test({
         Promise.resolve({
           kind: "failed",
           retryClassification: "provider_transient",
+          retryable: true,
+          failureCode: "provider_temporarily_unavailable",
           error: "temporary provider failure",
         }));
 
@@ -285,6 +287,120 @@ Deno.test({
         deferral_count: 0,
         dispatch_generation: 1,
       });
+      const attempt = await pool.query<{
+        outcome: string;
+        retry_classification: string;
+        failure_code: string;
+      }>(
+        `select outcome, retry_classification, failure_code
+           from relay.job_attempts where job_id = $1`,
+        [admitted.jobId],
+      );
+      assertEquals(attempt.rows[0], {
+        outcome: "retry_scheduled",
+        retry_classification: "provider_transient",
+        failure_code: "provider_temporarily_unavailable",
+      });
+      assertEquals(capacity.releaseCount, 1);
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "generic provider failures are terminal unless the handler opts into retry",
+  ignore: databaseUrl === undefined,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      const capacity = new FakeCapacityController();
+      const execution = processor(pool, capacity, () =>
+        Promise.resolve({
+          kind: "failed",
+          retryClassification: "provider_transient",
+          error: "unknown submission outcome",
+        }));
+
+      assertEquals(await execution.process({ data: admitted.ticket }), {
+        kind: "failed",
+      });
+      const job = await pool.query<{
+        status: string;
+        dispatch_generation: number;
+      }>(
+        `select status, dispatch_generation
+           from relay.execution_jobs where id = $1`,
+        [admitted.jobId],
+      );
+      assertEquals(job.rows[0], {
+        status: "failed",
+        dispatch_generation: 0,
+      });
+      assertEquals(capacity.releaseCount, 1);
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "an ambiguous submission without an operation id is never retried",
+  ignore: databaseUrl === undefined,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      const capacity = new FakeCapacityController();
+      const execution = processor(pool, capacity, () =>
+        Promise.resolve({
+          kind: "failed",
+          retryClassification: "submission_ambiguous",
+          retryable: true,
+          failureCode: "unsafe_handler_code",
+          error: "the POST response was lost",
+        }));
+
+      assertEquals(await execution.process({ data: admitted.ticket }), {
+        kind: "failed",
+      });
+      const job = await pool.query<{
+        status: string;
+        dispatch_generation: number;
+      }>(
+        `select status, dispatch_generation
+           from relay.execution_jobs where id = $1`,
+        [admitted.jobId],
+      );
+      assertEquals(job.rows[0], {
+        status: "failed",
+        dispatch_generation: 0,
+      });
+      const attempt = await pool.query<{
+        submission_state: string;
+        outcome: string;
+        retry_classification: string;
+        failure_code: string;
+        provider_operation_id: string | null;
+      }>(
+        `select submission_state, outcome, retry_classification,
+                failure_code, provider_operation_id
+           from relay.job_attempts where job_id = $1`,
+        [admitted.jobId],
+      );
+      assertEquals(attempt.rows[0], {
+        submission_state: "ambiguous",
+        outcome: "failed",
+        retry_classification: "submission_ambiguous",
+        failure_code: "provider_submission_ambiguous",
+        provider_operation_id: null,
+      });
       assertEquals(capacity.releaseCount, 1);
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
@@ -302,14 +418,20 @@ Deno.test({
     try {
       admitted = await admitJob(pool);
       const capacity = new FakeCapacityController();
+      let terminalFinalizations = 0;
       const execution = processor(
         pool,
         capacity,
         () =>
           Promise.resolve({
             kind: "failed",
-            retryClassification: "provider_transient",
+            retryClassification: "provider_rate_limited" as const,
+            retryAt: new Date(Date.now() + 100),
             error: "still unavailable",
+            finalizeTerminalFailure: () => {
+              terminalFinalizations += 1;
+              return Promise.resolve();
+            },
           }),
         10_000,
         { maxExecutionAttempts: 1 },
@@ -332,6 +454,7 @@ Deno.test({
         attempt_count: 1,
         dispatch_generation: 0,
       });
+      assertEquals(terminalFinalizations, 1);
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();
@@ -349,6 +472,7 @@ Deno.test({
       admitted = await admitJob(pool);
       const capacity = new FakeCapacityController();
       let retryAt: Date | undefined;
+      let terminalFinalizations = 0;
       const execution = processor(pool, capacity, () => {
         retryAt = new Date(Date.now() + 100);
         return Promise.resolve({
@@ -356,6 +480,10 @@ Deno.test({
           retryClassification: "provider_rate_limited" as const,
           retryAt,
           error: "retry later",
+          finalizeTerminalFailure: () => {
+            terminalFinalizations += 1;
+            return Promise.resolve();
+          },
         });
       });
 
@@ -363,6 +491,23 @@ Deno.test({
         kind: "retry_scheduled",
       });
       assertEquals(capacity.cooldowns, [retryAt!]);
+      assertEquals(terminalFinalizations, 0);
+      const scheduled = await pool.query<{
+        eligible_at: Date;
+        attempt_deadline_at: Date;
+      }>(
+        `select eligible_at, attempt_deadline_at
+           from relay.execution_jobs where id = $1`,
+        [admitted.jobId],
+      );
+      assertEquals(
+        scheduled.rows[0].eligible_at.getTime() >= retryAt!.getTime(),
+        true,
+      );
+      assertEquals(
+        scheduled.rows[0].eligible_at < scheduled.rows[0].attempt_deadline_at,
+        true,
+      );
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();

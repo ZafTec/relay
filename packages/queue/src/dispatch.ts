@@ -26,6 +26,13 @@ const DEFAULT_EXECUTION_CAPACITY_LIMITS: ExecutionCapacityLimits = {
   workspaceTool: 1,
 };
 
+export interface SubmissionRatePolicy {
+  readonly providerPerMinute: number | null;
+  readonly toolPerMinute: number | null;
+  readonly capacityPoolRevision: number | null;
+  readonly toolRevision: number | null;
+}
+
 export interface ClaimedJob {
   readonly jobId: string;
   readonly runId: string;
@@ -35,12 +42,14 @@ export interface ClaimedJob {
   readonly toolVersionId: string;
   readonly toolId: string;
   readonly toolKey: string;
+  readonly providerModelId: string;
   readonly capacityPoolId: string;
   readonly capacityPoolKey: string;
   readonly capacityUnits: number;
   readonly policyVersion: number;
   readonly capacityPolicyRevision: number | null;
   readonly capacityLimits: ExecutionCapacityLimits;
+  readonly submissionRatePolicy: SubmissionRatePolicy;
   /** Guides resume/inspect behavior after an interrupted or retryable attempt. */
   readonly previousRetryClassification: string | null;
   readonly previousProviderOperationId: string | null;
@@ -68,12 +77,14 @@ interface ClaimedJobDbRow {
   scheduling_policy_version: number;
   tool_id: string;
   tool_key: string;
+  provider_model_id: string;
   capacity_pool_id: string;
   capacity_pool_key: string;
   estimated_cost_units: string | number | null;
 }
 
 interface CapacityPolicyDbRow {
+  scope_type: "capacity_pool" | "tool";
   revision: number;
   configuration: unknown;
 }
@@ -112,6 +123,98 @@ function parseExecutionCapacityLimits(
   };
 }
 
+function policyConfiguration(
+  policy: CapacityPolicyDbRow,
+): Record<string, unknown> {
+  if (
+    policy.configuration === null ||
+    typeof policy.configuration !== "object" ||
+    Array.isArray(policy.configuration)
+  ) {
+    throw new Error(
+      `Current ${policy.scope_type} capacity policy revision ${policy.revision} has invalid configuration`,
+    );
+  }
+  return policy.configuration as Record<string, unknown>;
+}
+
+function positiveIntegerRate(value: unknown, field: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) <= 0) {
+    throw new Error(`${field} must be a positive integer`);
+  }
+  return value as number;
+}
+
+function submissionRateDefaults(
+  policy: CapacityPolicyDbRow,
+  required: boolean,
+): {
+  readonly providerPerMinute: number | null;
+  readonly toolPerMinute: number | null;
+} {
+  const configuration = policyConfiguration(policy);
+  const defaults = configuration.submissionRateDefaults;
+  if (defaults === undefined && !required) {
+    return { providerPerMinute: null, toolPerMinute: null };
+  }
+  if (
+    defaults === null || typeof defaults !== "object" || Array.isArray(defaults)
+  ) {
+    throw new Error(
+      `Current ${policy.scope_type} capacity policy revision ${policy.revision} has invalid submissionRateDefaults`,
+    );
+  }
+  const rates = defaults as Record<string, unknown>;
+  const providerPerMinute = rates.providerPerMinute === undefined
+    ? null
+    : positiveIntegerRate(
+      rates.providerPerMinute,
+      `${policy.scope_type} submissionRateDefaults.providerPerMinute`,
+    );
+  const toolPerMinute = rates.toolPerMinute === undefined
+    ? null
+    : positiveIntegerRate(
+      rates.toolPerMinute,
+      `${policy.scope_type} submissionRateDefaults.toolPerMinute`,
+    );
+  if (required && providerPerMinute === null) {
+    throw new Error(
+      `${policy.scope_type} submissionRateDefaults.providerPerMinute must be a positive integer`,
+    );
+  }
+  return { providerPerMinute, toolPerMinute };
+}
+
+export function parseSubmissionRatePolicy(
+  capacityPoolPolicy: {
+    readonly revision: number;
+    readonly configuration: unknown;
+  } | null,
+  toolPolicy: {
+    readonly revision: number;
+    readonly configuration: unknown;
+  } | null,
+): SubmissionRatePolicy {
+  const capacityPoolRates = capacityPoolPolicy === null
+    ? { providerPerMinute: null, toolPerMinute: null }
+    : submissionRateDefaults(
+      { ...capacityPoolPolicy, scope_type: "capacity_pool" },
+      true,
+    );
+  const toolRates = toolPolicy === null
+    ? { providerPerMinute: null, toolPerMinute: null }
+    : submissionRateDefaults(
+      { ...toolPolicy, scope_type: "tool" },
+      false,
+    );
+  return {
+    providerPerMinute: capacityPoolRates.providerPerMinute,
+    toolPerMinute: toolRates.toolPerMinute ?? capacityPoolRates.toolPerMinute,
+    capacityPoolRevision: capacityPoolPolicy?.revision ?? null,
+    toolRevision: toolPolicy?.revision ?? null,
+  };
+}
+
 async function resolveExecutionCapacityPolicy(
   client: pg.PoolClient,
   toolId: string,
@@ -119,9 +222,10 @@ async function resolveExecutionCapacityPolicy(
 ): Promise<{
   revision: number | null;
   limits: ExecutionCapacityLimits;
+  submissionRates: SubmissionRatePolicy;
 }> {
   const { rows } = await client.query<CapacityPolicyDbRow>(
-    `select revision, configuration
+    `select distinct on (scope_type) scope_type, revision, configuration
        from relay.capacity_policies
       where effective_at <= now()
         and (expires_at is null or expires_at > now())
@@ -129,17 +233,26 @@ async function resolveExecutionCapacityPolicy(
           (scope_type = 'capacity_pool' and scope_id = $1)
           or (scope_type = 'tool' and scope_id = $2)
         )
-      order by case when scope_type = 'capacity_pool' then 0 else 1 end,
-               revision desc
-      limit 1`,
+      order by scope_type, revision desc`,
     [capacityPoolId, toolId],
   );
-  if (rows.length === 0) {
-    return { revision: null, limits: DEFAULT_EXECUTION_CAPACITY_LIMITS };
-  }
+  const capacityPoolPolicy = rows.find((row: CapacityPolicyDbRow) =>
+    row.scope_type === "capacity_pool"
+  );
+  const toolPolicy = rows.find((row: CapacityPolicyDbRow) =>
+    row.scope_type === "tool"
+  );
+  const concurrencyPolicy = capacityPoolPolicy ?? toolPolicy;
+
   return {
-    revision: rows[0].revision,
-    limits: parseExecutionCapacityLimits(rows[0].configuration),
+    revision: concurrencyPolicy?.revision ?? null,
+    limits: concurrencyPolicy === undefined
+      ? DEFAULT_EXECUTION_CAPACITY_LIMITS
+      : parseExecutionCapacityLimits(concurrencyPolicy.configuration),
+    submissionRates: parseSubmissionRatePolicy(
+      capacityPoolPolicy ?? null,
+      toolPolicy ?? null,
+    ),
   };
 }
 
@@ -167,7 +280,8 @@ export async function claimJobForDispatch(
                 lease_expires_at = now() + ($3 || ' milliseconds')::interval,
                 scheduler_ticket_token = null,
                 state_version = j.state_version + 1
-           from relay.tool_versions tv, relay.tools t, relay.capacity_pools cp
+           from relay.tool_versions tv, relay.tools t, relay.capacity_pools cp,
+                relay.routing_decisions rd
           where j.id = $1
             and j.dispatch_generation = $4
             and j.scheduling_policy_version = $5
@@ -190,11 +304,15 @@ export async function claimJobForDispatch(
             and t.lifecycle not in ('disabled', 'retired')
             and cp.id = j.capacity_pool_id
             and cp.enabled = true
+            and rd.tool_run_id = j.run_id
+            and rd.tool_version_id = j.tool_version_id
+            and rd.capacity_pool_id = j.capacity_pool_id
           returning j.id, j.run_id, j.workspace_id, j.tool_version_id,
                     j.lease_epoch, j.dispatch_generation, j.state_version,
                     j.scheduling_policy_version, t.id as tool_id,
-                    t.key as tool_key, cp.id as capacity_pool_id,
-                    cp.key as capacity_pool_key, j.estimated_cost_units`,
+                    t.key as tool_key, rd.provider_model_id,
+                    cp.id as capacity_pool_id, cp.key as capacity_pool_key,
+                    j.estimated_cost_units`,
         [
           ticket.domainJobId,
           leaseOwner,
@@ -258,12 +376,14 @@ export async function claimJobForDispatch(
           toolVersionId: row.tool_version_id,
           toolId: row.tool_id,
           toolKey: row.tool_key,
+          providerModelId: String(row.provider_model_id),
           capacityPoolId: String(row.capacity_pool_id),
           capacityPoolKey: row.capacity_pool_key,
           capacityUnits: positiveLimit(row.estimated_cost_units, 1),
           policyVersion: row.scheduling_policy_version,
           capacityPolicyRevision: policy.revision,
           capacityLimits: policy.limits,
+          submissionRatePolicy: policy.submissionRates,
           previousRetryClassification:
             previousAttempt.rows[0]?.retry_classification ?? null,
           previousProviderOperationId:
@@ -994,6 +1114,7 @@ export async function retryJob(
   attemptDeadlineAt: Date,
   retryClassification: string,
   error: unknown,
+  failureCode?: string,
 ): Promise<boolean> {
   const client = await pool.connect();
   try {
@@ -1036,7 +1157,8 @@ export async function retryJob(
                 finished_at = now(),
                 outcome = 'retry_scheduled',
                 retry_classification = $4,
-                sanitized_error = $5
+                sanitized_error = $5,
+                failure_code = $6
           where id = $1 and job_id = $2 and lease_epoch = $3
             and finished_at is null
           returning id`,
@@ -1046,6 +1168,7 @@ export async function retryJob(
           leaseEpoch,
           retryClassification,
           sanitizeError(error),
+          failureCode ?? null,
         ],
       );
       requireExactlyOne(attempt.rows, "finish retryable job attempt");
@@ -1132,6 +1255,7 @@ interface TerminalTransitionInput {
   readonly outcome: string;
   readonly retryClassification: string | null;
   readonly sanitizedError: string | null;
+  readonly failureCode: string | null;
 }
 
 async function transitionJobToTerminal(
@@ -1176,7 +1300,8 @@ async function transitionJobToTerminal(
                   finished_at = now(),
                   outcome = $5,
                   retry_classification = $6,
-                  sanitized_error = $7
+                  sanitized_error = $7,
+                  failure_code = $8
             where id = $1 and job_id = $2 and lease_epoch = $3
               and finished_at is null
             returning id`,
@@ -1188,6 +1313,7 @@ async function transitionJobToTerminal(
             input.outcome,
             input.retryClassification,
             input.sanitizedError,
+            input.failureCode,
           ],
         );
         requireExactlyOne(attempt.rows, "finish terminal job attempt");
@@ -1270,6 +1396,7 @@ export async function completeJobSuccessfully(
     outcome: "succeeded",
     retryClassification: null,
     sanitizedError: null,
+    failureCode: null,
   });
 }
 
@@ -1281,15 +1408,20 @@ export async function failJob(
   leaseOwner: string,
   retryClassification: string,
   error: unknown,
+  failureCode?: string,
 ): Promise<boolean> {
+  const ambiguousSubmission = retryClassification === "submission_ambiguous";
   return await transitionJobToTerminal(pool, jobId, leaseEpoch, leaseOwner, {
     status: "failed",
     allowedStatuses: ["running"],
     attemptId,
-    submissionState: "completed",
+    submissionState: ambiguousSubmission ? "ambiguous" : "completed",
     outcome: "failed",
     retryClassification,
     sanitizedError: sanitizeError(error),
+    failureCode: ambiguousSubmission
+      ? "provider_submission_ambiguous"
+      : failureCode ?? null,
   });
 }
 
@@ -1308,6 +1440,7 @@ export async function completeJobCancellation(
     outcome: "cancelled",
     retryClassification: null,
     sanitizedError: null,
+    failureCode: null,
   });
 }
 
@@ -1598,6 +1731,12 @@ export async function recoverExpiredJobLeases(
         capacity_lease_owner: string | null;
         capacity_units: string | number | null;
         current_attempt_id: string | null;
+        current_attempt_submission_state:
+          | "pending"
+          | "submitting"
+          | "submitted"
+          | null;
+        current_attempt_provider_operation_id: string | null;
       }>(
         `select j.id, j.run_id, j.workspace_id, j.tool_version_id, j.status,
                 j.lease_epoch, j.dispatch_generation,
@@ -1608,7 +1747,9 @@ export async function recoverExpiredJobLeases(
                 cl.expires_at as capacity_expires_at,
                 cl.lease_owner as capacity_lease_owner,
                 cl.units as capacity_units,
-                current_attempt.id as current_attempt_id
+                current_attempt.id as current_attempt_id,
+                current_attempt.submission_state as current_attempt_submission_state,
+                current_attempt.provider_operation_id as current_attempt_provider_operation_id
            from relay.execution_jobs j
            join relay.capacity_pools cp on cp.id = j.capacity_pool_id
            left join relay.execution_capacity_leases cl
@@ -1630,11 +1771,42 @@ export async function recoverExpiredJobLeases(
           row.run_deadline_at <= effectiveNow) ||
           (row.attempt_count === 0 && row.admission_deadline_at !== null &&
             row.admission_deadline_at <= effectiveNow);
-        const target = row.status === "cancel_requested"
+        const ambiguousSubmission = row.current_attempt_id !== null &&
+          (row.current_attempt_submission_state === "submitting" ||
+            row.current_attempt_submission_state === "submitted") &&
+          row.current_attempt_provider_operation_id === null;
+        const target = ambiguousSubmission
+          ? "failed"
+          : row.status === "cancel_requested"
           ? "cancelled"
           : deadlineExpired
           ? "failed"
           : "queued";
+        const recoveredSubmissionState = target === "cancelled"
+          ? "cancelled"
+          : ambiguousSubmission
+          ? "ambiguous"
+          : "interrupted";
+        const recoveredOutcome = target === "cancelled"
+          ? "cancelled"
+          : ambiguousSubmission
+          ? "failed"
+          : "worker_stalled";
+        const recoveredRetryClassification = ambiguousSubmission
+          ? "submission_ambiguous"
+          : target === "failed"
+          ? "deadline_exceeded"
+          : row.current_attempt_provider_operation_id === null
+          ? "pre_submission_failure"
+          : "submission_confirmed";
+        const recoveredFailureCode = ambiguousSubmission
+          ? "provider_submission_ambiguous"
+          : null;
+        const recoveredError = ambiguousSubmission
+          ? "Provider submission outcome is ambiguous after stalled-worker recovery"
+          : target === "failed"
+          ? "Execution deadline expired during stalled-worker recovery"
+          : null;
         const nextGeneration = row.dispatch_generation +
           (target === "queued" ? 1 : 0);
         const retryDeadline = new Date(effectiveNow.getTime() + retryWaitMs);
@@ -1668,28 +1840,24 @@ export async function recoverExpiredJobLeases(
         requireExactlyOne(job.rows, "recover expired execution job lease");
         const attempt = await client.query<{ id: string }>(
           `update relay.job_attempts
-              set submission_state = case
-                    when $3 = 'cancelled' then 'cancelled'
-                    else 'interrupted'
-                  end,
+              set submission_state = $3,
                   heartbeat_at = now(),
                   finished_at = now(),
-                  outcome = case
-                    when $3 = 'cancelled' then 'cancelled'
-                    else 'worker_stalled'
-                  end,
-                  retry_classification = case
-                    when $3 = 'queued' then 'submission_ambiguous'
-                    when $3 = 'failed' then 'deadline_exceeded'
-                    else null
-                  end,
-                  sanitized_error = case
-                    when $3 = 'failed' then 'Execution deadline expired during stalled-worker recovery'
-                    else null
-                  end
+                  outcome = $4,
+                  retry_classification = $5,
+                  sanitized_error = $6,
+                  failure_code = $7
             where job_id = $1 and lease_epoch = $2 and finished_at is null
             returning id`,
-          [row.id, row.lease_epoch, target],
+          [
+            row.id,
+            row.lease_epoch,
+            recoveredSubmissionState,
+            recoveredOutcome,
+            target === "cancelled" ? null : recoveredRetryClassification,
+            recoveredError,
+            recoveredFailureCode,
+          ],
         );
         if (row.current_attempt_id !== null) {
           requireExactlyOne(attempt.rows, "finish recovered job attempt");

@@ -40,9 +40,15 @@ export type {
 
 export { admitToolRun } from "./admission.ts";
 export type {
+  AdmissionUsageFailure,
+  AdmissionUsageMeasureRange,
+  AdmissionUsageMeasures,
   AdmissionUsagePort,
   AdmissionUsageQuote,
+  AdmissionUsageQuoteResult,
   AdmissionUsageRequest,
+  AdmissionUsageReservationResult,
+  AdmissionUsageUnavailableReason,
   AdmitRunDependencies,
   AdmitRunInput,
   AdmitRunResult,
@@ -61,6 +67,7 @@ export {
   heartbeatJobLease,
   markAttemptSubmitted,
   markAttemptSubmitting,
+  parseSubmissionRatePolicy,
   persistCapacityLease,
   rearmQueuedJobDispatch,
   reconcileQueueCounters,
@@ -79,6 +86,7 @@ export type {
   JobHeartbeatResult,
   PersistCapacityLeaseInput,
   StalledRecoveryResult,
+  SubmissionRatePolicy,
 } from "./dispatch.ts";
 
 export { ExecutionProcessor, withExecutionConsumerSpan } from "./processor.ts";

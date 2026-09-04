@@ -1,7 +1,42 @@
 import type { DatabasePool } from "@relay/database";
 import { generatePublicId, ID_PREFIXES } from "@relay/contracts";
 import { createHandlerRegistry, type HandlerRegistry } from "@relay/catalog";
+import pg from "pg";
+import {
+  reserveUsageForAdmission,
+  withMeteringTransaction,
+} from "../../metering/src/index.ts";
 import type { AdmissionUsagePort } from "./admission.ts";
+
+const TEST_MEASURES = Object.freeze({
+  requested_units: Object.freeze({
+    minimum: "1",
+    expected: "1",
+    maximum: "1",
+  }),
+});
+
+const TEST_METER_POLICY = {
+  schemaVersion: 1,
+  metric: "fixture.compute_units",
+  unit: "fixture_unit",
+  period: "calendar_month",
+  estimate: {
+    base: "0",
+    terms: [{ measure: "requested_units", rate: "1" }],
+  },
+  reservation: { multiplier: "1", minimum: "1" },
+  settlement: {
+    success: "commit_actual",
+    partial_output: "commit_actual",
+    validation_rejected: "release",
+    safety_rejected: "commit_actual",
+    provider_failure: "release",
+    cancelled: "release",
+    timed_out: "release",
+    storage_failure: "commit_actual",
+  },
+} as const;
 
 const FOREIGN_KEY_VIOLATION = "23503";
 const IMMUTABLE_ROW_VIOLATION = "55000";
@@ -9,8 +44,50 @@ const INSUFFICIENT_PRIVILEGE = "42501";
 
 export const TEST_USAGE_PORT: AdmissionUsagePort = {
   quote: () =>
-    Promise.resolve({ estimatedCostUnits: 1, policyKey: "test-unmetered:v1" }),
-  reserve: () => Promise.resolve(null),
+    Promise.resolve({
+      estimatedCostUnits: 1,
+      policyKey: "test-meter-policy:v1",
+      measures: TEST_MEASURES,
+    }),
+  reserve: async (client, request, quote) => {
+    const measures = quote.measures;
+    if (measures === undefined) {
+      return { kind: "usage_unavailable", reason: "invalid_configuration" };
+    }
+    const result = await withMeteringTransaction(
+      client,
+      (transaction) =>
+        reserveUsageForAdmission(transaction, {
+          actorUserId: request.createdBy,
+          workspaceId: request.workspaceId,
+          toolVersionId: request.toolVersionId,
+          providerModelId: request.route.route.providerModelId,
+          measures,
+          idempotencyKey: `queue-test:${request.runIdempotencyKey}`,
+          reservationTtlSeconds: 300,
+        }),
+    );
+    switch (result.kind) {
+      case "reserved":
+      case "replayed":
+        return result.reservation.reservationId;
+      case "not_entitled":
+        return { kind: "not_entitled" };
+      case "allowance_exceeded":
+        return result;
+      case "idempotency_conflict":
+        return result;
+      case "workspace_unavailable":
+        return { kind: "usage_unavailable", reason: "unavailable" };
+      case "tool_unavailable":
+      case "metering_not_configured":
+      case "invalid_configuration":
+        return {
+          kind: "usage_unavailable",
+          reason: "invalid_configuration",
+        };
+    }
+  },
 };
 
 /**
@@ -73,6 +150,67 @@ export interface AdmissibleFixture {
 
 function unique(label: string): string {
   return `${label}-${crypto.randomUUID()}`;
+}
+
+async function createMeteringConfiguration(
+  workspaceId: string,
+): Promise<
+  { readonly meterPolicyId: string; readonly entitlementKey: string }
+> {
+  const databaseUrl = Deno.env.get("DATABASE_URL");
+  if (databaseUrl === undefined) {
+    throw new Error("DATABASE_URL is required for the admission fixture");
+  }
+  const ownerUrl = new URL(databaseUrl);
+  ownerUrl.username = "relay_migrator";
+  ownerUrl.password = "relay_dev_only";
+  const client = new pg.Client({ connectionString: ownerUrl.toString() });
+  const suffix = crypto.randomUUID().replaceAll("-", "");
+  const meterPolicyId = `meter_policy_queue_${suffix}`;
+  const entitlementKey = `tools.execute.queue_fixture_${suffix}`;
+  await client.connect();
+  try {
+    await client.query("begin");
+    await client.query("set local role relay_owner");
+    await client.query(
+      `insert into relay.meter_policies
+         (id, policy_key, revision, document, effective_at)
+       values ($1, $2, 1, $3, now() - interval '1 second')`,
+      [
+        meterPolicyId,
+        `queue.fixture.${suffix}`,
+        JSON.stringify(TEST_METER_POLICY),
+      ],
+    );
+    await client.query(
+      `insert into relay.entitlement_grants (
+         id, workspace_id, entitlement_key, grant_kind, capability_enabled,
+         source_kind, source_reference, effective_at
+       ) values (
+         $1, $2, $3, 'capability', true,
+         'manual', 'queue-test-fixture', now() - interval '1 second'
+       )`,
+      [`grant_queue_cap_${suffix}`, workspaceId, entitlementKey],
+    );
+    await client.query(
+      `insert into relay.entitlement_grants (
+         id, workspace_id, entitlement_key, grant_kind, limit_amount, unit,
+         period, source_kind, source_reference, effective_at
+       ) values (
+         $1, $2, 'fixture.compute_units', 'limit', 1000000, 'fixture_unit',
+         'calendar_month', 'manual', 'queue-test-fixture',
+         now() - interval '1 second'
+       )`,
+      [`grant_queue_limit_${suffix}`, workspaceId],
+    );
+    await client.query("commit");
+    return { meterPolicyId, entitlementKey };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    await client.end();
+  }
 }
 
 async function createUser(pool: DatabasePool): Promise<string> {
@@ -168,6 +306,7 @@ export async function createAdmissibleFixture(
   const createdBy = await createUser(pool);
   const outsiderId = await createUser(pool);
   await addMember(pool, workspaceId, createdBy);
+  const metering = await createMeteringConfiguration(workspaceId);
 
   const capacityPoolId = await createCapacityPool(pool);
   const { providerId, providerModelId } = await createProviderModel(pool);
@@ -183,14 +322,17 @@ export async function createAdmissibleFixture(
   await pool.query(
     `insert into relay.tool_versions
        (id, tool_id, version, input_schema, output_schema, handler_key,
-        execution_mode, max_duration_seconds, immutable_hash)
-     values ($1, $2, 1, $3, $4, $5, 'async', 120, '')`,
+        execution_mode, max_duration_seconds, meter_policy_id,
+        entitlement_key, immutable_hash)
+     values ($1, $2, 1, $3, $4, $5, 'async', 120, $6, $7, '')`,
     [
       toolVersionId,
       toolId,
       JSON.stringify({ type: "object" }),
       JSON.stringify({ type: "object" }),
       handlerKey,
+      metering.meterPolicyId,
+      metering.entitlementKey,
     ],
   );
   await pool.query(
