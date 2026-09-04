@@ -1,6 +1,10 @@
 import { md5Base64, sha256Hex } from "@relay/storage/checksums";
 import { createImmutableObjectKey } from "@relay/storage/keys";
-import type { ObjectHead, ObjectStorage } from "@relay/storage/types";
+import type {
+  ObjectHead,
+  ObjectStorage,
+  UploadAuthorization,
+} from "@relay/storage/types";
 import { hasWorkspaceMembership } from "./authorization.ts";
 import {
   type ArtifactDatabasePool,
@@ -8,11 +12,19 @@ import {
   withArtifactTransaction,
 } from "./database.ts";
 import {
+  ArtifactIdempotencyInvariantError,
+  type ArtifactMutationClaim,
+  type ArtifactMutationOperation,
+  type ArtifactMutationResultReference,
+  type PostgresArtifactMutationIdempotencyRepository,
+} from "./idempotency.ts";
+import {
   generateArtifactId,
   generateShareSecret,
   hashShareSecret,
 } from "./ids.ts";
 import type { ArtifactQuota } from "./quota.ts";
+import type { ShareTokenCodec } from "./share-tokens.ts";
 import type {
   ArtifactDownloadResult,
   ArtifactRecord,
@@ -21,6 +33,14 @@ import type {
   CleanupExecutionResult,
   CompleteUploadResult,
   CreateShareLinkResult,
+  IdempotentBeginUploadResult,
+  IdempotentCompleteUploadResult,
+  IdempotentCreateShareLinkResult,
+  IdempotentRevokeShareLinkResult,
+  NonIdempotentBeginUploadResult,
+  NonIdempotentCompleteUploadResult,
+  NonIdempotentCreateShareLinkResult,
+  NonIdempotentRevokeShareLinkResult,
   OutputItemRecord,
   OutputSetRecord,
   PurgeExecutionResult,
@@ -43,6 +63,7 @@ import {
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const CONTENT_MD5_PATTERN = /^[A-Za-z0-9+/]{22}==$/;
+const DEFAULT_MAX_UPLOAD_BYTES = Number.MAX_SAFE_INTEGER;
 const DEFAULT_UPLOAD_TTL_SECONDS = 15 * 60;
 const DEFAULT_CLEANUP_LEASE_SECONDS = 60;
 const DEFAULT_PURGE_DELAY_SECONDS = 7 * 24 * 60 * 60;
@@ -55,6 +76,13 @@ export interface ArtifactServiceOptions {
   readonly pool: ArtifactDatabasePool;
   readonly storage: ObjectStorage;
   readonly quota: ArtifactQuota;
+  /** Required when a mutation supplies an idempotency key. */
+  readonly idempotencyRepository?:
+    PostgresArtifactMutationIdempotencyRepository;
+  /** Required for replayable share creation; optional for legacy internal calls. */
+  readonly shareTokenCodec?: ShareTokenCodec;
+  /** Applies only to caller-initiated direct uploads. */
+  readonly maxUploadBytes?: number;
   readonly uploadTtlSeconds?: number;
   readonly cleanupLeaseSeconds?: number;
   readonly purgeDelaySeconds?: number;
@@ -65,6 +93,7 @@ export interface ArtifactServiceOptions {
 export interface DirectUploadVersionInput {
   readonly workspaceId: string;
   readonly actorUserId: string;
+  readonly idempotencyKey?: string;
   readonly target:
     | {
       readonly kind: "new_artifact";
@@ -85,6 +114,42 @@ export interface DirectUploadVersionInput {
   readonly durationMs?: number | null;
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly sourceRunId?: string | null;
+}
+
+type IdempotentInput<Input extends { readonly idempotencyKey?: string }> =
+  & Omit<Input, "idempotencyKey">
+  & { readonly idempotencyKey: string };
+
+type NonIdempotentInput<Input extends { readonly idempotencyKey?: string }> =
+  & Omit<Input, "idempotencyKey">
+  & { readonly idempotencyKey?: never };
+
+interface CompleteUploadInput {
+  readonly workspaceId: string;
+  readonly actorUserId: string;
+  readonly uploadId: string;
+  readonly idempotencyKey?: string;
+}
+
+interface CreateShareLinkInput {
+  readonly workspaceId: string;
+  readonly actorUserId: string;
+  readonly idempotencyKey?: string;
+  readonly artifactId: string;
+  readonly followCurrent: boolean;
+  readonly artifactVersionId?: string | null;
+  readonly expiresAt?: Date | null;
+  readonly maxResolutions?: number | null;
+  readonly requireAuth?: boolean;
+  readonly contentDisposition: "attachment" | "inline";
+}
+
+interface RevokeShareLinkInput {
+  readonly workspaceId: string;
+  readonly actorUserId: string;
+  readonly artifactId?: string;
+  readonly shareLinkId: string;
+  readonly idempotencyKey?: string;
 }
 
 export type GetArtifactResult =
@@ -192,6 +257,23 @@ interface UploadRow {
   readonly cleanup_storage_version_id: string | null;
 }
 
+type TerminalUploadResult =
+  | {
+    readonly kind: "completed";
+    readonly artifactId: string;
+    readonly artifactVersionId: string;
+    readonly becameCurrent: boolean;
+  }
+  | { readonly kind: "expired" }
+  | { readonly kind: "verification_failed"; readonly reason: string };
+
+interface ShareLinkTokenRow {
+  readonly id: string;
+  readonly artifact_id: string;
+  readonly token_hash: string;
+  readonly token_key_version: number | null;
+}
+
 interface VersionSourceRow {
   readonly id: string;
   readonly object_key: string;
@@ -207,7 +289,7 @@ interface VersionSourceRow {
   readonly metadata: unknown;
 }
 
-function validateSeconds(value: number, field: string): number {
+function validatePositiveOption(value: number, field: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new TypeError(`${field} must be a positive safe integer`);
   }
@@ -223,17 +305,26 @@ function validateBatchSize(value: number): number {
   return value;
 }
 
-function validateOptionalFutureDate(
+function validateOptionalDate(
   value: Date | null | undefined,
-  now: Date,
   field: string,
 ): Date | null {
   if (value === null || value === undefined) return null;
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime()) || date.getTime() <= now.getTime()) {
-    throw new ArtifactInputError(field, "must be a valid future date");
+  if (!Number.isFinite(date.getTime())) {
+    throw new ArtifactInputError(field, "must be a valid date");
   }
   return date;
+}
+
+function requireFutureDate(
+  value: Date | null,
+  now: Date,
+  field: string,
+): void {
+  if (value !== null && value.getTime() <= now.getTime()) {
+    throw new ArtifactInputError(field, "must be a valid future date");
+  }
 }
 
 function laterDate(first: Date, second: Date): Date {
@@ -315,7 +406,7 @@ function headMismatch(row: UploadRow, head: ObjectHead): string | null {
   return null;
 }
 
-function terminalUploadResult(row: UploadRow): CompleteUploadResult | null {
+function terminalUploadResult(row: UploadRow): TerminalUploadResult | null {
   if (row.status === "completed") {
     return {
       kind: "completed",
@@ -332,6 +423,14 @@ function terminalUploadResult(row: UploadRow): CompleteUploadResult | null {
     };
   }
   return null;
+}
+
+function withReplayMetadata<T extends object>(
+  result: T,
+  idempotencyKey: string | undefined,
+  replayed: boolean,
+): T | (T & { readonly replayed: boolean }) {
+  return idempotencyKey === undefined ? result : { ...result, replayed };
 }
 
 function sourceHeadMismatch(row: VersionSourceRow, head: ObjectHead): boolean {
@@ -412,6 +511,11 @@ export class ArtifactService {
   readonly #pool: ArtifactDatabasePool;
   readonly #storage: ObjectStorage;
   readonly #quota: ArtifactQuota;
+  readonly #idempotencyRepository:
+    | PostgresArtifactMutationIdempotencyRepository
+    | null;
+  readonly #shareTokenCodec: ShareTokenCodec | null;
+  readonly #maxUploadBytes: number;
   readonly #uploadTtlSeconds: number;
   readonly #cleanupLeaseSeconds: number;
   readonly #purgeDelaySeconds: number;
@@ -422,29 +526,83 @@ export class ArtifactService {
     this.#pool = options.pool;
     this.#storage = options.storage;
     this.#quota = options.quota;
-    this.#uploadTtlSeconds = validateSeconds(
+    this.#idempotencyRepository = options.idempotencyRepository ?? null;
+    this.#shareTokenCodec = options.shareTokenCodec ?? null;
+    this.#maxUploadBytes = validatePositiveOption(
+      options.maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES,
+      "maxUploadBytes",
+    );
+    this.#uploadTtlSeconds = validatePositiveOption(
       options.uploadTtlSeconds ?? DEFAULT_UPLOAD_TTL_SECONDS,
       "uploadTtlSeconds",
     );
-    this.#cleanupLeaseSeconds = validateSeconds(
+    this.#cleanupLeaseSeconds = validatePositiveOption(
       options.cleanupLeaseSeconds ?? DEFAULT_CLEANUP_LEASE_SECONDS,
       "cleanupLeaseSeconds",
     );
-    this.#purgeDelaySeconds = validateSeconds(
+    this.#purgeDelaySeconds = validatePositiveOption(
       options.purgeDelaySeconds ?? DEFAULT_PURGE_DELAY_SECONDS,
       "purgeDelaySeconds",
     );
-    this.#downloadTtlSeconds = validateSeconds(
+    this.#downloadTtlSeconds = validatePositiveOption(
       options.downloadTtlSeconds ?? DEFAULT_DOWNLOAD_TTL_SECONDS,
       "downloadTtlSeconds",
     );
     this.#now = options.now ?? (() => new Date());
   }
 
+  #requireIdempotencyRepository(): PostgresArtifactMutationIdempotencyRepository {
+    if (this.#idempotencyRepository === null) {
+      throw new TypeError(
+        "idempotencyRepository is required for idempotent artifact mutations",
+      );
+    }
+    return this.#idempotencyRepository;
+  }
+
+  #requireShareTokenCodec(): ShareTokenCodec {
+    if (this.#shareTokenCodec === null) {
+      throw new TypeError(
+        "shareTokenCodec is required for idempotent share creation",
+      );
+    }
+    return this.#shareTokenCodec;
+  }
+
+  async #completeIdempotency<Operation extends ArtifactMutationOperation>(
+    client: ArtifactTransaction,
+    repository: PostgresArtifactMutationIdempotencyRepository,
+    claim: ArtifactMutationClaim<Operation>,
+    reference: ArtifactMutationResultReference<Operation>,
+  ): Promise<void> {
+    const completed = await repository.complete(client, claim, reference);
+    if (completed.kind !== "completed") {
+      throw new ArtifactIdempotencyInvariantError(
+        "Artifact mutation idempotency completion did not create its result reference",
+      );
+    }
+  }
+
+  async beginDirectUpload(
+    input: IdempotentInput<DirectUploadVersionInput>,
+  ): Promise<IdempotentBeginUploadResult>;
+  async beginDirectUpload(
+    input: NonIdempotentInput<DirectUploadVersionInput>,
+  ): Promise<NonIdempotentBeginUploadResult>;
+  async beginDirectUpload(
+    input: DirectUploadVersionInput,
+  ): Promise<BeginUploadResult>;
   async beginDirectUpload(
     input: DirectUploadVersionInput,
   ): Promise<BeginUploadResult> {
     const sizeBytes = validateByteCount(input.sizeBytes);
+    if (sizeBytes > this.#maxUploadBytes) {
+      return withReplayMetadata(
+        { kind: "quota_exceeded" } as const,
+        input.idempotencyKey,
+        false,
+      );
+    }
     const mimeType = validateMimeType(input.mimeType);
     validateChecksums(input.sha256, input.contentMd5);
     const width = validatePositiveInteger(input.width, "width");
@@ -460,6 +618,31 @@ export class ArtifactService {
         ),
       }
       : null;
+    const idempotencyRepository = input.idempotencyKey === undefined
+      ? null
+      : this.#requireIdempotencyRepository();
+    const idempotencyRequest = {
+      target: input.target.kind === "new_artifact"
+        ? {
+          kind: input.target.kind,
+          name: newArtifact!.name,
+          mediaKind: newArtifact!.mediaKind,
+          retentionPolicyId: newArtifact!.retentionPolicyId,
+        }
+        : {
+          kind: input.target.kind,
+          artifactId: input.target.artifactId,
+        },
+      sizeBytes,
+      mimeType,
+      sha256: input.sha256,
+      contentMd5: input.contentMd5,
+      width,
+      height,
+      durationMs,
+      metadata: JSON.parse(metadata) as unknown,
+      sourceRunId: input.sourceRunId ?? null,
+    };
     const artifactId = input.target.kind === "new_artifact"
       ? generateArtifactId("art")
       : input.target.artifactId;
@@ -479,7 +662,34 @@ export class ArtifactService {
           input.actorUserId,
         )
       ) {
-        return { kind: "not_found" } as const;
+        return withReplayMetadata(
+          { kind: "not_found" } as const,
+          input.idempotencyKey,
+          false,
+        );
+      }
+
+      let idempotencyClaim: ArtifactMutationClaim<"create_upload"> | null =
+        null;
+      if (idempotencyRepository !== null) {
+        const claimed = await idempotencyRepository.claim(client, {
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          operation: "create_upload",
+          idempotencyKey: input.idempotencyKey!,
+          request: idempotencyRequest,
+        });
+        if (claimed.kind === "conflict") {
+          return { kind: "idempotency_conflict" } as const;
+        }
+        if (claimed.kind === "replay") {
+          return await this.#replayDirectUpload(
+            client,
+            input.workspaceId,
+            claimed.reference.uploadId,
+          );
+        }
+        idempotencyClaim = claimed.claim;
       }
 
       let currentVersionId: string | null = null;
@@ -496,7 +706,13 @@ export class ArtifactService {
             for update`,
           [input.workspaceId, artifactId],
         );
-        if (rows.length === 0) return { kind: "not_found" } as const;
+        if (rows.length === 0) {
+          return withReplayMetadata(
+            { kind: "not_found" } as const,
+            input.idempotencyKey,
+            false,
+          );
+        }
         currentVersionId = rows[0].current_version_id;
         const next = await client.query<{ sequence: number }>(
           `select coalesce(max(sequence), 0) + 1 as sequence
@@ -513,12 +729,17 @@ export class ArtifactService {
         bytes: sizeBytes,
       });
       if (reservation.kind === "denied") {
-        return { kind: "quota_exceeded" } as const;
+        return withReplayMetadata(
+          { kind: "quota_exceeded" } as const,
+          input.idempotencyKey,
+          false,
+        );
       }
 
       const authorization = await this.#storage.createUploadUrl({
         key: objectKey,
         uploadId,
+        sizeBytes,
         contentType: mimeType,
         contentMd5: input.contentMd5,
         sha256Hex: input.sha256,
@@ -606,26 +827,46 @@ export class ArtifactService {
         ],
       );
 
-      return {
-        kind: "created",
-        value: {
-          uploadId,
-          artifactId,
-          artifactVersionId,
-          sequence,
-          upload: authorization,
-        },
-      } as const;
+      if (idempotencyClaim !== null) {
+        await this.#completeIdempotency(
+          client,
+          idempotencyRepository!,
+          idempotencyClaim,
+          { kind: "artifact_upload", uploadId },
+        );
+      }
+
+      return withReplayMetadata(
+        {
+          kind: "created",
+          value: {
+            uploadId,
+            artifactId,
+            artifactVersionId,
+            sequence,
+            upload: authorization,
+          },
+        } as const,
+        input.idempotencyKey,
+        false,
+      );
     });
 
     return result;
   }
 
-  async completeUpload(input: {
-    readonly workspaceId: string;
-    readonly actorUserId: string;
-    readonly uploadId: string;
-  }): Promise<CompleteUploadResult> {
+  async completeUpload(
+    input: IdempotentInput<CompleteUploadInput>,
+  ): Promise<IdempotentCompleteUploadResult>;
+  async completeUpload(
+    input: NonIdempotentInput<CompleteUploadInput>,
+  ): Promise<NonIdempotentCompleteUploadResult>;
+  async completeUpload(
+    input: CompleteUploadInput,
+  ): Promise<CompleteUploadResult>;
+  async completeUpload(
+    input: CompleteUploadInput,
+  ): Promise<CompleteUploadResult> {
     const { rows } = await this.#pool.query<UploadRow>(
       `select u.id, u.workspace_id, u.artifact_id, u.artifact_version_id,
               u.output_item_id, u.kind, u.object_key,
@@ -643,6 +884,23 @@ export class ArtifactService {
           )`,
       [input.workspaceId, input.uploadId, input.actorUserId],
     );
+    if (input.idempotencyKey !== undefined) {
+      let observedHead: ObjectHead | null | undefined;
+      const preflight = rows[0];
+      if (
+        preflight !== undefined && terminalUploadResult(preflight) === null &&
+        asDate(preflight.expires_at).getTime() > this.#now().getTime()
+      ) {
+        observedHead = await this.#storage.headObject({
+          key: preflight.object_key,
+        });
+      }
+      return await this.#completeUploadIdempotently(
+        { ...input, idempotencyKey: input.idempotencyKey },
+        observedHead,
+      );
+    }
+
     if (rows.length === 0) return { kind: "not_found" };
     const row = rows[0];
     const terminal = terminalUploadResult(row);
@@ -708,6 +966,222 @@ export class ArtifactService {
       [workspaceId, uploadId],
     );
     return rows[0] ?? null;
+  }
+
+  async #createReplayUploadAuthorization(
+    row: UploadRow,
+    now: Date,
+  ): Promise<UploadAuthorization | null> {
+    const originalExpiresAt = asDate(row.expires_at);
+    const remainingSeconds = Math.floor(
+      (originalExpiresAt.getTime() - now.getTime()) / 1000,
+    ) - 1;
+    if (remainingSeconds < 1) return null;
+
+    const authorization = await this.#storage.createUploadUrl({
+      key: row.object_key,
+      uploadId: row.id,
+      sizeBytes: Number(row.expected_size_bytes),
+      contentType: row.expected_mime_type,
+      contentMd5: row.content_md5,
+      sha256Hex: row.expected_sha256,
+      expiresInSeconds: Math.min(this.#uploadTtlSeconds, remainingSeconds),
+    });
+    if (
+      authorization.expiresAt.getTime() <= now.getTime() ||
+      authorization.expiresAt.getTime() > originalExpiresAt.getTime()
+    ) {
+      throw new Error(
+        "storage returned an upload authorization outside the durable upload lifetime",
+      );
+    }
+    return authorization;
+  }
+
+  async #replayDirectUpload(
+    client: ArtifactTransaction,
+    workspaceId: string,
+    uploadId: string,
+  ): Promise<BeginUploadResult> {
+    const upload = await this.#loadUploadForUpdate(
+      client,
+      workspaceId,
+      uploadId,
+    );
+    if (upload === null || upload.kind !== "direct_upload") {
+      throw new ArtifactIdempotencyInvariantError(
+        "Upload idempotency reference does not identify a direct upload",
+      );
+    }
+    const version = await client.query<{ sequence: number }>(
+      `select sequence
+         from relay.artifact_versions
+        where workspace_id = $1 and artifact_id = $2 and id = $3`,
+      [workspaceId, upload.artifact_id, upload.artifact_version_id],
+    );
+    if (version.rows.length !== 1) {
+      throw new ArtifactIdempotencyInvariantError(
+        "Upload idempotency reference has no artifact version",
+      );
+    }
+    const identity = {
+      uploadId: upload.id,
+      artifactId: upload.artifact_id,
+      artifactVersionId: upload.artifact_version_id,
+      sequence: version.rows[0].sequence,
+    } as const;
+
+    if (upload.status === "completed") {
+      return {
+        kind: "completed",
+        ...identity,
+        becameCurrent: upload.became_current === true,
+        replayed: true,
+      };
+    }
+    if (upload.status === "expired") {
+      return { kind: "expired", ...identity, replayed: true };
+    }
+    if (upload.status === "failed") {
+      return {
+        kind: "verification_failed",
+        ...identity,
+        reason: upload.failure_code ?? "verification_failed",
+        replayed: true,
+      };
+    }
+
+    const now = this.#now();
+    const authorization = await this.#createReplayUploadAuthorization(
+      upload,
+      now,
+    );
+    if (authorization === null) {
+      await this.#transitionPendingToFailure(
+        client,
+        upload,
+        "upload_expired",
+        true,
+        now,
+      );
+      return { kind: "expired", ...identity, replayed: true };
+    }
+    return {
+      kind: "created",
+      value: { ...identity, upload: authorization },
+      replayed: true,
+    };
+  }
+
+  async #completeUploadIdempotently(
+    input: {
+      readonly workspaceId: string;
+      readonly actorUserId: string;
+      readonly uploadId: string;
+      readonly idempotencyKey: string;
+    },
+    observedHead: ObjectHead | null | undefined,
+  ): Promise<CompleteUploadResult> {
+    const repository = this.#requireIdempotencyRepository();
+    return await withArtifactTransaction(this.#pool, async (client) => {
+      if (
+        !await hasWorkspaceMembership(
+          client,
+          input.workspaceId,
+          input.actorUserId,
+        )
+      ) {
+        return { kind: "not_found", replayed: false } as const;
+      }
+
+      const claimed = await repository.claim(client, {
+        workspaceId: input.workspaceId,
+        actorUserId: input.actorUserId,
+        operation: "complete_upload",
+        idempotencyKey: input.idempotencyKey,
+        request: { uploadId: input.uploadId },
+      });
+      if (claimed.kind === "conflict") {
+        return { kind: "idempotency_conflict" } as const;
+      }
+      if (claimed.kind === "replay") {
+        if (claimed.reference.uploadId !== input.uploadId) {
+          throw new ArtifactIdempotencyInvariantError(
+            "Completion idempotency reference targets a different upload",
+          );
+        }
+        const replayed = await this.#loadUploadForUpdate(
+          client,
+          input.workspaceId,
+          claimed.reference.uploadId,
+        );
+        if (replayed === null) {
+          throw new ArtifactIdempotencyInvariantError(
+            "Completion idempotency reference has no upload",
+          );
+        }
+        const terminal = terminalUploadResult(replayed);
+        if (terminal === null) {
+          throw new ArtifactIdempotencyInvariantError(
+            "Completed upload idempotency reference is not terminal",
+          );
+        }
+        return { ...terminal, replayed: true };
+      }
+
+      const upload = await this.#loadUploadForUpdate(
+        client,
+        input.workspaceId,
+        input.uploadId,
+      );
+      if (upload === null) {
+        return { kind: "not_found", replayed: false } as const;
+      }
+
+      let result = terminalUploadResult(upload);
+      if (result === null) {
+        const now = this.#now();
+        if (asDate(upload.expires_at).getTime() <= now.getTime()) {
+          await this.#transitionPendingToFailure(
+            client,
+            upload,
+            "upload_expired",
+            true,
+            now,
+          );
+          result = { kind: "expired" };
+        } else if (observedHead === null || observedHead === undefined) {
+          return { kind: "pending", replayed: false } as const;
+        } else {
+          const mismatch = headMismatch(upload, observedHead);
+          if (mismatch !== null) {
+            await this.#transitionPendingToFailure(
+              client,
+              upload,
+              mismatch,
+              false,
+              now,
+              observedHead,
+            );
+            result = { kind: "verification_failed", reason: mismatch };
+          } else {
+            result = await this.#finalizeLoadedPendingUpload(
+              client,
+              upload,
+              observedHead,
+            );
+          }
+        }
+      }
+
+      await this.#completeIdempotency(
+        client,
+        repository,
+        claimed.claim,
+        { kind: "artifact_upload", uploadId: upload.id },
+      );
+      return { ...result, replayed: false };
+    });
   }
 
   async #transitionPendingToFailure(
@@ -830,152 +1304,168 @@ export class ArtifactService {
         uploadId,
       );
       if (row === null) return { kind: "not_found" } as const;
-      if (row.status === "completed") {
-        return {
-          kind: "completed",
-          artifactId: row.artifact_id,
-          artifactVersionId: row.artifact_version_id,
-          becameCurrent: row.became_current === true,
-        } as const;
-      }
-      if (row.status === "expired") return { kind: "expired" } as const;
-      if (row.status === "failed") {
-        return {
-          kind: "verification_failed",
-          reason: row.failure_code ?? "verification_failed",
-        } as const;
-      }
+      return await this.#finalizeLoadedPendingUpload(
+        client,
+        row,
+        head,
+        cryptographicallyVerified,
+      );
+    });
+  }
 
-      const now = this.#now();
-      if (asDate(row.expires_at).getTime() <= now.getTime()) {
-        await this.#transitionPendingToFailure(
-          client,
-          row,
-          "upload_expired",
-          true,
-          now,
-        );
-        return { kind: "expired" } as const;
-      }
-      const mismatch = headMismatch(row, head);
-      if (mismatch !== null) {
-        await this.#transitionPendingToFailure(
-          client,
-          row,
-          mismatch,
-          false,
-          now,
-          head,
-        );
-        return { kind: "verification_failed", reason: mismatch } as const;
-      }
+  async #finalizeLoadedPendingUpload(
+    client: ArtifactTransaction,
+    row: UploadRow,
+    head: ObjectHead,
+    cryptographicallyVerified = false,
+  ): Promise<TerminalUploadResult> {
+    const workspaceId = row.workspace_id;
+    if (row.status === "completed") {
+      return {
+        kind: "completed",
+        artifactId: row.artifact_id,
+        artifactVersionId: row.artifact_version_id,
+        becameCurrent: row.became_current === true,
+      } as const;
+    }
+    if (row.status === "expired") return { kind: "expired" } as const;
+    if (row.status === "failed") {
+      return {
+        kind: "verification_failed",
+        reason: row.failure_code ?? "verification_failed",
+      } as const;
+    }
 
-      const artifact = await client.query<{
-        current_version_id: string | null;
-        deleted_at: Date | null;
-        purge_status: string;
-      }>(
-        `select current_version_id, deleted_at, purge_status
+    const now = this.#now();
+    if (asDate(row.expires_at).getTime() <= now.getTime()) {
+      await this.#transitionPendingToFailure(
+        client,
+        row,
+        "upload_expired",
+        true,
+        now,
+      );
+      return { kind: "expired" } as const;
+    }
+    const mismatch = headMismatch(row, head);
+    if (mismatch !== null) {
+      await this.#transitionPendingToFailure(
+        client,
+        row,
+        mismatch,
+        false,
+        now,
+        head,
+      );
+      return { kind: "verification_failed", reason: mismatch } as const;
+    }
+
+    const artifact = await client.query<{
+      current_version_id: string | null;
+      deleted_at: Date | null;
+      purge_status: string;
+    }>(
+      `select current_version_id, deleted_at, purge_status
            from relay.artifacts
           where workspace_id = $1 and id = $2
           for update`,
-        [workspaceId, row.artifact_id],
+      [workspaceId, row.artifact_id],
+    );
+    if (artifact.rows.length === 0) {
+      await this.#transitionPendingToFailure(
+        client,
+        row,
+        "artifact_missing",
+        false,
+        now,
+        head,
       );
-      if (artifact.rows.length === 0) {
-        await this.#transitionPendingToFailure(
-          client,
-          row,
-          "artifact_missing",
-          false,
-          now,
-          head,
-        );
-        return {
-          kind: "verification_failed",
-          reason: "artifact_missing",
-        } as const;
-      }
+      return {
+        kind: "verification_failed",
+        reason: "artifact_missing",
+      } as const;
+    }
 
-      if (
-        row.kind === "restore" &&
-        (artifact.rows[0].deleted_at === null ||
-          artifact.rows[0].purge_status !== "pending" ||
-          artifact.rows[0].current_version_id !==
-            row.expected_previous_version_id)
-      ) {
-        await this.#transitionPendingToFailure(
-          client,
-          row,
-          "restore_conflict",
-          false,
-          now,
-          head,
-        );
-        return {
-          kind: "verification_failed",
-          reason: "restore_conflict",
-        } as const;
-      }
+    if (
+      row.kind === "restore" &&
+      (artifact.rows[0].deleted_at === null ||
+        artifact.rows[0].purge_status !== "pending" ||
+        artifact.rows[0].current_version_id !==
+          row.expected_previous_version_id)
+    ) {
+      await this.#transitionPendingToFailure(
+        client,
+        row,
+        "restore_conflict",
+        false,
+        now,
+        head,
+      );
+      return {
+        kind: "verification_failed",
+        reason: "restore_conflict",
+      } as const;
+    }
 
-      if (row.output_item_id !== null) {
-        const item = await client.query<{
-          status: string;
-          output_set_id: string;
-        }>(
-          `select oi.status, oi.output_set_id
+    if (row.output_item_id !== null) {
+      const item = await client.query<{
+        status: string;
+        output_set_id: string;
+      }>(
+        `select oi.status, oi.output_set_id
              from relay.output_items oi
              join relay.output_sets os
                on os.workspace_id = oi.workspace_id
               and os.id = oi.output_set_id
             where oi.workspace_id = $1 and oi.id = $2
             for update of os, oi`,
-          [workspaceId, row.output_item_id],
+        [workspaceId, row.output_item_id],
+      );
+      if (item.rows.length === 0 || item.rows[0].status !== "pending") {
+        await this.#transitionPendingToFailure(
+          client,
+          row,
+          "output_item_conflict",
+          false,
+          now,
+          head,
         );
-        if (item.rows.length === 0 || item.rows[0].status !== "pending") {
-          await this.#transitionPendingToFailure(
-            client,
-            row,
-            "output_item_conflict",
-            false,
-            now,
-            head,
-          );
-          return {
-            kind: "verification_failed",
-            reason: "output_item_conflict",
-          } as const;
-        }
+        return {
+          kind: "verification_failed",
+          reason: "output_item_conflict",
+        } as const;
       }
+    }
 
-      await this.#quota.commit(client, {
-        workspaceId,
-        reservationId: row.quota_reservation_id,
-        bytes: Number(row.expected_size_bytes),
-      });
-      await client.query(
-        `update relay.artifact_versions
+    await this.#quota.commit(client, {
+      workspaceId,
+      reservationId: row.quota_reservation_id,
+      bytes: Number(row.expected_size_bytes),
+    });
+    await client.query(
+      `update relay.artifact_versions
             set storage_version_id = $3,
                 etag = $4,
                 verification_status = $5,
                 verified_at = $6
           where workspace_id = $1 and id = $2
             and verification_status = 'pending'`,
-        [
-          workspaceId,
-          row.artifact_version_id,
-          head.storageVersionId,
-          head.etag,
-          cryptographicallyVerified
-            ? "cryptographically_verified"
-            : "head_verified",
-          now,
-        ],
-      );
+      [
+        workspaceId,
+        row.artifact_version_id,
+        head.storageVersionId,
+        head.etag,
+        cryptographicallyVerified
+          ? "cryptographically_verified"
+          : "head_verified",
+        now,
+      ],
+    );
 
-      let becameCurrent = false;
-      if (row.kind === "restore") {
-        const restored = await client.query(
-          `update relay.artifacts
+    let becameCurrent = false;
+    if (row.kind === "restore") {
+      const restored = await client.query(
+        `update relay.artifacts
               set current_version_id = $3,
                   deleted_at = null,
                   purge_after = null,
@@ -987,69 +1477,68 @@ export class ArtifactService {
               and deleted_at is not null
               and purge_status = 'pending'
               and current_version_id is not distinct from $4`,
-          [
-            workspaceId,
-            row.artifact_id,
-            row.artifact_version_id,
-            row.expected_previous_version_id,
-          ],
-        );
-        becameCurrent = (restored.rowCount ?? 0) === 1;
-      } else {
-        const advanced = await client.query(
-          `update relay.artifacts
+        [
+          workspaceId,
+          row.artifact_id,
+          row.artifact_version_id,
+          row.expected_previous_version_id,
+        ],
+      );
+      becameCurrent = (restored.rowCount ?? 0) === 1;
+    } else {
+      const advanced = await client.query(
+        `update relay.artifacts
               set current_version_id = $3
             where workspace_id = $1 and id = $2
               and deleted_at is null and purged_at is null
               and current_version_id is not distinct from $4`,
-          [
-            workspaceId,
-            row.artifact_id,
-            row.artifact_version_id,
-            row.expected_previous_version_id,
-          ],
-        );
-        becameCurrent = (advanced.rowCount ?? 0) === 1;
-      }
+        [
+          workspaceId,
+          row.artifact_id,
+          row.artifact_version_id,
+          row.expected_previous_version_id,
+        ],
+      );
+      becameCurrent = (advanced.rowCount ?? 0) === 1;
+    }
 
-      if ((row.created_artifact || row.kind === "restore") && !becameCurrent) {
-        throw new Error("staged artifact head changed unexpectedly");
-      }
+    if ((row.created_artifact || row.kind === "restore") && !becameCurrent) {
+      throw new Error("staged artifact head changed unexpectedly");
+    }
 
-      if (row.output_item_id !== null) {
-        const output = await client.query<{ output_set_id: string }>(
-          `update relay.output_items
+    if (row.output_item_id !== null) {
+      const output = await client.query<{ output_set_id: string }>(
+        `update relay.output_items
               set status = 'succeeded', artifact_version_id = $3,
                   completed_at = $4
             where workspace_id = $1 and id = $2 and status = 'pending'
             returning output_set_id`,
-          [workspaceId, row.output_item_id, row.artifact_version_id, now],
+        [workspaceId, row.output_item_id, row.artifact_version_id, now],
+      );
+      if (output.rows[0] !== undefined) {
+        await refreshOutputSet(
+          client,
+          workspaceId,
+          output.rows[0].output_set_id,
+          now,
         );
-        if (output.rows[0] !== undefined) {
-          await refreshOutputSet(
-            client,
-            workspaceId,
-            output.rows[0].output_set_id,
-            now,
-          );
-        }
       }
+    }
 
-      await client.query(
-        `update relay.artifact_uploads
+    await client.query(
+      `update relay.artifact_uploads
             set status = 'completed', completed_at = $3,
                 quota_state = 'committed', became_current = $4
           where workspace_id = $1 and id = $2 and status = 'pending'`,
-        [workspaceId, uploadId, now, becameCurrent],
-      );
+      [workspaceId, row.id, now, becameCurrent],
+    );
 
-      return {
-        kind: "completed",
-        artifactId: row.artifact_id,
-        artifactVersionId: row.artifact_version_id,
-        becameCurrent,
-      } as const;
-    });
+    return {
+      kind: "completed",
+      artifactId: row.artifact_id,
+      artifactVersionId: row.artifact_version_id,
+      becameCurrent,
+    } as const;
   }
 
   async getArtifact(input: {
@@ -1955,7 +2444,7 @@ export class ArtifactService {
     readonly contentDisposition?: "attachment" | "inline";
     readonly expiresInSeconds?: number;
   }): Promise<ArtifactDownloadResult> {
-    const expiresInSeconds = validateSeconds(
+    const expiresInSeconds = validatePositiveOption(
       input.expiresInSeconds ?? this.#downloadTtlSeconds,
       "expiresInSeconds",
     );
@@ -2007,17 +2496,18 @@ export class ArtifactService {
     };
   }
 
-  async createShareLink(input: {
-    readonly workspaceId: string;
-    readonly actorUserId: string;
-    readonly artifactId: string;
-    readonly followCurrent: boolean;
-    readonly artifactVersionId?: string | null;
-    readonly expiresAt?: Date | null;
-    readonly maxResolutions?: number | null;
-    readonly requireAuth?: boolean;
-    readonly contentDisposition: "attachment" | "inline";
-  }): Promise<CreateShareLinkResult> {
+  async createShareLink(
+    input: IdempotentInput<CreateShareLinkInput>,
+  ): Promise<IdempotentCreateShareLinkResult>;
+  async createShareLink(
+    input: NonIdempotentInput<CreateShareLinkInput>,
+  ): Promise<NonIdempotentCreateShareLinkResult>;
+  async createShareLink(
+    input: CreateShareLinkInput,
+  ): Promise<CreateShareLinkResult>;
+  async createShareLink(
+    input: CreateShareLinkInput,
+  ): Promise<CreateShareLinkResult> {
     if (
       (input.followCurrent && input.artifactVersionId != null) ||
       (!input.followCurrent && !input.artifactVersionId)
@@ -2038,18 +2528,20 @@ export class ArtifactService {
     }
 
     const now = this.#now();
-    const expiresAt = validateOptionalFutureDate(
-      input.expiresAt,
-      now,
-      "expiresAt",
-    );
+    const expiresAt = validateOptionalDate(input.expiresAt, "expiresAt");
     const maxResolutions = validatePositiveInteger(
       input.maxResolutions,
       "maxResolutions",
     );
-    const shareLinkId = generateArtifactId("share");
-    const token = generateShareSecret();
-    const tokenHash = await hashShareSecret(token);
+    const idempotencyRepository = input.idempotencyKey === undefined
+      ? null
+      : this.#requireIdempotencyRepository();
+    const shareTokenCodec = input.idempotencyKey === undefined
+      ? this.#shareTokenCodec
+      : this.#requireShareTokenCodec();
+    if (idempotencyRepository === null) {
+      requireFutureDate(expiresAt, now, "expiresAt");
+    }
 
     const result = await withArtifactTransaction(this.#pool, async (client) => {
       if (
@@ -2059,8 +2551,46 @@ export class ArtifactService {
           input.actorUserId,
         )
       ) {
-        return { kind: "not_found" } as const;
+        return withReplayMetadata(
+          { kind: "not_found" } as const,
+          input.idempotencyKey,
+          false,
+        );
       }
+
+      let idempotencyClaim: ArtifactMutationClaim<"create_share"> | null = null;
+      if (idempotencyRepository !== null) {
+        const claimed = await idempotencyRepository.claim(client, {
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          operation: "create_share",
+          idempotencyKey: input.idempotencyKey!,
+          request: {
+            artifactId: input.artifactId,
+            followCurrent: input.followCurrent,
+            artifactVersionId: input.artifactVersionId ?? null,
+            expiresAt: expiresAt?.toISOString() ?? null,
+            maxResolutions,
+            requireAuth: input.requireAuth ?? false,
+            contentDisposition: input.contentDisposition,
+          },
+        });
+        if (claimed.kind === "conflict") {
+          return { kind: "idempotency_conflict" } as const;
+        }
+        if (claimed.kind === "replay") {
+          return await this.#replayShareLink(
+            client,
+            input.workspaceId,
+            input.artifactId,
+            claimed.reference.shareLinkId,
+            shareTokenCodec!,
+          );
+        }
+        idempotencyClaim = claimed.claim;
+      }
+
+      requireFutureDate(expiresAt, now, "expiresAt");
       const target = await client.query<{ version_id: string | null }>(
         `select case when $3::boolean then a.current_version_id else $4 end
                   as version_id
@@ -2076,7 +2606,13 @@ export class ArtifactService {
         ],
       );
       const versionId = target.rows[0]?.version_id;
-      if (versionId == null) return { kind: "not_found" } as const;
+      if (versionId == null) {
+        return withReplayMetadata(
+          { kind: "not_found" } as const,
+          input.idempotencyKey,
+          false,
+        );
+      }
       const version = await client.query<{ present: boolean }>(
         `select exists (
            select 1 from relay.artifact_versions
@@ -2087,21 +2623,39 @@ export class ArtifactService {
         [input.workspaceId, input.artifactId, versionId],
       );
       if (version.rows[0]?.present !== true) {
-        return { kind: "not_found" } as const;
+        return withReplayMetadata(
+          { kind: "not_found" } as const,
+          input.idempotencyKey,
+          false,
+        );
       }
 
+      const shareLinkId = generateArtifactId("share");
+      const issued = shareTokenCodec === null
+        ? {
+          token: generateShareSecret(),
+          tokenHash: "",
+          keyVersion: null,
+        }
+        : await shareTokenCodec.issue(shareLinkId);
+      const tokenHash = issued.keyVersion === null
+        ? await hashShareSecret(issued.token)
+        : issued.tokenHash;
       await client.query(
         `insert into relay.share_links
            (id, workspace_id, artifact_id, artifact_version_id, token_hash,
-            follow_current, expires_at, max_resolutions, require_auth,
-            content_disposition, created_by, created_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            token_key_version, follow_current, expires_at, max_resolutions,
+            require_auth, content_disposition, created_by, created_at)
+         values (
+           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+         )`,
         [
           shareLinkId,
           input.workspaceId,
           input.artifactId,
           input.followCurrent ? null : versionId,
           tokenHash,
+          issued.keyVersion,
           input.followCurrent,
           expiresAt,
           maxResolutions,
@@ -2111,19 +2665,95 @@ export class ArtifactService {
           now,
         ],
       );
-      return {
-        kind: "created",
-        value: { shareLinkId, token },
-      } as const;
+      if (idempotencyClaim !== null) {
+        await this.#completeIdempotency(
+          client,
+          idempotencyRepository!,
+          idempotencyClaim,
+          { kind: "share_link", shareLinkId },
+        );
+      }
+      return withReplayMetadata(
+        {
+          kind: "created",
+          value: { shareLinkId, token: issued.token },
+        } as const,
+        input.idempotencyKey,
+        false,
+      );
     });
     return result;
   }
 
-  async revokeShareLink(input: {
-    readonly workspaceId: string;
-    readonly actorUserId: string;
-    readonly shareLinkId: string;
-  }): Promise<RevokeShareLinkResult> {
+  async #replayShareLink(
+    client: ArtifactTransaction,
+    workspaceId: string,
+    artifactId: string,
+    shareLinkId: string,
+    codec: ShareTokenCodec,
+  ): Promise<CreateShareLinkResult> {
+    const link = await client.query<ShareLinkTokenRow>(
+      `select id, artifact_id, token_hash, token_key_version
+         from relay.share_links
+        where workspace_id = $1 and artifact_id = $2 and id = $3
+        for share`,
+      [workspaceId, artifactId, shareLinkId],
+    );
+    const row = link.rows[0];
+    if (row === undefined || row.token_key_version === null) {
+      throw new ArtifactIdempotencyInvariantError(
+        "Share idempotency reference does not identify a replayable link",
+      );
+    }
+    if (!codec.hasVersion(row.token_key_version)) {
+      throw new ArtifactIdempotencyInvariantError(
+        "Share token key version is not configured",
+      );
+    }
+    const issued = await codec.issueForVersion(
+      row.id,
+      row.token_key_version,
+    );
+    if (issued.tokenHash !== row.token_hash) {
+      throw new ArtifactIdempotencyInvariantError(
+        "Share token key material does not match the persisted token hash",
+      );
+    }
+    return {
+      kind: "created",
+      value: { shareLinkId: row.id, token: issued.token },
+      replayed: true,
+    };
+  }
+
+  async revokeShareLink(
+    input: IdempotentInput<RevokeShareLinkInput> & {
+      readonly artifactId: string;
+    },
+  ): Promise<IdempotentRevokeShareLinkResult>;
+  async revokeShareLink(
+    input: NonIdempotentInput<RevokeShareLinkInput> & {
+      readonly artifactId: string;
+    },
+  ): Promise<NonIdempotentRevokeShareLinkResult>;
+  /** Legacy internal compatibility; new callers must bind the artifact target. */
+  async revokeShareLink(
+    input: NonIdempotentInput<RevokeShareLinkInput> & {
+      readonly artifactId?: never;
+    },
+  ): Promise<NonIdempotentRevokeShareLinkResult>;
+  async revokeShareLink(
+    input: RevokeShareLinkInput,
+  ): Promise<RevokeShareLinkResult> {
+    if (input.idempotencyKey !== undefined && input.artifactId === undefined) {
+      throw new TypeError(
+        "artifactId is required for idempotent share-link revocation",
+      );
+    }
+    const idempotencyRepository = input.idempotencyKey === undefined
+      ? null
+      : this.#requireIdempotencyRepository();
+
     return await withArtifactTransaction(this.#pool, async (client) => {
       if (
         !await hasWorkspaceMembership(
@@ -2132,26 +2762,112 @@ export class ArtifactService {
           input.actorUserId,
         )
       ) {
-        return { kind: "not_found" } as const;
+        return withReplayMetadata(
+          { kind: "not_found" } as const,
+          input.idempotencyKey,
+          false,
+        );
       }
-      const link = await client.query<{ revoked_at: Date | null }>(
-        `select revoked_at
-           from relay.share_links
-          where workspace_id = $1 and id = $2
-          for update`,
-        [input.workspaceId, input.shareLinkId],
-      );
-      if (link.rows.length === 0) return { kind: "not_found" } as const;
-      if (link.rows[0].revoked_at !== null) {
-        return { kind: "already_revoked" } as const;
+
+      let idempotencyClaim: ArtifactMutationClaim<"revoke_share"> | null = null;
+      if (idempotencyRepository !== null) {
+        const claimed = await idempotencyRepository.claim(client, {
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          operation: "revoke_share",
+          idempotencyKey: input.idempotencyKey!,
+          request: {
+            artifactId: input.artifactId!,
+            shareLinkId: input.shareLinkId,
+          },
+        });
+        if (claimed.kind === "conflict") {
+          return { kind: "idempotency_conflict" } as const;
+        }
+        if (claimed.kind === "replay") {
+          if (claimed.reference.shareLinkId !== input.shareLinkId) {
+            throw new ArtifactIdempotencyInvariantError(
+              "Revocation idempotency reference targets a different share link",
+            );
+          }
+          const replayed = await client.query<{ revoked_at: Date | null }>(
+            `select revoked_at
+               from relay.share_links
+              where workspace_id = $1 and artifact_id = $2 and id = $3
+              for update`,
+            [input.workspaceId, input.artifactId!, input.shareLinkId],
+          );
+          if (
+            replayed.rows.length !== 1 || replayed.rows[0].revoked_at === null
+          ) {
+            throw new ArtifactIdempotencyInvariantError(
+              "Revocation idempotency reference is not revoked",
+            );
+          }
+          return { kind: "revoked", replayed: true } as const;
+        }
+        idempotencyClaim = claimed.claim;
       }
-      await client.query(
-        `update relay.share_links
-            set revoked_at = $3
-          where workspace_id = $1 and id = $2 and revoked_at is null`,
-        [input.workspaceId, input.shareLinkId, this.#now()],
-      );
-      return { kind: "revoked" } as const;
+
+      const link = input.artifactId === undefined
+        ? await client.query<{ revoked_at: Date | null }>(
+          `select revoked_at
+             from relay.share_links
+            where workspace_id = $1 and id = $2
+            for update`,
+          [input.workspaceId, input.shareLinkId],
+        )
+        : await client.query<{ revoked_at: Date | null }>(
+          `select revoked_at
+             from relay.share_links
+            where workspace_id = $1 and artifact_id = $2 and id = $3
+            for update`,
+          [input.workspaceId, input.artifactId, input.shareLinkId],
+        );
+      if (link.rows.length === 0) {
+        return withReplayMetadata(
+          { kind: "not_found" } as const,
+          input.idempotencyKey,
+          false,
+        );
+      }
+
+      if (link.rows[0].revoked_at === null) {
+        if (input.artifactId === undefined) {
+          await client.query(
+            `update relay.share_links
+                set revoked_at = $3
+              where workspace_id = $1 and id = $2 and revoked_at is null`,
+            [input.workspaceId, input.shareLinkId, this.#now()],
+          );
+        } else {
+          await client.query(
+            `update relay.share_links
+                set revoked_at = $4
+              where workspace_id = $1 and artifact_id = $2 and id = $3
+                and revoked_at is null`,
+            [
+              input.workspaceId,
+              input.artifactId,
+              input.shareLinkId,
+              this.#now(),
+            ],
+          );
+        }
+      }
+
+      if (idempotencyClaim !== null) {
+        await this.#completeIdempotency(
+          client,
+          idempotencyRepository!,
+          idempotencyClaim,
+          { kind: "share_link", shareLinkId: input.shareLinkId },
+        );
+        return { kind: "revoked", replayed: false } as const;
+      }
+      return link.rows[0].revoked_at === null
+        ? { kind: "revoked" } as const
+        : { kind: "already_revoked" } as const;
     });
   }
 

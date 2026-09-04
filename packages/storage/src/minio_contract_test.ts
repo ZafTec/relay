@@ -88,16 +88,91 @@ Deno.test({
       publicSigningEndpoint: endpoint,
       forcePathStyle: true,
       bucketVersioning: "enabled",
+      requestTimeoutMs: 5_000,
     });
 
-    await admin.send(new CreateBucketCommand({ Bucket: bucket }));
-    await admin.send(
-      new PutBucketVersioningCommand({
-        Bucket: bucket,
-        VersioningConfiguration: { Status: "Enabled" },
-      }),
-    );
     try {
+      await admin.send(new CreateBucketCommand({ Bucket: bucket }));
+      assertEquals(await storage.checkHealth(), {
+        name: "storage",
+        status: "error",
+        message: "bucket versioning must be enabled",
+      });
+
+      const missingStorage = createS3ObjectStorage({
+        bucket: `${bucket}-missing`,
+        region: "us-east-1",
+        credentials,
+        internalEndpoint: endpoint,
+        forcePathStyle: true,
+        bucketVersioning: "enabled",
+        requestTimeoutMs: 5_000,
+      });
+      try {
+        assertEquals(await missingStorage.checkHealth(), {
+          name: "storage",
+          status: "error",
+          message: "bucket is unavailable",
+        });
+      } finally {
+        missingStorage.close();
+      }
+
+      const invalidCredentialsStorage = createS3ObjectStorage({
+        bucket,
+        region: "us-east-1",
+        credentials: {
+          accessKeyId: `${accessKeyId}-invalid`,
+          secretAccessKey: `${secretAccessKey}-invalid`,
+        },
+        internalEndpoint: endpoint,
+        forcePathStyle: true,
+        bucketVersioning: "enabled",
+        requestTimeoutMs: 5_000,
+      });
+      try {
+        const readiness = await invalidCredentialsStorage.checkHealth();
+        assertEquals(readiness, {
+          name: "storage",
+          status: "error",
+          message: "bucket is unavailable",
+        });
+        assertEquals(
+          JSON.stringify(readiness).includes(secretAccessKey),
+          false,
+        );
+      } finally {
+        invalidCredentialsStorage.close();
+      }
+
+      await admin.send(
+        new PutBucketVersioningCommand({
+          Bucket: bucket,
+          VersioningConfiguration: { Status: "Enabled" },
+        }),
+      );
+      assertEquals(await storage.checkHealth(), {
+        name: "storage",
+        status: "ok",
+      });
+      await admin.send(
+        new PutBucketVersioningCommand({
+          Bucket: bucket,
+          VersioningConfiguration: { Status: "Suspended" },
+        }),
+      );
+      assertEquals(await storage.checkHealth(), {
+        name: "storage",
+        status: "error",
+        message: "bucket versioning must be enabled",
+      });
+      await admin.send(
+        new PutBucketVersioningCommand({
+          Bucket: bucket,
+          VersioningConfiguration: { Status: "Enabled" },
+        }),
+      );
+
       const bytes = new TextEncoder().encode(
         `relay-minio-contract-${crypto.randomUUID()}`,
       );
@@ -113,6 +188,7 @@ Deno.test({
       const authorization = await storage.createUploadUrl({
         key,
         uploadId,
+        sizeBytes: bytes.byteLength,
         contentType: "application/octet-stream",
         contentMd5,
         sha256Hex: digest,
@@ -122,6 +198,10 @@ Deno.test({
       const uploadUrl = new URL(authorization.url);
       assertEquals(uploadUrl.origin, endpoint);
       assertStringIncludes(uploadUrl.pathname, `/${bucket}/${key}`);
+      assertEquals(
+        authorization.requiredHeaders["content-length"],
+        String(bytes.byteLength),
+      );
 
       const uploaded = await fetch(authorization.url, {
         method: authorization.method,
@@ -137,6 +217,33 @@ Deno.test({
       assertEquals(head.metadata["relay-upload-id"], uploadId);
       assertEquals(head.metadata["relay-sha256"], digest);
       assertEquals(head.checksumSha256, hexToBase64(digest));
+
+      const oversizedBytes = new Uint8Array(bytes.byteLength + 1);
+      oversizedBytes.set(bytes);
+      oversizedBytes[bytes.byteLength] = 0x21;
+      const oversizedKey = createImmutableObjectKey({
+        artifactId,
+        artifactVersionId: "aver_55555555555555555555555555555555",
+      });
+      const oversizedAuthorization = await storage.createUploadUrl({
+        key: oversizedKey,
+        uploadId: "upl_55555555555555555555555555555555",
+        sizeBytes: bytes.byteLength,
+        contentType: "application/octet-stream",
+        contentMd5: md5Base64(oversizedBytes),
+        sha256Hex: await sha256Hex(oversizedBytes),
+        expiresInSeconds: 60,
+      });
+      const oversizedResponse = await fetch(oversizedAuthorization.url, {
+        method: "PUT",
+        headers: {
+          ...oversizedAuthorization.requiredHeaders,
+          "content-length": String(oversizedBytes.byteLength),
+        },
+        body: body(oversizedBytes),
+      });
+      assertEquals(oversizedResponse.ok, false);
+      assertEquals(await storage.headObject({ key: oversizedKey }), null);
 
       const downloaded = await storage.createDownloadUrl({
         key,
@@ -247,6 +354,7 @@ Deno.test({
       const changedHeaderAuth = await storage.createUploadUrl({
         key: changedHeaderKey,
         uploadId: "upl_11111111111111111111111111111111",
+        sizeBytes: bytes.byteLength,
         contentType: "application/octet-stream",
         contentMd5,
         sha256Hex: digest,
@@ -270,6 +378,7 @@ Deno.test({
       const missingHeaderAuth = await storage.createUploadUrl({
         key: missingHeaderKey,
         uploadId: "upl_22222222222222222222222222222222",
+        sizeBytes: bytes.byteLength,
         contentType: "application/octet-stream",
         contentMd5,
         sha256Hex: digest,
@@ -291,6 +400,7 @@ Deno.test({
       const alteredAuth = await storage.createUploadUrl({
         key: alteredKey,
         uploadId: "upl_33333333333333333333333333333333",
+        sizeBytes: bytes.byteLength,
         contentType: "application/octet-stream",
         contentMd5,
         sha256Hex: digest,
@@ -312,6 +422,7 @@ Deno.test({
       const overwriteAuthorization = await storage.createUploadUrl({
         key,
         uploadId,
+        sizeBytes: bytes.byteLength,
         contentType: "application/octet-stream",
         contentMd5,
         sha256Hex: digest,
@@ -331,6 +442,7 @@ Deno.test({
       const expiring = await storage.createUploadUrl({
         key: expiringKey,
         uploadId: "upl_44444444444444444444444444444444",
+        sizeBytes: bytes.byteLength,
         contentType: "application/octet-stream",
         contentMd5,
         sha256Hex: digest,
