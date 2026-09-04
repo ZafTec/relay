@@ -148,15 +148,37 @@ Deno.test({
         { kind: "not_found" },
       );
 
-      const usage = new PostgresUsageService(
-        pool,
-        () => new Date("2026-08-24T10:03:00.000Z"),
-      );
+      const generatedAt = new Date("2026-08-24T10:03:00.000Z");
+      const usage = new PostgresUsageService(pool, () => generatedAt);
+      // The usage bucket's calendar-month window is stamped by the
+      // reservation at the real admission time above, not by this
+      // service's injected clock (which only affects `generatedAt`) --
+      // compute the expected window from wall-clock "now" so this
+      // assertion doesn't rot across a month boundary.
+      const admittedAt = new Date();
+      const periodStartsAt = new Date(Date.UTC(
+        admittedAt.getUTCFullYear(),
+        admittedAt.getUTCMonth(),
+        1,
+      ));
+      const periodEndsAt = new Date(Date.UTC(
+        admittedAt.getUTCFullYear(),
+        admittedAt.getUTCMonth() + 1,
+        1,
+      ));
       assertEquals(await usage.getSummary(context, {}), {
         kind: "ok",
         usage: {
-          generatedAt: "2026-08-24T10:03:00.000Z",
-          items: [],
+          generatedAt: generatedAt.toISOString(),
+          items: [{
+            metric: "fixture.compute_units",
+            unit: "fixture_unit",
+            period: "calendar_month",
+            periodStartsAt: periodStartsAt.toISOString(),
+            periodEndsAt: periodEndsAt.toISOString(),
+            consumedAmount: "0.000000000",
+            reservedAmount: "3.000000000",
+          }],
           truncated: false,
         },
       });

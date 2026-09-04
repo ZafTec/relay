@@ -114,14 +114,24 @@ export function createPostgresApplicationServices(
       createDownload: (context, request) =>
         commands.createDownload(context, request),
       get: (context, artifactId) => reads.artifacts.get(context, artifactId),
-      createUpload: (context, request) =>
-        commands.createUpload(context, request),
-      completeUpload: (context, uploadId) =>
-        commands.completeUpload(context, uploadId),
-      createShareLink: (context, request) =>
-        commands.createShareLink(context, request),
-      revokeShareLink: (context, shareLinkId) =>
-        commands.revokeShareLink(context, shareLinkId),
+      createUpload: (context, request, idempotencyKey) =>
+        commands.createUpload(context, request, idempotencyKey),
+      completeUpload: (context, uploadId, idempotencyKey) =>
+        commands.completeUpload(context, uploadId, idempotencyKey),
+      createShareLink: (context, request, idempotencyKey) =>
+        commands.createShareLink(context, request, idempotencyKey),
+      revokeShareLink: (
+        context,
+        artifactId,
+        shareLinkId,
+        idempotencyKey,
+      ) =>
+        commands.revokeShareLink(
+          context,
+          artifactId,
+          shareLinkId,
+          idempotencyKey,
+        ),
       resolveShareLink: (token, actorUserId) =>
         commands.resolveShareLink(token, actorUserId),
     },

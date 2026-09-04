@@ -17,6 +17,20 @@ export type {
 } from "./admission.ts";
 
 export {
+  createPostgresAdmissionUsagePort,
+  DEFAULT_ADMISSION_RESERVATION_TTL_SECONDS,
+  MAX_ADMISSION_RESERVATION_TTL_SECONDS,
+  PostgresAdmissionUsagePort,
+  resolveAdmissionUsageMeasures,
+  runAdmissionReservationIdempotencyKey,
+  schedulerCostFromExpectedUsage,
+} from "./metering-admission.ts";
+export type {
+  PostgresAdmissionUsagePortDependencies,
+  PostgresAdmissionUsagePortOptions,
+} from "./metering-admission.ts";
+
+export {
   createPostgresApplicationServices,
   createPostgresReadServices,
   createPostgresRunService,
