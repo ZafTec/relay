@@ -44,6 +44,27 @@ const FORBIDDEN_EXPORTER_OVERRIDES = [
   "OTEL_METRICS_EXPORTER",
   "OTEL_TRACES_EXPORTER",
 ] as const;
+const OBSERVABILITY_ENVIRONMENT_VARIABLES = [
+  "OTEL_DENO",
+  "OTEL_EXPORTER_OTLP_PROTOCOL",
+  "OTEL_EXPORTER_OTLP_ENDPOINT",
+  ...FORBIDDEN_EXPORTER_OVERRIDES,
+  "OTEL_SERVICE_NAME",
+  "OTEL_RESOURCE_ATTRIBUTES",
+  "OTEL_PROPAGATORS",
+  "OTEL_DENO_CONSOLE",
+  "OTEL_METRIC_EXPORT_INTERVAL",
+  "OTEL_TRACES_SAMPLER",
+  "OTEL_TRACES_SAMPLER_ARG",
+] as const;
+
+type ObservabilityEnv = Record<string, string | undefined>;
+
+function readProcessEnvironment(names: readonly string[]): ObservabilityEnv {
+  const env: ObservabilityEnv = {};
+  for (const name of names) env[name] = Deno.env.get(name);
+  return env;
+}
 
 function required(name: string, value: string | undefined): string {
   if (value === undefined || value.trim() === "") {
@@ -201,7 +222,9 @@ function parseSampler(
 
 /** Strict startup validation for the single-exporter Relay -> Alloy topology. */
 export function loadObservabilityConfig(
-  env: Record<string, string | undefined> = Deno.env.toObject(),
+  env: ObservabilityEnv = readProcessEnvironment(
+    OBSERVABILITY_ENVIRONMENT_VARIABLES,
+  ),
 ): ObservabilityConfig {
   if (env.OTEL_DENO !== "true") {
     throw new Error("OTEL_DENO must be true");
