@@ -15,6 +15,7 @@
     "./packages/metering",
     "./packages/mcp",
     "./packages/observability",
+    "./packages/providers",
     "./packages/queue",
     "./packages/scheduler",
     "./packages/storage"
@@ -29,7 +30,7 @@
     "admin:bootstrap-superadmin": "deno run --allow-env --allow-net src/main.ts admin bootstrap-superadmin",
     "compile": "deno compile --allow-env --allow-net --output dist/relay src/main.ts",
     "test": "deno test --allow-env --allow-net apps/api apps/worker packages src",
-    "test:coverage": "deno test --allow-env --allow-net --coverage=coverage/backend --clean --coverage-threshold=55 apps/api apps/worker packages src",
+    "test:coverage": "deno test --allow-env --allow-net --allow-read --coverage=coverage/backend --clean --coverage-threshold=55 apps/api apps/worker packages scripts/release src",
     "check": "deno fmt --check apps packages scripts src && deno lint apps packages scripts src && deno check src/main.ts scripts/dev/check-live.ts scripts/ci/api-container-smoke.ts scripts/ci/web-container-smoke.ts && deno task test:coverage",
     "check:live": "deno run --allow-env --allow-run --allow-read scripts/dev/check-live.ts",
     "check:containers": "sh scripts/ci/check-containers.sh",
