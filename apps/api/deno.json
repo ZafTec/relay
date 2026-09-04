@@ -1,4 +1,8 @@
 {
   "name": "@relay/api",
-  "exports": "./src/app.ts"
+  "exports": {
+    ".": "./src/app.ts",
+    "./composition": "./src/composition.ts",
+    "./server": "./src/server.ts"
+  }
 }
