@@ -1,8 +1,19 @@
-import { assert, assertEquals } from "@std/assert";
+import {
+  assert,
+  assertEquals,
+  assertRejects,
+  assertStrictEquals,
+} from "@std/assert";
+import type { CapacityCoordinator, RateLimitCheck } from "@relay/capacity";
 import type { RuntimeConfig } from "@relay/config";
-import { createDatabasePool } from "@relay/database";
+import {
+  createDatabasePool,
+  type DatabasePool,
+  MIGRATIONS,
+} from "@relay/database";
 import {
   admitToolRun,
+  type ClaimedJob,
   type DurableCapacityLease,
   ExecutionQueueRegistry,
 } from "@relay/queue";
@@ -14,12 +25,69 @@ import {
   TEST_USAGE_PORT,
 } from "../../../packages/queue/src/test_support.ts";
 import {
+  acquireReadyConsumer,
+  ArtifactMaintenanceOwner,
+  checkWorkerReadiness,
   type ClosableWorker,
+  CoordinatorAdapter,
   createExecutionHandlerRegistry,
   gracefullyCloseWorkers,
   restoreDurableRedisLease,
   startWorker,
 } from "./worker.ts";
+
+const WORKER_CONFIG: RuntimeConfig = {
+  appName: "Relay Worker Test",
+  deploymentEnvironment: "test",
+  port: 8_000,
+  build: { version: "test", revision: "test" },
+  database: {
+    url: new URL("postgres://relay:test@localhost:5432/relay"),
+    poolMax: 2,
+    connectTimeoutMs: 100,
+    statementTimeoutMs: 100,
+  },
+  redis: {
+    url: new URL("redis://localhost:6379"),
+    connectTimeoutMs: 100,
+  },
+};
+
+function claimedJob(
+  providerPerMinute: number | null,
+  toolPerMinute: number | null,
+): ClaimedJob {
+  return {
+    jobId: "job-1",
+    runId: "run-1",
+    leaseEpoch: 1,
+    dispatchGeneration: 0,
+    workspaceId: "workspace-1",
+    toolVersionId: "tool-version-1",
+    toolId: "tool-1",
+    toolKey: "image.generate",
+    providerModelId: "provider-model-1",
+    capacityPoolId: "pool-1",
+    capacityPoolKey: "pool-key-1",
+    capacityUnits: 1,
+    policyVersion: 1,
+    capacityPolicyRevision: 7,
+    capacityLimits: {
+      globalTool: 1,
+      pool: 1,
+      workspaceTotal: 1,
+      workspaceTool: 1,
+    },
+    submissionRatePolicy: {
+      providerPerMinute,
+      toolPerMinute,
+      capacityPoolRevision: 7,
+      toolRevision: toolPerMinute === null ? null : 3,
+    },
+    previousRetryClassification: null,
+    previousProviderOperationId: null,
+  };
+}
 
 class FakeWorker implements ClosableWorker {
   paused = false;
@@ -35,6 +103,108 @@ class FakeWorker implements ClosableWorker {
     return Promise.resolve();
   }
 }
+
+Deno.test("coordinator adapter constructs configured GCRA checks", async () => {
+  const calls: Array<{
+    readonly poolId: string;
+    readonly checks: readonly RateLimitCheck[];
+  }> = [];
+  const coordinator = {
+    rateKeys: {
+      provider: (providerModelId: string) => `provider:${providerModelId}`,
+      tool: (toolKey: string) => `tool:${toolKey}`,
+    },
+    acquireSubmissionPermit(
+      poolId: string,
+      checks: readonly RateLimitCheck[],
+    ) {
+      calls.push({ poolId, checks });
+      return Promise.resolve({ ok: true });
+    },
+  } as unknown as CapacityCoordinator;
+  const adapter = new CoordinatorAdapter(
+    coordinator,
+    1_000,
+    "worker-rate-test",
+  );
+
+  assertEquals(
+    await adapter.acquireSubmissionPermit(claimedJob(12, 4)),
+    { kind: "acquired" },
+  );
+  assertEquals(
+    await adapter.acquireSubmissionPermit(claimedJob(4, null)),
+    { kind: "acquired" },
+  );
+  assertEquals(
+    await adapter.acquireSubmissionPermit(claimedJob(50, null)),
+    { kind: "acquired" },
+  );
+  assertEquals(calls, [
+    {
+      poolId: "pool-1",
+      checks: [
+        {
+          key: "provider:provider-model-1",
+          emissionIntervalMs: 5_000,
+          burstMs: 0,
+          cost: 1,
+        },
+        {
+          key: "tool:image.generate",
+          emissionIntervalMs: 15_000,
+          burstMs: 0,
+          cost: 1,
+        },
+      ],
+    },
+    {
+      poolId: "pool-1",
+      checks: [{
+        key: "provider:provider-model-1",
+        emissionIntervalMs: 15_000,
+        burstMs: 0,
+        cost: 1,
+      }],
+    },
+    {
+      poolId: "pool-1",
+      checks: [{
+        key: "provider:provider-model-1",
+        emissionIntervalMs: 1_200,
+        burstMs: 0,
+        cost: 1,
+      }],
+    },
+  ]);
+});
+
+Deno.test("coordinator adapter passes a relative provider cooldown duration", async () => {
+  const cooldowns: Array<
+    { readonly poolId: string; readonly durationMs: number }
+  > = [];
+  const coordinator = {
+    setProviderCooldown(poolId: string, durationMs: number) {
+      cooldowns.push({ poolId, durationMs });
+      return Promise.resolve(true);
+    },
+  } as unknown as CapacityCoordinator;
+  const adapter = new CoordinatorAdapter(
+    coordinator,
+    1_000,
+    "worker-cooldown-test",
+    () => 10_000,
+  );
+  const job = claimedJob(12, null);
+
+  await adapter.setProviderCooldown(job, new Date(12_500));
+  await adapter.setProviderCooldown(job, new Date(9_000));
+
+  assertEquals(cooldowns, [
+    { poolId: "pool-1", durationMs: 2_500 },
+    { poolId: "pool-1", durationMs: 1 },
+  ]);
+});
 
 Deno.test("graceful shutdown pauses intake and drains before non-forced close", async () => {
   const worker = new FakeWorker();
@@ -93,6 +263,225 @@ Deno.test("shutdown budget includes a stuck pause operation", async () => {
   assert(Date.now() - startedAt < 500);
 });
 
+Deno.test("consumer resources are owned before readiness can fail", async () => {
+  const order: string[] = [];
+  const connection = { name: "consumer-redis" };
+  const consumer = {
+    waitUntilReady() {
+      order.push("wait");
+      return Promise.reject(new Error("injected readiness failure"));
+    },
+  };
+
+  await assertRejects(
+    () =>
+      acquireReadyConsumer(
+        () => {
+          order.push("create connection");
+          return connection;
+        },
+        (ownedConnection) => {
+          assertStrictEquals(ownedConnection, connection);
+          order.push("own connection");
+        },
+        (workerConnection) => {
+          assertStrictEquals(workerConnection, connection);
+          order.push("create consumer");
+          return consumer;
+        },
+        (ownedConsumer) => {
+          assertStrictEquals(ownedConsumer, consumer);
+          order.push("own consumer");
+        },
+      ),
+    Error,
+    "injected readiness failure",
+  );
+
+  assertEquals(order, [
+    "create connection",
+    "own connection",
+    "create consumer",
+    "own consumer",
+    "wait",
+  ]);
+});
+
+Deno.test("maintenance ownership stops once and waits for termination", async () => {
+  let finishMaintenance: (() => void) | undefined;
+  let startCount = 0;
+  let stopCount = 0;
+  let unexpectedStops = 0;
+  const owner = new ArtifactMaintenanceOwner(
+    {
+      start() {
+        startCount += 1;
+        return new Promise<void>((resolve) => {
+          finishMaintenance = resolve;
+        });
+      },
+      stop() {
+        stopCount += 1;
+        return Promise.resolve();
+      },
+    },
+    () => {
+      unexpectedStops += 1;
+    },
+  );
+
+  const startTask = owner.start();
+  assertStrictEquals(owner.start(), startTask);
+  const firstTermination = owner.terminate();
+  assertStrictEquals(owner.terminate(), firstTermination);
+  await Promise.resolve();
+
+  assertEquals(startCount, 1);
+  assertEquals(stopCount, 1);
+  assertEquals(owner.terminated, false);
+
+  finishMaintenance?.();
+  await firstTermination;
+
+  assertEquals(owner.terminated, true);
+  assertEquals(unexpectedStops, 0);
+  assertEquals(stopCount, 1);
+});
+
+Deno.test("bootstrap failure disposes every acquired resource exactly once", async () => {
+  let signalAdds = 0;
+  let signalRemoves = 0;
+  let poolEnds = 0;
+  let metricsDisposals = 0;
+  let queueCloses = 0;
+  const quitCounts = [0, 0, 0, 0];
+  const disconnectCounts = [0, 0, 0, 0];
+  const rejectQuits: Array<(reason?: unknown) => void> = [];
+  let redisCreated = 0;
+  const signal = {
+    aborted: false,
+    addEventListener() {
+      signalAdds += 1;
+    },
+    removeEventListener() {
+      signalRemoves += 1;
+    },
+  } as unknown as AbortSignal;
+  const pool = {
+    end() {
+      poolEnds += 1;
+      return Promise.resolve();
+    },
+  } as unknown as DatabasePool;
+
+  await assertRejects(
+    () =>
+      startWorker(
+        WORKER_CONFIG,
+        {
+          signal,
+          installSignalHandlers: false,
+          shutdownDeadlineMs: 5,
+          telemetry: {} as never,
+          log: () => undefined,
+        },
+        {
+          createDatabasePool: () => pool,
+          createWorkerRuntimeMetrics: (() => ({
+            dispose() {
+              metricsDisposals += 1;
+            },
+          })) as never,
+          createRedisConnection: (() => {
+            const index = redisCreated;
+            redisCreated += 1;
+            return {
+              status: "ready",
+              quit() {
+                quitCounts[index] += 1;
+                return new Promise<void>((_resolve, reject) => {
+                  rejectQuits[index] = reject;
+                });
+              },
+              disconnect() {
+                disconnectCounts[index] += 1;
+              },
+            } as unknown as Redis;
+          }) as never,
+          createExecutionQueueRegistry: () =>
+            ({
+              close() {
+                queueCloses += 1;
+                return Promise.resolve();
+              },
+            }) as never,
+          createRedisDispatchGate() {
+            throw new Error("injected bootstrap failure");
+          },
+        },
+      ),
+    Error,
+    "injected bootstrap failure",
+  );
+
+  for (const reject of rejectQuits) reject(new Error("late quit failure"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assertEquals(signalAdds, 1);
+  assertEquals(signalRemoves, 1);
+  assertEquals(poolEnds, 1);
+  assertEquals(metricsDisposals, 1);
+  assertEquals(queueCloses, 1);
+  assertEquals(quitCounts, [1, 1, 1, 1]);
+  assertEquals(disconnectCounts, [1, 1, 1, 1]);
+});
+
+Deno.test("bootstrap failure preserves injected pool ownership", async () => {
+  let poolCreates = 0;
+  let poolEnds = 0;
+  let metricsDisposals = 0;
+  const pool = {
+    end() {
+      poolEnds += 1;
+      return Promise.resolve();
+    },
+  } as unknown as DatabasePool;
+
+  await assertRejects(
+    () =>
+      startWorker(
+        WORKER_CONFIG,
+        {
+          pool,
+          installSignalHandlers: false,
+          shutdownDeadlineMs: 100,
+          telemetry: {} as never,
+          log: () => undefined,
+        },
+        {
+          createDatabasePool() {
+            poolCreates += 1;
+            throw new Error("owned pool factory must not run");
+          },
+          createWorkerRuntimeMetrics: (() => ({
+            dispose() {
+              metricsDisposals += 1;
+            },
+          })) as never,
+          createRedisConnection() {
+            throw new Error("injected Redis construction failure");
+          },
+        },
+      ),
+    Error,
+    "injected Redis construction failure",
+  );
+
+  assertEquals(poolCreates, 0);
+  assertEquals(poolEnds, 0);
+  assertEquals(metricsDisposals, 1);
+});
+
 const redisUrl = Deno.env.get("REDIS_URL");
 
 Deno.test({
@@ -148,6 +537,54 @@ Deno.test("worker handler registry may start empty without installing fake work"
   assertEquals(handlers.catalogHandlers.keys.size, 0);
 });
 
+Deno.test("worker readiness includes database, migrations, Redis, and storage", async () => {
+  const queries: string[] = [];
+  const pool = {
+    query(text: string) {
+      queries.push(text);
+      if (text === "select 1") return Promise.resolve({ rows: [{}] });
+      return Promise.resolve({
+        rows: MIGRATIONS.map((migration) => ({
+          id: migration.id,
+          checksum_sha256: migration.checksumSha256,
+        })),
+      });
+    },
+  } as unknown as DatabasePool;
+  let redisPings = 0;
+  let storageChecks = 0;
+  const redis = [
+    {
+      ping: () => {
+        redisPings += 1;
+        return Promise.resolve("PONG");
+      },
+    },
+    {
+      ping: () => {
+        redisPings += 1;
+        return Promise.resolve("PONG");
+      },
+    },
+  ];
+
+  assertEquals(
+    await checkWorkerReadiness(pool, redis as never, [() => {
+      storageChecks += 1;
+      return Promise.resolve({ name: "storage", status: "ok" });
+    }]),
+    [
+      { name: "database", status: "ok" },
+      { name: "migrations", status: "ok" },
+      { name: "redis", status: "ok" },
+      { name: "storage", status: "ok" },
+    ],
+  );
+  assertEquals(queries.length, 2);
+  assertEquals(redisPings, 2);
+  assertEquals(storageChecks, 1);
+});
+
 const databaseUrl = Deno.env.get("DATABASE_URL");
 
 Deno.test({
@@ -172,6 +609,7 @@ Deno.test({
     const abort = new AbortController();
     const config: RuntimeConfig = {
       appName: "Relay Test",
+      deploymentEnvironment: environment,
       port: 8_000,
       build: { version: "test", revision: "test" },
       database: {

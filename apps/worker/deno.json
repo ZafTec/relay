@@ -1,4 +1,7 @@
 {
   "name": "@relay/worker",
-  "exports": "./src/worker.ts"
+  "exports": {
+    ".": "./src/worker.ts",
+    "./composition": "./src/composition.ts"
+  }
 }
