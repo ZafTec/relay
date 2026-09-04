@@ -1,0 +1,514 @@
+name: Release images
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+# Serialize every tag release at one fixed repository boundary. GitHub.com
+# supports queue:max, so bursts of tags wait instead of replacing pending runs.
+# actionlint 1.7.12 reports this official key as a known false positive (#657).
+concurrency:
+  group: release-images
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  release:
+    name: verify and stage images
+    runs-on: ubuntu-24.04
+    outputs:
+      release_id: ${{ steps.identity.outputs.release_id }}
+      promote_latest: ${{ steps.identity.outputs.promote_latest }}
+    timeout-minutes: 90
+    environment: release
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    env:
+      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || 'zaftec' }}
+      DOCKERHUB_BACKEND_REPOSITORY: ${{ vars.DOCKERHUB_BACKEND_REPOSITORY || 'relay-backend' }}
+      DOCKERHUB_WEB_REPOSITORY: ${{ vars.DOCKERHUB_WEB_REPOSITORY || 'relay-web' }}
+      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
+    steps:
+      - name: Require protected registry credentials
+        shell: bash
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$DOCKERHUB_USERNAME" ]]; then
+            echo "::error::Set the release environment variable DOCKERHUB_USERNAME (or environment secret of the same name)." >&2
+            exit 1
+          fi
+          if [[ -z "$DOCKERHUB_TOKEN" ]]; then
+            echo "::error::Set protected release environment secret DOCKERHUB_TOKEN to a read/write token; verification reads and publication writes both repositories." >&2
+            exit 1
+          fi
+          if [[ ! "$DOCKERHUB_NAMESPACE" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]]; then
+            echo "::error::DOCKERHUB_NAMESPACE is not a safe Docker Hub namespace." >&2
+            exit 1
+          fi
+          for repository in "$DOCKERHUB_BACKEND_REPOSITORY" "$DOCKERHUB_WEB_REPOSITORY"; do
+            if [[ ! "$repository" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]]; then
+              echo "::error::Docker Hub repository names must be lowercase and unqualified." >&2
+              exit 1
+            fi
+          done
+          if [[ "$DOCKERHUB_BACKEND_REPOSITORY" == "$DOCKERHUB_WEB_REPOSITORY" ]]; then
+            echo "::error::Backend and web repositories must be distinct." >&2
+            exit 1
+          fi
+
+      - name: Check out the tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Install Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: 2.9.4
+
+      - name: Validate release identity and draft
+        id: identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          tag="$GITHUB_REF_NAME"
+          tag_sha=$(git rev-list -n 1 "$tag")
+          if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+            echo "::error::The tag resolves to $tag_sha, not event SHA $GITHUB_SHA." >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$tag_sha" origin/main; then
+            echo "::error::Release tag commit is not reachable from origin/main." >&2
+            exit 1
+          fi
+          version=$(deno run --allow-read scripts/release/validate.ts tag \
+            --tag "$tag" --version-file version.txt --sha "$tag_sha")
+          created=$(git show -s --format=%cI "$tag_sha")
+
+          release_json="$RUNNER_TEMP/release.json"
+          found=false
+          for _attempt in {1..12}; do
+            if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > "$release_json" 2>/dev/null; then
+              found=true
+              break
+            fi
+            sleep 5
+          done
+          if [[ "$found" != "true" ]]; then
+            echo "::error::Release Please did not create a release for $tag." >&2
+            exit 1
+          fi
+          jq -e --arg tag "$tag" \
+            '.tag_name == $tag and .draft == true and .prerelease == false' \
+            "$release_json" >/dev/null || {
+              echo "::error::The matching GitHub release must still be a non-prerelease draft." >&2
+              exit 1
+            }
+
+          release_id=$(jq -er '.id | select(type == "number")' "$release_json")
+          releases_json="$RUNNER_TEMP/releases.json"
+          # A published stable release is the durable success marker because
+          # publishing this workflow's draft is its final operation. Failed
+          # drafts and prereleases therefore cannot block latest promotion.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | {tag_name, draft, prerelease, published_at}' \
+            | jq -s '.' > "$releases_json"
+          promote_latest=$(deno run --allow-read scripts/release/validate.ts latest \
+            --version "$version" --releases-file "$releases_json")
+
+          backend_repository="$DOCKERHUB_NAMESPACE/$DOCKERHUB_BACKEND_REPOSITORY"
+          web_repository="$DOCKERHUB_NAMESPACE/$DOCKERHUB_WEB_REPOSITORY"
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "revision=$tag_sha"
+            echo "created=$created"
+            echo "release_id=$release_id"
+            echo "promote_latest=$promote_latest"
+            echo "backend_repository=$backend_repository"
+            echo "web_repository=$web_repository"
+            echo "backend_candidate=$backend_repository:candidate-$GITHUB_RUN_ID"
+            echo "web_candidate=$web_repository:candidate-$GITHUB_RUN_ID"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Resolve preserved candidates
+        id: candidates
+        shell: bash
+        env:
+          BACKEND_CANDIDATE: ${{ steps.identity.outputs.backend_candidate }}
+          WEB_CANDIDATE: ${{ steps.identity.outputs.web_candidate }}
+        run: |
+          set -Eeuo pipefail
+          inspect_candidate() {
+            local reference=$1
+            local error_file="$RUNNER_TEMP/candidate-inspect-error"
+            local digest classification
+            if digest=$(docker buildx imagetools inspect "$reference" --format '{{.Manifest.Digest}}' 2>"$error_file"); then
+              deno run scripts/release/validate.ts digest --digest "$digest" >/dev/null
+              printf '%s\n' "$digest"
+              return
+            fi
+            classification=$(deno run --allow-read scripts/release/validate.ts registry-error \
+              --reference "$reference" --error-file "$error_file")
+            if [[ "$classification" == "missing" ]]; then
+              printf '\n'
+              return
+            fi
+            echo "::error::Unable to inspect $reference; refusing to rebuild after an authorization or transport error." >&2
+            cat "$error_file" >&2
+            exit 1
+          }
+
+          backend_digest=$(inspect_candidate "$BACKEND_CANDIDATE")
+          web_digest=$(inspect_candidate "$WEB_CANDIDATE")
+          {
+            echo "backend_digest=$backend_digest"
+            echo "backend_needs_build=$([[ -z "$backend_digest" ]] && echo true || echo false)"
+            echo "web_digest=$web_digest"
+            echo "web_needs_build=$([[ -z "$web_digest" ]] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push backend candidate once
+        id: build-backend
+        if: steps.candidates.outputs.backend_needs_build == 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          pull: true
+          tags: ${{ steps.identity.outputs.backend_candidate }}
+          build-args: |
+            APP_VERSION=${{ steps.identity.outputs.version }}
+            GIT_SHA=${{ steps.identity.outputs.revision }}
+            IMAGE_CREATED=${{ steps.identity.outputs.created }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Build and push web candidate once
+        id: build-web
+        if: steps.candidates.outputs.web_needs_build == 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: apps/web
+          file: apps/web/Dockerfile
+          platforms: linux/amd64
+          push: true
+          pull: true
+          tags: ${{ steps.identity.outputs.web_candidate }}
+          build-args: |
+            APP_VERSION=${{ steps.identity.outputs.version }}
+            GIT_SHA=${{ steps.identity.outputs.revision }}
+            IMAGE_CREATED=${{ steps.identity.outputs.created }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Pin candidate digests
+        id: digests
+        shell: bash
+        env:
+          BACKEND_CANDIDATE: ${{ steps.identity.outputs.backend_candidate }}
+          BACKEND_EXISTING_DIGEST: ${{ steps.candidates.outputs.backend_digest }}
+          BACKEND_BUILT_DIGEST: ${{ steps.build-backend.outputs.digest }}
+          WEB_CANDIDATE: ${{ steps.identity.outputs.web_candidate }}
+          WEB_EXISTING_DIGEST: ${{ steps.candidates.outputs.web_digest }}
+          WEB_BUILT_DIGEST: ${{ steps.build-web.outputs.digest }}
+          VERSION: ${{ steps.identity.outputs.version }}
+          REVISION: ${{ steps.identity.outputs.revision }}
+          CREATED: ${{ steps.identity.outputs.created }}
+        run: |
+          set -Eeuo pipefail
+          backend_digest=${BACKEND_EXISTING_DIGEST:-$BACKEND_BUILT_DIGEST}
+          web_digest=${WEB_EXISTING_DIGEST:-$WEB_BUILT_DIGEST}
+          deno run scripts/release/validate.ts digest --digest "$backend_digest" >/dev/null
+          deno run scripts/release/validate.ts digest --digest "$web_digest" >/dev/null
+
+          verify_candidate() {
+            local reference=$1
+            local digest=$2
+            local manifest_file="$RUNNER_TEMP/candidate-manifest.json"
+            local image_file="$RUNNER_TEMP/candidate-image.json"
+            docker buildx imagetools inspect "$reference@$digest" \
+              --format '{{json .Manifest}}' > "$manifest_file"
+            docker buildx imagetools inspect "$reference@$digest" \
+              --format '{{json .Image}}' > "$image_file"
+            deno run --allow-read scripts/release/validate.ts image \
+              --manifest-file "$manifest_file" \
+              --image-file "$image_file" \
+              --digest "$digest" \
+              --version "$VERSION" \
+              --revision "$REVISION" \
+              --created "$CREATED" >/dev/null || {
+                echo "::error::Candidate platform, attestations, or OCI identity labels do not match $reference@$digest." >&2
+                exit 1
+              }
+          }
+
+          verify_candidate "$BACKEND_CANDIDATE" "$backend_digest"
+          verify_candidate "$WEB_CANDIDATE" "$web_digest"
+          {
+            echo "backend=$backend_digest"
+            echo "web=$web_digest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create evidence directory
+        run: mkdir -p evidence
+
+      - name: Generate backend SBOM from exact candidate
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ steps.identity.outputs.backend_candidate }}@${{ steps.digests.outputs.backend }}
+          format: spdx-json
+          output-file: evidence/relay-backend-${{ steps.identity.outputs.version }}.spdx.json
+          syft-version: v1.51.0
+          dependency-snapshot: false
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Generate web SBOM from exact candidate
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ steps.identity.outputs.web_candidate }}@${{ steps.digests.outputs.web }}
+          format: spdx-json
+          output-file: evidence/relay-web-${{ steps.identity.outputs.version }}.spdx.json
+          syft-version: v1.51.0
+          dependency-snapshot: false
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Generate backend GitHub provenance
+        id: backend-provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: docker.io/${{ steps.identity.outputs.backend_repository }}
+          subject-digest: ${{ steps.digests.outputs.backend }}
+          push-to-registry: true
+
+      - name: Generate web GitHub provenance
+        id: web-provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: docker.io/${{ steps.identity.outputs.web_repository }}
+          subject-digest: ${{ steps.digests.outputs.web }}
+          push-to-registry: true
+
+      - name: Collect provenance bundles
+        shell: bash
+        env:
+          BACKEND_BUNDLE: ${{ steps.backend-provenance.outputs.bundle-path }}
+          WEB_BUNDLE: ${{ steps.web-provenance.outputs.bundle-path }}
+          VERSION: ${{ steps.identity.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          test -s "$BACKEND_BUNDLE"
+          test -s "$WEB_BUNDLE"
+          cp -- "$BACKEND_BUNDLE" "evidence/relay-backend-$VERSION.provenance.json"
+          cp -- "$WEB_BUNDLE" "evidence/relay-web-$VERSION.provenance.json"
+
+      - name: Scan exact backend candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.identity.outputs.backend_candidate }}@${{ steps.digests.outputs.backend }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          timeout: 15m
+          exit-code: "1"
+          format: json
+          output: evidence/relay-backend-${{ steps.identity.outputs.version }}.trivy.json
+
+      - name: Scan exact web candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.identity.outputs.web_candidate }}@${{ steps.digests.outputs.web }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          timeout: 15m
+          exit-code: "1"
+          format: json
+          output: evidence/relay-web-${{ steps.identity.outputs.version }}.trivy.json
+
+      - name: Promote immutable image tags
+        shell: bash
+        env:
+          VERSION: ${{ steps.identity.outputs.version }}
+          REVISION: ${{ steps.identity.outputs.revision }}
+          BACKEND_REPOSITORY: ${{ steps.identity.outputs.backend_repository }}
+          BACKEND_CANDIDATE: ${{ steps.identity.outputs.backend_candidate }}
+          BACKEND_DIGEST: ${{ steps.digests.outputs.backend }}
+          WEB_REPOSITORY: ${{ steps.identity.outputs.web_repository }}
+          WEB_CANDIDATE: ${{ steps.identity.outputs.web_candidate }}
+          WEB_DIGEST: ${{ steps.digests.outputs.web }}
+        run: |
+          bash scripts/release/promote-images.sh \
+            --phase immutable \
+            --version "$VERSION" \
+            --revision "$REVISION" \
+            --backend-repository "$BACKEND_REPOSITORY" \
+            --backend-candidate "$BACKEND_CANDIDATE" \
+            --backend-digest "$BACKEND_DIGEST" \
+            --web-repository "$WEB_REPOSITORY" \
+            --web-candidate "$WEB_CANDIDATE" \
+            --web-digest "$WEB_DIGEST"
+
+      - name: Create and validate release manifest
+        shell: bash
+        env:
+          VERSION: ${{ steps.identity.outputs.version }}
+          TAG: ${{ steps.identity.outputs.tag }}
+          REVISION: ${{ steps.identity.outputs.revision }}
+          BACKEND_REPOSITORY: ${{ steps.identity.outputs.backend_repository }}
+          BACKEND_CANDIDATE: ${{ steps.identity.outputs.backend_candidate }}
+          BACKEND_DIGEST: ${{ steps.digests.outputs.backend }}
+          WEB_REPOSITORY: ${{ steps.identity.outputs.web_repository }}
+          WEB_CANDIDATE: ${{ steps.identity.outputs.web_candidate }}
+          WEB_DIGEST: ${{ steps.digests.outputs.web }}
+          PROMOTE_LATEST: ${{ steps.identity.outputs.promote_latest }}
+        run: |
+          set -Eeuo pipefail
+          deno run --allow-write scripts/release/create-manifest.ts \
+            --version "$VERSION" \
+            --tag "$TAG" \
+            --revision "$REVISION" \
+            --backend-repository "$BACKEND_REPOSITORY" \
+            --backend-digest "$BACKEND_DIGEST" \
+            --backend-candidate "$BACKEND_CANDIDATE" \
+            --web-repository "$WEB_REPOSITORY" \
+            --web-digest "$WEB_DIGEST" \
+            --web-candidate "$WEB_CANDIDATE" \
+            --promote-latest "$PROMOTE_LATEST" \
+            --output evidence/release-manifest.json
+          deno run --allow-read scripts/release/validate.ts manifest \
+            --file evidence/release-manifest.json
+          test -s "evidence/relay-backend-$VERSION.spdx.json"
+          test -s "evidence/relay-backend-$VERSION.provenance.json"
+          test -s "evidence/relay-backend-$VERSION.trivy.json"
+          test -s "evidence/relay-web-$VERSION.spdx.json"
+          test -s "evidence/relay-web-$VERSION.provenance.json"
+          test -s "evidence/relay-web-$VERSION.trivy.json"
+          for sbom in evidence/*.spdx.json; do
+            jq -e '.spdxVersion | startswith("SPDX-")' "$sbom" >/dev/null
+          done
+          for provenance in evidence/*.provenance.json; do
+            jq -e 'type == "object"' "$provenance" >/dev/null
+          done
+          for scan in evidence/*.trivy.json; do
+            jq -e '.SchemaVersion >= 2 and (.Results | type == "array")' "$scan" >/dev/null
+          done
+          (
+            cd evidence
+            sha256sum \
+              release-manifest.json \
+              "relay-backend-$VERSION.provenance.json" \
+              "relay-backend-$VERSION.spdx.json" \
+              "relay-backend-$VERSION.trivy.json" \
+              "relay-web-$VERSION.provenance.json" \
+              "relay-web-$VERSION.spdx.json" \
+              "relay-web-$VERSION.trivy.json" \
+              > SHA256SUMS
+          )
+
+      - name: Retain release evidence with the workflow run
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-evidence-${{ github.ref_name }}-${{ github.run_attempt }}
+          path: evidence
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Attach verified evidence to the draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.identity.outputs.tag }}
+        run: gh release upload "$TAG" evidence/* --clobber
+
+      - name: Confirm release is still a draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.identity.outputs.release_id }}
+          TAG: ${{ steps.identity.outputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            | jq -e --arg tag "$TAG" \
+              '.tag_name == $tag and .draft == true and .prerelease == false' \
+              >/dev/null
+
+      # Moving tags are idempotent, so a failed final publish can safely rerun
+      # while the release remains draft and the immutable evidence is retained.
+      - name: Promote latest image tags
+        if: success() && steps.identity.outputs.promote_latest == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.identity.outputs.version }}
+          REVISION: ${{ steps.identity.outputs.revision }}
+          BACKEND_REPOSITORY: ${{ steps.identity.outputs.backend_repository }}
+          BACKEND_CANDIDATE: ${{ steps.identity.outputs.backend_candidate }}
+          BACKEND_DIGEST: ${{ steps.digests.outputs.backend }}
+          WEB_REPOSITORY: ${{ steps.identity.outputs.web_repository }}
+          WEB_CANDIDATE: ${{ steps.identity.outputs.web_candidate }}
+          WEB_DIGEST: ${{ steps.digests.outputs.web }}
+        run: |
+          bash scripts/release/promote-images.sh \
+            --phase latest \
+            --version "$VERSION" \
+            --revision "$REVISION" \
+            --backend-repository "$BACKEND_REPOSITORY" \
+            --backend-candidate "$BACKEND_CANDIDATE" \
+            --backend-digest "$BACKEND_DIGEST" \
+            --web-repository "$WEB_REPOSITORY" \
+            --web-candidate "$WEB_CANDIDATE" \
+            --web-digest "$WEB_DIGEST"
+
+
+  publish:
+    name: publish verified release
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      # This job intentionally has no actions or later steps. The PATCH runs
+      # only after the staging job and all of its post-job cleanup succeeded.
+      - name: Publish the verified draft release last
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.release.outputs.release_id }}
+          PROMOTE_LATEST: ${{ needs.release.outputs.promote_latest }}
+        run: |
+          set -Eeuo pipefail
+          gh api --method PATCH \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            -F draft=false \
+            -f make_latest="$PROMOTE_LATEST" \
+            >/dev/null

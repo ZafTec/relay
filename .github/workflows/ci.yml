@@ -171,6 +171,18 @@ jobs:
           exit-code: "1"
           format: table
 
+  delivery:
+    name: release and deployment validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate workflows and release/deployment assets
+        run: bash scripts/ci/check-release-deploy.sh
+      - name: Confirm validation was read-only
+        run: test -z "$(git status --short)"
+
   required:
     name: required
     if: always()
@@ -179,6 +191,7 @@ jobs:
       - web
       - integration
       - security
+      - delivery
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -188,8 +201,9 @@ jobs:
           WEB_RESULT: ${{ needs.web.result }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
           SECURITY_RESULT: ${{ needs.security.result }}
+          DELIVERY_RESULT: ${{ needs.delivery.result }}
         run: |
-          for result in "$SOURCE_RESULT" "$WEB_RESULT" "$INTEGRATION_RESULT" "$SECURITY_RESULT"; do
+          for result in "$SOURCE_RESULT" "$WEB_RESULT" "$INTEGRATION_RESULT" "$SECURITY_RESULT" "$DELIVERY_RESULT"; do
             if [ "$result" != "success" ]; then
               echo "A required CI lane did not succeed." >&2
               exit 1
