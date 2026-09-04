@@ -24,6 +24,12 @@ function AdminNavigation({ mobile = false }: { readonly mobile?: boolean }) {
       >
         Changelog
       </NavLink>
+      <NavLink
+        className={({ isActive }) => `admin-nav__item${isActive ? " is-active" : ""}`}
+        to="/admin/capacity"
+      >
+        Capacity
+      </NavLink>
     </nav>
   );
 }

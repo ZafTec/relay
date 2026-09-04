@@ -6,6 +6,8 @@ import { Button, LinkButton } from "../../components/ui/Button";
 import { InlineNotice } from "../../components/ui/InlineNotice";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { StatusBadge } from "../../components/ui/StatusBadge";
+import { httpArtifactsAdapter } from "../../lib/api/artifacts";
+import { httpRunsAdapter } from "../../lib/api/runs";
 import {
   httpToolDetailAdapter,
   type ToolDetail,
@@ -13,6 +15,12 @@ import {
   type ToolDetailLoadResult,
   type ToolLifecycle,
 } from "../../lib/api/tools";
+import {
+  isProductionToolKey,
+  ToolExecutionComposer,
+  type ToolArtifactsAdapter,
+  type ToolRunsAdapter,
+} from "./ToolExecutionComposer";
 import "./tools.css";
 
 type DetailPageState =
@@ -21,6 +29,8 @@ type DetailPageState =
 
 export interface ToolDetailPageProps {
   readonly toolAdapter?: ToolDetailAdapter;
+  readonly runsAdapter?: ToolRunsAdapter;
+  readonly artifactsAdapter?: ToolArtifactsAdapter;
   readonly toolKey?: string;
 }
 
@@ -54,22 +64,44 @@ function schemaText(schema: ToolDetail["inputSchema"]): string {
   return JSON.stringify(schema, null, 2);
 }
 
-function ToolContract({ tool }: { readonly tool: ToolDetail }) {
+function ToolContract({
+  tool,
+  runsAdapter,
+  artifactsAdapter,
+  onAuthExpired,
+}: {
+  readonly tool: ToolDetail;
+  readonly runsAdapter: ToolRunsAdapter;
+  readonly artifactsAdapter: ToolArtifactsAdapter;
+  readonly onAuthExpired: () => void;
+}) {
   return (
     <>
-      <section
-        className="tool-execution-state"
-        aria-labelledby="tool-execution-title"
-      >
-        <div>
-          <h2 id="tool-execution-title">Execution unavailable</h2>
-          <p>
-            Execution is unavailable until a real provider and meter policy are
-            configured.
-          </p>
-        </div>
-        <StatusBadge tone="pending">Read only</StatusBadge>
-      </section>
+      {isProductionToolKey(tool.key)
+        ? (
+          <ToolExecutionComposer
+            key={tool.key}
+            tool={{ ...tool, key: tool.key }}
+            runsAdapter={runsAdapter}
+            artifactsAdapter={artifactsAdapter}
+            onAuthExpired={onAuthExpired}
+          />
+        )
+        : (
+          <section
+            className="tool-execution-state"
+            aria-labelledby="tool-execution-title"
+          >
+            <div>
+              <h2 id="tool-execution-title">Execution unavailable</h2>
+              <p>
+                Execution is unavailable until a real provider and meter policy are
+                configured.
+              </p>
+            </div>
+            <StatusBadge tone="pending">Read only</StatusBadge>
+          </section>
+        )}
 
       <section
         className="tool-contract-section"
@@ -157,6 +189,8 @@ function ToolContract({ tool }: { readonly tool: ToolDetail }) {
 
 export function ToolDetailPage({
   toolAdapter = httpToolDetailAdapter,
+  runsAdapter = httpRunsAdapter,
+  artifactsAdapter = httpArtifactsAdapter,
   toolKey,
 }: ToolDetailPageProps) {
   const params = useParams<{ toolKey: string }>();
@@ -283,7 +317,16 @@ export function ToolDetailPage({
           )
           : null}
 
-        {state.kind === "found" ? <ToolContract tool={state.tool} /> : null}
+        {state.kind === "found"
+          ? (
+            <ToolContract
+              tool={state.tool}
+              runsAdapter={runsAdapter}
+              artifactsAdapter={artifactsAdapter}
+              onAuthExpired={() => expireSession(sessionId)}
+            />
+          )
+          : null}
       </div>
     </div>
   );

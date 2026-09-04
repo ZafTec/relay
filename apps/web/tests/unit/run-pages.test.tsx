@@ -688,6 +688,8 @@ describe("run detail page", () => {
       "href",
       `/dashboard/artifacts/${ARTIFACT_ID}`,
     );
+    expect(screen.getByRole("link", { name: /Fixture Image Generator/i }))
+      .toHaveAttribute("href", "/dashboard/tools/image.generate.fixture");
     expect(screen.getByText("output_failed")).toBeInTheDocument();
     expect(container).not.toHaveTextContent(/Halide|Aurora|provider op|actor|idempotency|percentage/i);
     expect(screen.queryByRole("button", { name: "Request cancellation" })).not.toBeInTheDocument();

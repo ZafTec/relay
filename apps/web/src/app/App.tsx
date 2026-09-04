@@ -63,6 +63,9 @@ const AdminChangelogEditorPage = lazy(() => import("../features/admin-changelog"
 const AdminChangelogPreviewPage = lazy(() => import("../features/admin-changelog").then((module) => ({
   default: module.AdminChangelogPreviewPage,
 })));
+const AdminCapacityPage = lazy(() => import("../features/admin-capacity").then((module) => ({
+  default: module.AdminCapacityPage,
+})));
 
 function productRoute(content: ReactNode, loadingLabel: string) {
   return (
@@ -188,6 +191,13 @@ export const relayRoutes = [
                 element: productRoute(
                   <AdminChangelogPreviewPage />,
                   "Loading release preview",
+                ),
+              },
+              {
+                path: "capacity",
+                element: productRoute(
+                  <AdminCapacityPage />,
+                  "Loading capacity policies",
                 ),
               },
             ],

@@ -90,8 +90,13 @@ function RunFacts({ run }: { readonly run: RunDetail }) {
       <div>
         <dt>Tool</dt>
         <dd>
-          <strong>{run.tool.name}</strong>
-          <code>{run.tool.key} · v{run.tool.version}</code>
+          <Link
+            className="run-tool-link"
+            to={`/dashboard/tools/${encodeURIComponent(run.tool.key)}`}
+          >
+            <strong>{run.tool.name}</strong>
+            <code>{run.tool.key} · v{run.tool.version}</code>
+          </Link>
         </dd>
       </div>
       <div>

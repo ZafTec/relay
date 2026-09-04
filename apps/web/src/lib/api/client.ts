@@ -4,11 +4,28 @@ export interface ApiJsonObject {
   readonly [key: string]: ApiJsonValue;
 }
 
-export class ApiError extends Error {
+export interface ApiResponseMetadata {
+  readonly status: number;
+  readonly requestId: string | null;
+  readonly retryable: boolean | null;
+  readonly retryAfter: string | null;
+  readonly retryAfterSeconds: number | null;
+  readonly location: string | null;
+}
+
+export interface ApiJsonResponse<T> extends ApiResponseMetadata {
+  readonly data: T;
+}
+
+export class ApiError extends Error implements ApiResponseMetadata {
   readonly status: number;
   readonly code: string | null;
   readonly details: ApiJsonObject | null;
   readonly requestId: string | null;
+  readonly retryable: boolean | null;
+  readonly retryAfter: string | null;
+  readonly retryAfterSeconds: number | null;
+  readonly location: string | null;
 
   constructor(
     message: string,
@@ -16,6 +33,10 @@ export class ApiError extends Error {
     code: string | null = null,
     details: ApiJsonObject | null = null,
     requestId: string | null = null,
+    retryable: boolean | null = null,
+    retryAfter: string | null = null,
+    retryAfterSeconds: number | null = null,
+    location: string | null = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -23,6 +44,10 @@ export class ApiError extends Error {
     this.code = code;
     this.details = details;
     this.requestId = requestId;
+    this.retryable = retryable;
+    this.retryAfter = retryAfter;
+    this.retryAfterSeconds = retryAfterSeconds;
+    this.location = location;
   }
 }
 
@@ -60,6 +85,38 @@ function asJsonObject(value: unknown): ApiJsonObject | null {
   return object !== null && isJsonValue(object) ? object : null;
 }
 
+function retryAfterSeconds(
+  error: Record<string, unknown> | null,
+  retryAfter: string | null,
+): number | null {
+  if (
+    Number.isSafeInteger(error?.retryAfterSeconds)
+    && (error?.retryAfterSeconds as number) >= 0
+  ) {
+    return error?.retryAfterSeconds as number;
+  }
+  if (retryAfter !== null && /^(?:0|[1-9][0-9]*)$/.test(retryAfter)) {
+    const parsed = Number(retryAfter);
+    return Number.isSafeInteger(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function responseMetadata(
+  response: Response,
+  error: Record<string, unknown> | null = null,
+): ApiResponseMetadata {
+  const retryAfter = response.headers.get("retry-after");
+  return {
+    status: response.status,
+    requestId: response.headers.get("x-request-id"),
+    retryable: typeof error?.retryable === "boolean" ? error.retryable : null,
+    retryAfter,
+    retryAfterSeconds: retryAfterSeconds(error, retryAfter),
+    location: response.headers.get("location"),
+  };
+}
+
 function errorDetails(
   body: unknown,
   status: number,
@@ -69,6 +126,7 @@ function errorDetails(
   code: string | null;
   details: ApiJsonObject | null;
   requestId: string | null;
+  error: Record<string, unknown> | null;
 } {
   const record = asRecord(body);
   const error = asRecord(record?.error);
@@ -81,20 +139,20 @@ function errorDetails(
     requestId: typeof error?.requestId === "string"
       ? error.requestId
       : fallbackRequestId,
+    error,
   };
 }
 
-export async function fetchJson<T>(
+export async function fetchJsonResponse<T>(
   path: string,
   init: RequestInit = {},
-): Promise<T> {
+): Promise<ApiJsonResponse<T>> {
+  const headers = new Headers(init.headers);
+  if (!headers.has("accept")) headers.set("accept", "application/json");
   const response = await fetch(path, {
     ...init,
     credentials: "include",
-    headers: {
-      accept: "application/json",
-      ...init.headers,
-    },
+    headers,
   });
 
   const contentType = response.headers.get("content-type") ?? "";
@@ -117,14 +175,29 @@ export async function fetchJson<T>(
       response.status,
       response.headers.get("x-request-id"),
     );
+    const metadata = responseMetadata(response, details.error);
     throw new ApiError(
       details.message,
       response.status,
       details.code,
       details.details,
       details.requestId,
+      metadata.retryable,
+      metadata.retryAfter,
+      metadata.retryAfterSeconds,
+      metadata.location,
     );
   }
 
-  return body as T;
+  return {
+    data: body as T,
+    ...responseMetadata(response),
+  };
+}
+
+export async function fetchJson<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  return (await fetchJsonResponse<T>(path, init)).data;
 }

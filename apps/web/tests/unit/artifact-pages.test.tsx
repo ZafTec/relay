@@ -36,6 +36,7 @@ const SHARE_ID = "share_55555555555555555555555555555555";
 const CREATED_SHARE_ID = "share_66666666666666666666666666666666";
 const TOKEN = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ";
 const PUBLIC_PATH = `/s/${TOKEN}`;
+const SHARE_CREATE_KEY = "artifact:share:create:00000000-0000-4000-8000-000000000000";
 
 const currentVersion: ArtifactVersionResource = {
   id: VERSION_ID,
@@ -138,6 +139,18 @@ function createArtifactsAdapter(overrides: Partial<ArtifactsAdapter> = {}): Arti
   return {
     list: vi.fn(async () => ({ kind: "ok", items: [artifactSummary], nextCursor: null })),
     get: vi.fn(async () => ({ kind: "found", artifact: artifactDetail })),
+    createUpload: vi.fn(async () => ({
+      kind: "degraded",
+      message: "Upload not configured for this test.",
+    })),
+    putUpload: vi.fn(async () => ({
+      kind: "degraded",
+      message: "Upload not configured for this test.",
+    })),
+    completeUpload: vi.fn(async () => ({
+      kind: "degraded",
+      message: "Upload not configured for this test.",
+    })),
     createShareLink: vi.fn(async () => ({
       kind: "conflict",
     } as CreateShareLinkAdapterResult)),
@@ -231,17 +244,22 @@ describe("artifact response parsing", () => {
       shareLinkId: CREATED_SHARE_ID,
       token: TOKEN,
       publicPath: `/s/${"z".repeat(43)}`,
+      replayed: false,
     })).toThrow(/must identify the returned token/i);
   });
 
-  it("posts the exact nested share payload and reports an uncertain server result without retrying", async () => {
+  it("posts the exact nested share payload and reports an uncertain result as exact-request retryable", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
         kind: "created",
         shareLinkId: CREATED_SHARE_ID,
         token: TOKEN,
         publicPath: PUBLIC_PATH,
-      }), { status: 201, headers: { "content-type": "application/json" } }))
+        replayed: false,
+      }), {
+        status: 201,
+        headers: { "content-type": "application/json", location: PUBLIC_PATH },
+      }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         error: { code: "unavailable", message: "unavailable" },
       }), { status: 503, headers: { "content-type": "application/json" } }));
@@ -256,15 +274,18 @@ describe("artifact response parsing", () => {
       requireAuth: true,
       contentDisposition: "inline" as const,
     };
-    await expect(httpArtifactsAdapter.createShareLink(request)).resolves.toEqual({
+    await expect(httpArtifactsAdapter.createShareLink(request, SHARE_CREATE_KEY)).resolves.toEqual({
       kind: "created",
       shareLinkId: CREATED_SHARE_ID,
       token: TOKEN,
       publicPath: PUBLIC_PATH,
+      replayed: false,
     });
 
     const firstCall = fetchMock.mock.calls[0];
     expect(firstCall?.[0]).toBe(`${"/api/v1/artifacts/"}${ARTIFACT_ID}/share-links`);
+    expect(new Headers((firstCall?.[1] as RequestInit | undefined)?.headers).get("idempotency-key"))
+      .toBe(SHARE_CREATE_KEY);
     expect(JSON.parse(String((firstCall?.[1] as RequestInit | undefined)?.body))).toEqual({
       followCurrent: false,
       artifactVersionId: VERSION_ID,
@@ -274,9 +295,10 @@ describe("artifact response parsing", () => {
       contentDisposition: "inline",
     });
 
-    await expect(httpArtifactsAdapter.createShareLink(request)).resolves.toEqual({
+    await expect(httpArtifactsAdapter.createShareLink(request, SHARE_CREATE_KEY)).resolves.toMatchObject({
       kind: "unknown_outcome",
-      message: "Relay could not confirm whether the share link was created. Do not retry this request. Close the panel and inspect the share records.",
+      retryable: true,
+      retryMode: "exact-request",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -289,6 +311,7 @@ describe("artifact response parsing", () => {
         shareLinkId: CREATED_SHARE_ID,
         token: TOKEN,
         publicPath: `/s/${"z".repeat(43)}`,
+        replayed: false,
       }), { status: 201, headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);
     const request = {
@@ -301,11 +324,13 @@ describe("artifact response parsing", () => {
       contentDisposition: "inline" as const,
     };
 
-    await expect(httpArtifactsAdapter.createShareLink(request)).resolves.toMatchObject({
+    await expect(httpArtifactsAdapter.createShareLink(request, SHARE_CREATE_KEY)).resolves.toMatchObject({
       kind: "unknown_outcome",
+      retryMode: "exact-request",
     });
-    await expect(httpArtifactsAdapter.createShareLink(request)).resolves.toMatchObject({
+    await expect(httpArtifactsAdapter.createShareLink(request, SHARE_CREATE_KEY)).resolves.toMatchObject({
       kind: "unknown_outcome",
+      retryMode: "exact-request",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -331,6 +356,7 @@ describe("artifact gallery page", () => {
       `/dashboard/artifacts/${ARTIFACT_ID}`,
     );
     expect(await screen.findByText("Workspace workspace-artifacts")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload artifact" })).toBeInTheDocument();
     expect(screen.getByText("Preview URL not provided")).toBeInTheDocument();
     expect(screen.getByText("1 artifact loaded")).toBeInTheDocument();
     expect(container.querySelector("img")).toHaveAttribute(
@@ -442,6 +468,12 @@ describe("artifact detail and sharing", () => {
       name: /Share records for Campaign master.*do not expose the token value shown at creation/i,
     })).toBeInTheDocument();
     expect(screen.getByText(SHARE_ID)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload new version" })).toBeInTheDocument();
+    const sourceRunLinks = screen.getAllByRole("link", { name: RUN_ID });
+    expect(sourceRunLinks.length).toBeGreaterThanOrEqual(2);
+    for (const link of sourceRunLinks) {
+      expect(link).toHaveAttribute("href", `/dashboard/runs/${RUN_ID}`);
+    }
     expect(screen.queryByDisplayValue(TOKEN)).not.toBeInTheDocument();
     expect(container.querySelector('a[href^="/s/"]')).toBeNull();
     expect(screen.getByText("Preview URL not provided")).toBeInTheDocument();
@@ -515,6 +547,7 @@ describe("artifact detail and sharing", () => {
       shareLinkId: CREATED_SHARE_ID,
       token: TOKEN,
       publicPath: PUBLIC_PATH,
+      replayed: false,
     }));
 
     const createdHeading = await screen.findByRole("heading", { name: "Share link created" });
@@ -532,7 +565,7 @@ describe("artifact detail and sharing", () => {
       maxResolutions: null,
       requireAuth: false,
       contentDisposition: "inline",
-    });
+    }, expect.stringMatching(/^artifact-ui:share-create:/));
     const absoluteShareUrl = new URL(PUBLIC_PATH, window.location.origin).href;
     expect(screen.getByLabelText("Public share URL, shown once")).toHaveAttribute("type", "password");
     expect(screen.getByLabelText("Public share URL, shown once")).toHaveValue(absoluteShareUrl);
@@ -568,8 +601,9 @@ describe("artifact detail and sharing", () => {
       shareLinkId: CREATED_SHARE_ID,
       token: TOKEN,
       publicPath: PUBLIC_PATH,
+      replayed: false,
     }));
-    const revokeShareLink = vi.fn(async () => ({ kind: "revoked" as const }));
+    const revokeShareLink = vi.fn(async () => ({ kind: "revoked" as const, replayed: false }));
     const adapter = createArtifactsAdapter({ get, createShareLink, revokeShareLink });
     renderProtectedPage(
       <ArtifactDetailPage adapter={adapter} />,
@@ -620,6 +654,7 @@ describe("artifact detail and sharing", () => {
       shareLinkId: CREATED_SHARE_ID,
       token: TOKEN,
       publicPath: PUBLIC_PATH,
+      replayed: false,
     }));
     const adapter = createArtifactsAdapter({ get, createShareLink });
     renderProtectedPage(
@@ -642,12 +677,23 @@ describe("artifact detail and sharing", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Alternate artifact" })).toBeInTheDocument();
   });
 
-  it("locks an unknown create outcome and refreshes records on close without resubmitting", async () => {
+  it("retries an unknown share creation with the exact frozen request and key", async () => {
     const user = userEvent.setup();
-    const createShareLink = vi.fn(async () => ({
-      kind: "unknown_outcome" as const,
-      message: "Relay could not confirm whether the share link was created. Do not retry this request. Close the panel and inspect the share records.",
-    }));
+    const createShareLink = vi.fn()
+      .mockResolvedValueOnce({
+        kind: "unknown_outcome" as const,
+        message: "Relay could not confirm the create share result. Retry only the exact request with the same idempotency key.",
+        retryable: true as const,
+        retryMode: "exact-request" as const,
+        retryAfterSeconds: null,
+      })
+      .mockResolvedValueOnce({
+        kind: "created" as const,
+        shareLinkId: CREATED_SHARE_ID,
+        token: TOKEN,
+        publicPath: PUBLIC_PATH,
+        replayed: true,
+      });
     const adapter = createArtifactsAdapter({ createShareLink });
     renderProtectedPage(
       <ArtifactDetailPage adapter={adapter} />,
@@ -663,16 +709,25 @@ describe("artifact detail and sharing", () => {
 
     expect(await screen.findByRole("heading", { name: "Creation outcome unknown" })).toBeInTheDocument();
     const unknownStatus = screen.getByRole("alert");
-    expect(unknownStatus).toHaveTextContent("Do not retry this request");
+    expect(unknownStatus).toHaveTextContent("Retry only the exact request");
     expect(unknownStatus).toHaveFocus();
-    expect(screen.getByRole("button", { name: "Do not retry" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Retry exact request" })).toBeEnabled();
     expect(screen.getByLabelText("Version policy")).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "Creation outcome unknown" })).toBeInTheDocument();
     expect(createShareLink).toHaveBeenCalledTimes(1);
+    const [firstRequest, firstKey] = createShareLink.mock.calls[0]!;
 
-    await user.click(screen.getByRole("button", { name: "Close and inspect shares" }));
+    await user.click(screen.getByRole("button", { name: "Retry exact request" }));
+    expect(await screen.findByRole("heading", { name: "Share link created" })).toBeInTheDocument();
+    expect(screen.getByText(/replayed the stored creation result/i)).toBeInTheDocument();
+    expect(createShareLink).toHaveBeenCalledTimes(2);
+    expect(createShareLink.mock.calls[1]?.[0]).toBe(firstRequest);
+    expect(createShareLink.mock.calls[1]?.[1]).toBe(firstKey);
+
+    await user.click(screen.getByRole("button", { name: "Clear values and refresh" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(createTrigger).toHaveFocus();
-    expect(createShareLink).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(adapter.get).toHaveBeenCalledTimes(2));
   });
 
@@ -687,7 +742,10 @@ describe("artifact detail and sharing", () => {
       .mockResolvedValueOnce({ kind: "found" as const, artifact: artifactDetail });
     const createShareLink = vi.fn(async () => ({
       kind: "unknown_outcome" as const,
-      message: "Relay could not confirm whether the share link was created. Do not retry this request. Close the panel and inspect the share records.",
+      message: "Relay could not confirm the create share result. Retry only the exact request with the same idempotency key.",
+      retryable: true as const,
+      retryMode: "exact-request" as const,
+      retryAfterSeconds: null,
     }));
     const adapter = createArtifactsAdapter({ get, createShareLink });
     renderProtectedPage(
@@ -703,7 +761,7 @@ describe("artifact detail and sharing", () => {
     await screen.findByRole("heading", { name: "Creation outcome unknown" });
     await user.click(screen.getByRole("button", { name: "Close and inspect shares" }));
 
-    expect(await screen.findByText(/Do not retry creation/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Share mutations remain paused/i)).toBeInTheDocument();
     const retryInspection = screen.getByRole("button", { name: "Inspect share records again" });
     expect(retryInspection).toBeEnabled();
     expect(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` })).toBeDisabled();
@@ -713,11 +771,87 @@ describe("artifact detail and sharing", () => {
 
     await user.click(retryInspection);
     await waitFor(() => expect(get).toHaveBeenCalledTimes(3));
-    await waitFor(() => expect(screen.queryByText(/Do not retry creation/i)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/Share mutations remain paused/i)).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` })).toBeEnabled();
     for (const trigger of screen.getAllByRole("button", { name: "Create share link" })) {
       expect(trigger).not.toHaveAttribute("aria-disabled");
     }
+  });
+
+  it.each([
+    {
+      label: "policy",
+      result: { kind: "conflict" as const },
+      message: "This share policy conflicts with the artifact's current state.",
+    },
+    {
+      label: "idempotency",
+      result: {
+        kind: "idempotency-conflict" as const,
+        message: "This idempotency key was already used for a different request.",
+      },
+      message: "The idempotency key conflicts with a different request.",
+    },
+  ])("distinguishes a $label conflict in share creation", async ({ result, message }) => {
+    const user = userEvent.setup();
+    const createShareLink = vi.fn(async () => result);
+    const adapter = createArtifactsAdapter({ createShareLink });
+    renderProtectedPage(
+      <ArtifactDetailPage adapter={adapter} />,
+      `/dashboard/artifacts/${ARTIFACT_ID}`,
+      "/dashboard/artifacts/:artifactId",
+    );
+
+    await screen.findByRole("heading", { level: 1, name: "Campaign master" });
+    await user.click(screen.getAllByRole("button", { name: "Create share link" })[0]!);
+    await completeSharePolicy(user);
+    await user.click(screen.getByRole("button", { name: "Create link" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.queryByRole("button", { name: "Retry exact request" })).not.toBeInTheDocument();
+    expect(createShareLink.mock.calls[0]?.[1]).toMatch(/^artifact-ui:share-create:/);
+    if (result.kind === "idempotency-conflict") {
+      expect(screen.getByLabelText("Version policy")).toBeDisabled();
+      const refresh = screen.getByRole("button", { name: "Refresh authoritative records" });
+      expect(refresh).toBeEnabled();
+      await user.click(refresh);
+      await waitFor(() => expect(adapter.get).toHaveBeenCalledTimes(2));
+    } else {
+      expect(screen.getByLabelText("Version policy")).toBeEnabled();
+      expect(screen.queryByRole("button", { name: "Refresh authoritative records" })).not.toBeInTheDocument();
+    }
+  });
+
+  it("retries an ambiguous revocation with the exact stable key and surfaces replay", async () => {
+    const user = userEvent.setup();
+    const revokeShareLink = vi.fn()
+      .mockResolvedValueOnce({
+        kind: "unknown_outcome" as const,
+        message: "Relay could not confirm the revoke share result. Retry only the exact request with the same idempotency key.",
+        retryable: true as const,
+        retryMode: "exact-request" as const,
+        retryAfterSeconds: null,
+      })
+      .mockResolvedValueOnce({ kind: "revoked" as const, replayed: true });
+    const adapter = createArtifactsAdapter({ revokeShareLink });
+    renderProtectedPage(
+      <ArtifactDetailPage adapter={adapter} />,
+      `/dashboard/artifacts/${ARTIFACT_ID}`,
+      "/dashboard/artifacts/:artifactId",
+    );
+
+    await screen.findByRole("heading", { level: 1, name: "Campaign master" });
+    await user.click(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` }));
+    await user.click(screen.getByRole("button", { name: "Confirm revoke" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Retry only the exact request");
+    const firstCall = revokeShareLink.mock.calls[0]!;
+
+    await user.click(screen.getByRole("button", { name: "Retry exact request" }));
+    expect(await screen.findByText(/replayed the stored result/i)).toBeInTheDocument();
+    expect(revokeShareLink).toHaveBeenCalledTimes(2);
+    expect(revokeShareLink.mock.calls[1]?.[0]).toBe(firstCall[0]);
+    expect(revokeShareLink.mock.calls[1]?.[1]).toBe(firstCall[1]);
+    expect(revokeShareLink.mock.calls[1]?.[2]).toBe(firstCall[2]);
   });
 
   it("restores revoke focus on cancel and focuses pending and success status", async () => {
@@ -745,7 +879,7 @@ describe("artifact detail and sharing", () => {
 
     await user.click(revokeTrigger);
     await user.click(screen.getByRole("button", { name: "Confirm revoke" }));
-    const pendingCopy = screen.getByText("Revoking share link. Relay will send this request once.");
+    const pendingCopy = screen.getByText("Revoking share link with the frozen request and stable idempotency key.");
     const pendingStatus = pendingCopy.closest<HTMLElement>("[role='status']");
     expect(pendingStatus).not.toBeNull();
     expect(pendingStatus).toHaveFocus();
@@ -753,9 +887,13 @@ describe("artifact detail and sharing", () => {
       expect(trigger).toHaveAttribute("aria-disabled", "true");
     }
     expect(revokeShareLink).toHaveBeenCalledTimes(1);
-    expect(revokeShareLink).toHaveBeenCalledWith(ARTIFACT_ID, SHARE_ID);
+    expect(revokeShareLink).toHaveBeenCalledWith(
+      ARTIFACT_ID,
+      SHARE_ID,
+      expect.stringMatching(/^artifact-ui:share-revoke:/),
+    );
 
-    await act(async () => resolveRevoke({ kind: "revoked" }));
+    await act(async () => resolveRevoke({ kind: "revoked", replayed: false }));
     const successCopy = await screen.findByText("Share link revoked. Future Relay resolutions are blocked.");
     const successStatus = successCopy.closest<HTMLElement>("[role='status']");
     expect(successStatus).not.toBeNull();
@@ -812,9 +950,33 @@ describe("artifact detail and sharing", () => {
     await user.click(screen.getByRole("button", { name: "Switch artifact route" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Alternate artifact" })).toBeInTheDocument();
 
-    await act(async () => revokeResult.resolve({ kind: "revoked" }));
+    await act(async () => revokeResult.resolve({ kind: "revoked", replayed: false }));
     expect(screen.getByRole("heading", { level: 1, name: "Alternate artifact" })).toBeInTheDocument();
     expect(screen.queryByText("Share link revoked. Future Relay resolutions are blocked.")).not.toBeInTheDocument();
+  });
+
+  it("surfaces a revoke idempotency conflict without offering an unsafe retry", async () => {
+    const user = userEvent.setup();
+    const revokeShareLink = vi.fn(async () => ({
+      kind: "idempotency-conflict" as const,
+      message: "This idempotency key was already used for a different request.",
+    }));
+    const adapter = createArtifactsAdapter({ revokeShareLink });
+    renderProtectedPage(
+      <ArtifactDetailPage adapter={adapter} />,
+      `/dashboard/artifacts/${ARTIFACT_ID}`,
+      "/dashboard/artifacts/:artifactId",
+    );
+
+    await screen.findByRole("heading", { level: 1, name: "Campaign master" });
+    await user.click(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` }));
+    await user.click(screen.getByRole("button", { name: "Confirm revoke" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "revocation idempotency key conflicts with a different request",
+    );
+    expect(screen.queryByRole("button", { name: "Retry exact request" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dismiss" })).toBeEnabled();
   });
 
   it("focuses a revoke error and returns focus when it is dismissed", async () => {

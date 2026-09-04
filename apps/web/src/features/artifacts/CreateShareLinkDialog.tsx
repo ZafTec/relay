@@ -12,11 +12,13 @@ import type {
   CreateShareLinkAdapterResult,
   CreateShareLinkRequest,
 } from "../../lib/api/artifacts";
+import { createArtifactIdempotencyKey } from "./artifact-idempotency";
 
 interface CreateShareLinkDialogProps {
   readonly artifact: ArtifactDetail;
   readonly createShareLink: (
     request: CreateShareLinkRequest,
+    idempotencyKey: string,
   ) => Promise<CreateShareLinkAdapterResult>;
   readonly onAuthExpired: () => void;
   readonly onMutationBusyChange: (busy: boolean) => void;
@@ -43,6 +45,11 @@ type ContentDisposition = "" | "inline" | "attachment";
 
 type CreatedSecret = Extract<CreateShareLinkAdapterResult, { kind: "created" }>;
 
+interface FrozenShareCreate {
+  readonly request: CreateShareLinkRequest;
+  readonly idempotencyKey: string;
+}
+
 function focusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(
     "button:not(:disabled), input:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex='-1'])",
@@ -61,9 +68,11 @@ export function CreateShareLinkDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLSelectElement>(null);
   const outcomeHeadingRef = useRef<HTMLHeadingElement>(null);
+  const mutationStatusRef = useRef<HTMLDivElement>(null);
   const unknownStatusRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef(false);
   const createGenerationRef = useRef(0);
+  const frozenCreateRef = useRef<FrozenShareCreate | null>(null);
   const [versionPolicy, setVersionPolicy] = useState<VersionPolicy>("");
   const [pinnedVersionId, setPinnedVersionId] = useState("");
   const [expiryPolicy, setExpiryPolicy] = useState<ExpiryPolicy>("");
@@ -75,6 +84,7 @@ export function CreateShareLinkDialog({
   const [errors, setErrors] = useState<SharePolicyErrors>({});
   const [pending, setPending] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [refreshRequired, setRefreshRequired] = useState(false);
   const [unknownOutcome, setUnknownOutcome] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedSecret | null>(null);
   const [revealed, setRevealed] = useState(false);
@@ -107,16 +117,16 @@ export function CreateShareLinkDialog({
   }, [unknownOutcome]);
 
   useEffect(() => {
-    if (pending) dialogRef.current?.focus();
-  }, [pending]);
+    if (mutationError !== null) mutationStatusRef.current?.focus();
+  }, [mutationError]);
 
   useEffect(() => {
     if (pending) dialogRef.current?.focus();
   }, [pending]);
 
-  function closeDialog() {
-    if (pending) return;
-    if (created !== null || unknownOutcome !== null) onDone();
+  function closeDialog(discardFrozen = false) {
+    if (pending || (unknownOutcome !== null && !discardFrozen)) return;
+    if (created !== null || unknownOutcome !== null || refreshRequired) onDone();
     else onClose();
   }
 
@@ -182,30 +192,16 @@ export function CreateShareLinkDialog({
     return next;
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (pending || created !== null || unknownOutcome !== null) return;
-    const nextErrors = validate();
-    setErrors(nextErrors);
-    setMutationError(null);
-    if (Object.keys(nextErrors).length > 0) return;
-
-    const request: CreateShareLinkRequest = {
-      artifactId: artifact.id,
-      followCurrent: versionPolicy === "follow",
-      ...(versionPolicy === "pinned" ? { artifactVersionId: pinnedVersionId } : {}),
-      expiresAt: expiryPolicy === "never" ? null : new Date(expiresAt).toISOString(),
-      maxResolutions: resolutionPolicy === "unlimited" ? null : Number(maxResolutions),
-      requireAuth: false,
-      contentDisposition: contentDisposition as "inline" | "attachment",
-    };
-
+  async function executeCreate(operation: FrozenShareCreate) {
+    if (pending || created !== null) return;
     const generation = ++createGenerationRef.current;
     let retainCreateLock = false;
     setPending(true);
+    setMutationError(null);
+    setUnknownOutcome(null);
     onMutationBusyChange(true);
     try {
-      const result = await createShareLink(request);
+      const result = await createShareLink(operation.request, operation.idempotencyKey);
       if (result.kind === "auth-expired") {
         onAuthExpired();
         return;
@@ -213,6 +209,7 @@ export function CreateShareLinkDialog({
       if (!activeRef.current || generation !== createGenerationRef.current) return;
       if (result.kind === "created") {
         retainCreateLock = true;
+        setUnknownOutcome(null);
         setCreated(result);
         setCopyStatus("");
         return;
@@ -222,8 +219,16 @@ export function CreateShareLinkDialog({
         setUnknownOutcome(result.message);
         return;
       }
+
+      frozenCreateRef.current = null;
+      setUnknownOutcome(null);
       if (result.kind === "conflict") {
-        setMutationError("This policy conflicts with the artifact's current state. No share link was created.");
+        setRefreshRequired(false);
+        setMutationError("This share policy conflicts with the artifact's current state. No share link was created.");
+      } else if (result.kind === "idempotency-conflict") {
+        retainCreateLock = true;
+        setRefreshRequired(true);
+        setMutationError("The idempotency key conflicts with a different request. This request cannot be retried; refresh authoritative share records before continuing.");
       } else if (result.kind === "not_found") {
         setMutationError("The artifact was not found. No share link was created.");
       } else {
@@ -232,13 +237,51 @@ export function CreateShareLinkDialog({
     } catch {
       if (!activeRef.current || generation !== createGenerationRef.current) return;
       retainCreateLock = true;
-      setUnknownOutcome("Relay could not confirm whether the share link was created. Do not retry this request. Close the panel and inspect the share records.");
+      setUnknownOutcome("Relay could not confirm whether the share link was created. Retry only this exact frozen policy with the same idempotency key.");
     } finally {
       if (activeRef.current && generation === createGenerationRef.current) {
         setPending(false);
         if (!retainCreateLock) onMutationBusyChange(false);
       }
     }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending || created !== null || unknownOutcome !== null || refreshRequired) return;
+    const nextErrors = validate();
+    setErrors(nextErrors);
+    setMutationError(null);
+    setRefreshRequired(false);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    try {
+      const request = Object.freeze<CreateShareLinkRequest>({
+        artifactId: artifact.id,
+        followCurrent: versionPolicy === "follow",
+        ...(versionPolicy === "pinned" ? { artifactVersionId: pinnedVersionId } : {}),
+        expiresAt: expiryPolicy === "never" ? null : new Date(expiresAt).toISOString(),
+        maxResolutions: resolutionPolicy === "unlimited" ? null : Number(maxResolutions),
+        requireAuth: false,
+        contentDisposition: contentDisposition as "inline" | "attachment",
+      });
+      const operation = Object.freeze({
+        request,
+        idempotencyKey: createArtifactIdempotencyKey("share-create"),
+      });
+      frozenCreateRef.current = operation;
+      await executeCreate(operation);
+    } catch (error) {
+      setMutationError(error instanceof Error
+        ? `Relay could not prepare a stable share request. ${error.message}`
+        : "Relay could not prepare a stable share request.");
+    }
+  }
+
+  async function retryExactCreate() {
+    const operation = frozenCreateRef.current;
+    if (operation === null || pending || created !== null) return;
+    await executeCreate(operation);
   }
 
   async function copySecret(value: string, label: string) {
@@ -295,13 +338,15 @@ export function CreateShareLinkDialog({
             className="share-dialog__close"
             variant="quiet"
             aria-disabled={pending || undefined}
-            onClick={closeDialog}
+            onClick={() => closeDialog(true)}
           >
             {created !== null
               ? "Clear and close"
               : unknownOutcome !== null
                 ? "Close and inspect"
-                : "Close"}
+                : refreshRequired
+                  ? "Close and refresh"
+                  : "Close"}
           </Button>
         </div>
 
@@ -321,18 +366,23 @@ export function CreateShareLinkDialog({
               >
                 <span aria-hidden="true">▲</span>
                 <div>
-                  <strong>Do not submit this policy again</strong>
+                  <strong>Exact request retained</strong>
                   <p>{unknownOutcome}</p>
                 </div>
               </div>
             ) : mutationError ? (
-              <div className="share-mutation-message share-mutation-message--error" role="alert">
+              <div
+                ref={mutationStatusRef}
+                className="share-mutation-message share-mutation-message--error"
+                role="alert"
+                tabIndex={-1}
+              >
                 <span aria-hidden="true">▲</span>
                 <p>{mutationError}</p>
               </div>
             ) : null}
 
-            <fieldset disabled={pending || unknownOutcome !== null}>
+            <fieldset disabled={pending || unknownOutcome !== null || refreshRequired}>
               <legend className="sr-only">Share link policy</legend>
 
               <div className="share-field">
@@ -550,17 +600,32 @@ export function CreateShareLinkDialog({
             </p>
 
             <div className="share-dialog__actions">
-              <Button variant="quiet" disabled={pending} onClick={closeDialog}>
-                {unknownOutcome === null ? "Cancel" : "Close and inspect shares"}
+              <Button variant="quiet" disabled={pending} onClick={() => closeDialog(true)}>
+                {unknownOutcome !== null
+                  ? "Close and inspect shares"
+                  : refreshRequired
+                    ? "Close and refresh"
+                    : "Cancel"}
               </Button>
-              <Button
-                type="submit"
-                disabled={unknownOutcome !== null}
-                pending={pending}
-                pendingLabel="Creating link"
-              >
-                {unknownOutcome === null ? "Create link" : "Do not retry"}
-              </Button>
+              {unknownOutcome === null && !refreshRequired ? (
+                <Button
+                  type="submit"
+                  pending={pending}
+                  pendingLabel="Creating link"
+                >
+                  Create link
+                </Button>
+              ) : unknownOutcome !== null ? (
+                <Button
+                  pending={pending}
+                  pendingLabel="Retrying exact request"
+                  onClick={() => void retryExactCreate()}
+                >
+                  Retry exact request
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={() => closeDialog(true)}>Refresh authoritative records</Button>
+              )}
             </div>
           </form>
         ) : (
@@ -570,7 +635,9 @@ export function CreateShareLinkDialog({
               <div>
                 <h3 id={`${id}-secret-title`}>Copy these values now</h3>
                 <p id={`${id}-secret-description`}>
-                  Relay shows this share URL and token once. Closing this panel clears them from the page. Later artifact reads do not return either value.
+                  {created.replayed
+                    ? "Relay replayed the stored creation result. Copy the recovered share URL and token now; closing this panel clears them from the page."
+                    : "Relay shows this share URL and token once. Closing this panel clears them from the page. Later artifact reads do not return either value."}
                 </p>
               </div>
             </div>
