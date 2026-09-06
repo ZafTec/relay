@@ -166,10 +166,23 @@ export interface ArtifactUploadResource {
   readonly authorization: UploadAuthorizationResource | null;
 }
 
+export interface ArtifactMutationReplayMetadata {
+  readonly replayed: boolean;
+}
+
+export interface ArtifactIdempotencyConflictResult {
+  readonly kind: "idempotency_conflict";
+}
+
 export type CreateArtifactUploadResult =
-  | { readonly kind: "created"; readonly upload: ArtifactUploadResource }
+  | {
+    readonly kind: "created";
+    readonly upload: ArtifactUploadResource;
+    readonly replayed: boolean;
+  }
   | { readonly kind: "not_found" }
-  | { readonly kind: "quota_exceeded" };
+  | { readonly kind: "quota_exceeded" }
+  | ArtifactIdempotencyConflictResult;
 
 export type CompleteArtifactUploadResult =
   | {
@@ -177,11 +190,17 @@ export type CompleteArtifactUploadResult =
     readonly artifactId: string;
     readonly artifactVersionId: string;
     readonly becameCurrent: boolean;
+    readonly replayed: boolean;
   }
-  | { readonly kind: "pending" }
-  | { readonly kind: "expired" }
-  | { readonly kind: "verification_failed"; readonly reason: string }
-  | { readonly kind: "not_found" };
+  | { readonly kind: "pending"; readonly replayed: false }
+  | { readonly kind: "expired"; readonly replayed: boolean }
+  | {
+    readonly kind: "verification_failed";
+    readonly reason: string;
+    readonly replayed: boolean;
+  }
+  | { readonly kind: "not_found" }
+  | ArtifactIdempotencyConflictResult;
 
 export interface CreateShareLinkRequest {
   readonly artifactId: string;
@@ -200,14 +219,17 @@ export type CreateShareLinkResult =
     /** Returned once; only its hash is durable. */
     readonly token: string;
     readonly publicPath: string;
+    readonly replayed: boolean;
   }
   | { readonly kind: "not_found" }
-  | { readonly kind: "conflict" };
+  | { readonly kind: "conflict" }
+  | ArtifactIdempotencyConflictResult;
 
 export type RevokeShareLinkResult =
-  | { readonly kind: "revoked" }
+  | { readonly kind: "revoked"; readonly replayed: boolean }
   | { readonly kind: "already_revoked" }
-  | { readonly kind: "not_found" };
+  | { readonly kind: "not_found" }
+  | ArtifactIdempotencyConflictResult;
 
 export interface DownloadAuthorizationResource {
   readonly method: "GET";
@@ -1333,26 +1355,40 @@ export const createArtifactUploadResultSchema: ContractSchema<
       {
         type: "object",
         additionalProperties: false,
-        required: ["kind", "upload"],
+        required: ["kind", "upload", "replayed"],
         properties: {
           kind: { const: "created" },
           upload: artifactUploadSchema.jsonSchema,
+          replayed: { type: "boolean" },
         },
       },
       {
         type: "object",
         additionalProperties: false,
         required: ["kind"],
-        properties: { kind: { enum: ["not_found", "quota_exceeded"] } },
+        properties: {
+          kind: {
+            enum: [
+              "not_found",
+              "quota_exceeded",
+              "idempotency_conflict",
+            ],
+          },
+        },
       },
     ],
   },
   (value, path): CreateArtifactUploadResult => {
-    const object = strictObject(value, path, ["kind", "upload"]);
+    const object = strictObject(value, path, ["kind", "upload", "replayed"]);
     const kind = enumValue(
       required(object, "kind", path),
       `${path}.kind`,
-      ["created", "not_found", "quota_exceeded"] as const,
+      [
+        "created",
+        "not_found",
+        "quota_exceeded",
+        "idempotency_conflict",
+      ] as const,
     );
     if (kind !== "created") {
       strictObject(value, path, ["kind"]);
@@ -1361,6 +1397,10 @@ export const createArtifactUploadResultSchema: ContractSchema<
     return {
       kind,
       upload: artifactUploadSchema.parse(required(object, "upload", path)),
+      replayed: booleanValue(
+        required(object, "replayed", path),
+        `${path}.replayed`,
+      ),
     };
   },
 );
@@ -1379,6 +1419,7 @@ export const completeArtifactUploadResultSchema: ContractSchema<
           "artifactId",
           "artifactVersionId",
           "becameCurrent",
+          "replayed",
         ],
         properties: {
           kind: { const: "completed" },
@@ -1388,15 +1429,35 @@ export const completeArtifactUploadResultSchema: ContractSchema<
             pattern: "^aver_[0-9a-f]{32}$",
           },
           becameCurrent: { type: "boolean" },
+          replayed: { type: "boolean" },
         },
       },
       {
         type: "object",
         additionalProperties: false,
-        required: ["kind", "reason"],
+        required: ["kind", "reason", "replayed"],
         properties: {
           kind: { const: "verification_failed" },
           reason: { type: "string", minLength: 1, maxLength: 128 },
+          replayed: { type: "boolean" },
+        },
+      },
+      {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "replayed"],
+        properties: {
+          kind: { const: "pending" },
+          replayed: { const: false },
+        },
+      },
+      {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "replayed"],
+        properties: {
+          kind: { const: "expired" },
+          replayed: { type: "boolean" },
         },
       },
       {
@@ -1404,7 +1465,7 @@ export const completeArtifactUploadResultSchema: ContractSchema<
         additionalProperties: false,
         required: ["kind"],
         properties: {
-          kind: { enum: ["pending", "expired", "not_found"] },
+          kind: { enum: ["not_found", "idempotency_conflict"] },
         },
       },
     ],
@@ -1416,6 +1477,7 @@ export const completeArtifactUploadResultSchema: ContractSchema<
       "artifactVersionId",
       "becameCurrent",
       "reason",
+      "replayed",
     ]);
     const kind = enumValue(
       required(object, "kind", path),
@@ -1426,6 +1488,7 @@ export const completeArtifactUploadResultSchema: ContractSchema<
         "expired",
         "verification_failed",
         "not_found",
+        "idempotency_conflict",
       ] as const,
     );
     if (kind === "completed") {
@@ -1434,6 +1497,7 @@ export const completeArtifactUploadResultSchema: ContractSchema<
         "artifactId",
         "artifactVersionId",
         "becameCurrent",
+        "replayed",
       ]);
       return {
         kind,
@@ -1449,15 +1513,48 @@ export const completeArtifactUploadResultSchema: ContractSchema<
           required(object, "becameCurrent", path),
           `${path}.becameCurrent`,
         ),
+        replayed: booleanValue(
+          required(object, "replayed", path),
+          `${path}.replayed`,
+        ),
       };
     }
     if (kind === "verification_failed") {
-      strictObject(value, path, ["kind", "reason"]);
+      strictObject(value, path, ["kind", "reason", "replayed"]);
       return {
         kind,
         reason: safeCodeParser(
           required(object, "reason", path),
           `${path}.reason`,
+        ),
+        replayed: booleanValue(
+          required(object, "replayed", path),
+          `${path}.replayed`,
+        ),
+      };
+    }
+    if (kind === "pending") {
+      strictObject(value, path, ["kind", "replayed"]);
+      const replayed = booleanValue(
+        required(object, "replayed", path),
+        `${path}.replayed`,
+      );
+      if (replayed) {
+        validationError(
+          `${path}.replayed`,
+          "invalid_value",
+          "must be false while upload completion is pending",
+        );
+      }
+      return { kind, replayed: false };
+    }
+    if (kind === "expired") {
+      strictObject(value, path, ["kind", "replayed"]);
+      return {
+        kind,
+        replayed: booleanValue(
+          required(object, "replayed", path),
+          `${path}.replayed`,
         ),
       };
     }
@@ -1475,7 +1572,13 @@ export const createShareLinkResultSchema: ContractSchema<
       {
         type: "object",
         additionalProperties: false,
-        required: ["kind", "shareLinkId", "token", "publicPath"],
+        required: [
+          "kind",
+          "shareLinkId",
+          "token",
+          "publicPath",
+          "replayed",
+        ],
         properties: {
           kind: { const: "created" },
           shareLinkId: {
@@ -1487,13 +1590,18 @@ export const createShareLinkResultSchema: ContractSchema<
             type: "string",
             pattern: "^/s/[A-Za-z0-9_-]{43}$",
           },
+          replayed: { type: "boolean" },
         },
       },
       {
         type: "object",
         additionalProperties: false,
         required: ["kind"],
-        properties: { kind: { enum: ["not_found", "conflict"] } },
+        properties: {
+          kind: {
+            enum: ["not_found", "conflict", "idempotency_conflict"],
+          },
+        },
       },
     ],
   },
@@ -1503,11 +1611,17 @@ export const createShareLinkResultSchema: ContractSchema<
       "shareLinkId",
       "token",
       "publicPath",
+      "replayed",
     ]);
     const kind = enumValue(
       required(object, "kind", path),
       `${path}.kind`,
-      ["created", "not_found", "conflict"] as const,
+      [
+        "created",
+        "not_found",
+        "conflict",
+        "idempotency_conflict",
+      ] as const,
     );
     if (kind !== "created") {
       strictObject(value, path, ["kind"]);
@@ -1538,6 +1652,10 @@ export const createShareLinkResultSchema: ContractSchema<
       ),
       token,
       publicPath,
+      replayed: booleanValue(
+        required(object, "replayed", path),
+        `${path}.replayed`,
+      ),
     };
   },
 );
@@ -1547,20 +1665,53 @@ export const revokeShareLinkResultSchema: ContractSchema<
 > = defineContractSchema(
   "RevokeShareLinkResult",
   {
-    type: "object",
-    additionalProperties: false,
-    required: ["kind"],
-    properties: {
-      kind: { enum: ["revoked", "already_revoked", "not_found"] },
-    },
+    oneOf: [
+      {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "replayed"],
+        properties: {
+          kind: { const: "revoked" },
+          replayed: { type: "boolean" },
+        },
+      },
+      {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind"],
+        properties: {
+          kind: {
+            enum: [
+              "already_revoked",
+              "not_found",
+              "idempotency_conflict",
+            ],
+          },
+        },
+      },
+    ],
   },
   (value, path): RevokeShareLinkResult => {
-    const object = strictObject(value, path, ["kind"]);
+    const object = strictObject(value, path, ["kind", "replayed"]);
+    const kind = enumValue(
+      required(object, "kind", path),
+      `${path}.kind`,
+      [
+        "revoked",
+        "already_revoked",
+        "not_found",
+        "idempotency_conflict",
+      ] as const,
+    );
+    if (kind !== "revoked") {
+      strictObject(value, path, ["kind"]);
+      return { kind };
+    }
     return {
-      kind: enumValue(
-        required(object, "kind", path),
-        `${path}.kind`,
-        ["revoked", "already_revoked", "not_found"] as const,
+      kind,
+      replayed: booleanValue(
+        required(object, "replayed", path),
+        `${path}.replayed`,
       ),
     };
   },

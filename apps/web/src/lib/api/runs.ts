@@ -1,4 +1,4 @@
-import { ApiError, fetchJson } from "./client";
+import { ApiError, fetchJson, fetchJsonResponse } from "./client";
 
 export const RUN_STATUSES = [
   "queued",
@@ -16,8 +16,21 @@ export const RUN_RESULT_COMPLETENESS = [
   "failed",
 ] as const;
 
+export const RUN_QUEUE_REASONS = [
+  "awaiting_dispatch",
+  "capacity_wait",
+  "retry_backoff",
+] as const;
+
+export const RUN_USAGE_UNAVAILABLE_REASONS = [
+  "unavailable",
+  "invalid_configuration",
+] as const;
+
 export type RunStatus = typeof RUN_STATUSES[number];
 export type RunResultCompleteness = typeof RUN_RESULT_COMPLETENESS[number];
+export type RunQueueReason = typeof RUN_QUEUE_REASONS[number];
+export type RunUsageUnavailableReason = typeof RUN_USAGE_UNAVAILABLE_REASONS[number];
 export type JsonPrimitive = boolean | number | string | null;
 export type JsonValue = JsonPrimitive | JsonObject | readonly JsonValue[];
 export interface JsonObject {
@@ -74,6 +87,12 @@ export interface RunDetail extends RunSummary {
   readonly reservation: RunReservationSummary | null;
 }
 
+export interface CreateRunRequest {
+  readonly toolKey: string;
+  readonly input: JsonValue;
+  readonly requestedModelVersion?: string | null;
+}
+
 export interface ListRunsRequest {
   readonly cursor?: string | null;
   readonly limit?: number;
@@ -82,6 +101,73 @@ export interface ListRunsRequest {
   readonly acceptedAfter?: string;
   readonly acceptedBefore?: string;
 }
+
+export type CreateRunResult =
+  | {
+      readonly kind: "accepted";
+      readonly run: RunDetail;
+      readonly replayed: boolean;
+      readonly queueReason: RunQueueReason | null;
+    }
+  | { readonly kind: "not_found" }
+  | { readonly kind: "tool_unavailable" }
+  | { readonly kind: "idempotency_conflict" }
+  | { readonly kind: "not_entitled" }
+  | {
+      readonly kind: "allowance_exceeded";
+      readonly metric: string;
+      readonly unit: string;
+      readonly limitAmount: string;
+      readonly consumedAmount: string;
+      readonly reservedAmount: string;
+      readonly requestedAmount: string;
+    }
+  | {
+      readonly kind: "usage_unavailable";
+      readonly reason: RunUsageUnavailableReason;
+    }
+  | {
+      readonly kind: "queue_full";
+      readonly scope: "global_tool" | "workspace_total" | "workspace_tool";
+    };
+
+export interface RunUnknownOutcomeResult {
+  readonly kind: "unknown-outcome";
+  readonly message: string;
+  readonly retryable: true;
+  readonly retryMode: "exact-request";
+  readonly retryAfterSeconds: number | null;
+}
+
+export type CreateRunAdapterResult =
+  | Extract<CreateRunResult, { readonly kind: "accepted" }>
+  | { readonly kind: "not_found" }
+  | { readonly kind: "auth-expired" }
+  | { readonly kind: "tool-unavailable" }
+  | { readonly kind: "idempotency-conflict" }
+  | { readonly kind: "not-entitled" }
+  | {
+      readonly kind: "allowance-exceeded";
+      readonly metric: string;
+      readonly unit: string;
+      readonly limitAmount: string;
+      readonly consumedAmount: string;
+      readonly reservedAmount: string;
+      readonly requestedAmount: string;
+    }
+  | {
+      readonly kind: "queue-full";
+      readonly scope: "global_tool" | "workspace_total" | "workspace_tool";
+      readonly retryable: true;
+      readonly retryAfterSeconds: number | null;
+    }
+  | {
+      readonly kind: "degraded";
+      readonly message: string;
+      readonly retryable?: boolean;
+      readonly retryAfterSeconds?: number | null;
+    }
+  | RunUnknownOutcomeResult;
 
 export type ListRunsAdapterResult =
   | {
@@ -109,6 +195,11 @@ export type CancelRunAdapterResult =
   | { readonly kind: "degraded"; readonly message: string };
 
 export interface RunsAdapter {
+  create(
+    request: CreateRunRequest,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<CreateRunAdapterResult>;
   list(
     request?: ListRunsRequest,
     signal?: AbortSignal,
@@ -135,6 +226,7 @@ const TOOL_KEY_PATTERN = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 const SAFE_CODE_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,127}$/;
 const DECIMAL_AMOUNT_PATTERN = /^(?:0|[1-9][0-9]{0,28})(?:\.[0-9]{1,9})?$/;
 const CURSOR_PATTERN = /^[A-Za-z0-9_-]+$/;
+const IDEMPOTENCY_KEY_MAX_LENGTH = 255;
 const ISO_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const MAX_PAGE_SIZE = 100;
 const MAX_CURSOR_LENGTH = 2_048;
@@ -215,6 +307,11 @@ function integerValue(
     invalid(path, `must be at most ${options.maximum}`);
   }
   return parsed;
+}
+
+function booleanValue(value: unknown, path: string): boolean {
+  if (typeof value !== "boolean") return invalid(path, "must be a boolean");
+  return value;
 }
 
 function enumValue<const Values extends readonly string[]>(
@@ -557,6 +654,123 @@ function runDetail(value: unknown, path: string): RunDetail {
   };
 }
 
+export function parseCreateRunResponse(value: unknown): CreateRunResult {
+  const path = "$input";
+  const object = strictObject(value, path, [
+    "kind",
+    "run",
+    "replayed",
+    "queueReason",
+    "scope",
+    "reason",
+    "metric",
+    "unit",
+    "limitAmount",
+    "consumedAmount",
+    "reservedAmount",
+    "requestedAmount",
+  ]);
+  const kind = enumValue(
+    required(object, "kind", path),
+    `${path}.kind`,
+    [
+      "accepted",
+      "not_found",
+      "tool_unavailable",
+      "idempotency_conflict",
+      "not_entitled",
+      "allowance_exceeded",
+      "usage_unavailable",
+      "queue_full",
+    ] as const,
+  );
+
+  if (kind === "accepted") {
+    strictObject(value, path, ["kind", "run", "replayed", "queueReason"]);
+    const run = runDetail(required(object, "run", path), `${path}.run`);
+    const queueReason = nullable(
+      required(object, "queueReason", path),
+      `${path}.queueReason`,
+      (item, itemPath) => enumValue(item, itemPath, RUN_QUEUE_REASONS),
+    );
+    if ((run.status === "queued") !== (queueReason !== null)) {
+      invalid(`${path}.queueReason`, "must be present exactly while the run is queued");
+    }
+    return {
+      kind,
+      run,
+      replayed: booleanValue(required(object, "replayed", path), `${path}.replayed`),
+      queueReason,
+    };
+  }
+
+  if (kind === "allowance_exceeded") {
+    strictObject(value, path, [
+      "kind",
+      "metric",
+      "unit",
+      "limitAmount",
+      "consumedAmount",
+      "reservedAmount",
+      "requestedAmount",
+    ]);
+    return {
+      kind,
+      metric: stringValue(required(object, "metric", path), `${path}.metric`, {
+        pattern: SAFE_CODE_PATTERN,
+      }),
+      unit: stringValue(required(object, "unit", path), `${path}.unit`, {
+        pattern: SAFE_CODE_PATTERN,
+      }),
+      limitAmount: stringValue(required(object, "limitAmount", path), `${path}.limitAmount`, {
+        pattern: DECIMAL_AMOUNT_PATTERN,
+      }),
+      consumedAmount: stringValue(
+        required(object, "consumedAmount", path),
+        `${path}.consumedAmount`,
+        { pattern: DECIMAL_AMOUNT_PATTERN },
+      ),
+      reservedAmount: stringValue(
+        required(object, "reservedAmount", path),
+        `${path}.reservedAmount`,
+        { pattern: DECIMAL_AMOUNT_PATTERN },
+      ),
+      requestedAmount: stringValue(
+        required(object, "requestedAmount", path),
+        `${path}.requestedAmount`,
+        { pattern: DECIMAL_AMOUNT_PATTERN },
+      ),
+    };
+  }
+
+  if (kind === "usage_unavailable") {
+    strictObject(value, path, ["kind", "reason"]);
+    return {
+      kind,
+      reason: enumValue(
+        required(object, "reason", path),
+        `${path}.reason`,
+        RUN_USAGE_UNAVAILABLE_REASONS,
+      ),
+    };
+  }
+
+  if (kind === "queue_full") {
+    strictObject(value, path, ["kind", "scope"]);
+    return {
+      kind,
+      scope: enumValue(
+        required(object, "scope", path),
+        `${path}.scope`,
+        ["global_tool", "workspace_total", "workspace_tool"] as const,
+      ),
+    };
+  }
+
+  strictObject(value, path, ["kind"]);
+  return { kind };
+}
+
 export function parseListRunsResponse(
   value: unknown,
 ): Extract<ListRunsAdapterResult, { kind: "ok" | "not_found" }> {
@@ -643,6 +857,39 @@ export function isRunId(value: string | undefined): value is string {
   return typeof value === "string" && RUN_ID_PATTERN.test(value);
 }
 
+export function parseCreateRunRequest(value: unknown): CreateRunRequest {
+  const path = "$request";
+  const object = strictObject(value, path, ["toolKey", "input", "requestedModelVersion"]);
+  const requestedModelVersion = optionalNullable(
+    object,
+    "requestedModelVersion",
+    path,
+    (item, itemPath) => stringValue(item, itemPath, { minLength: 1, maxLength: 128 }),
+  );
+  return {
+    toolKey: stringValue(required(object, "toolKey", path), `${path}.toolKey`, {
+      minLength: 1,
+      maxLength: 128,
+      pattern: TOOL_KEY_PATTERN,
+    }),
+    input: jsonValue(required(object, "input", path), `${path}.input`),
+    ...(requestedModelVersion === undefined ? {} : { requestedModelVersion }),
+  };
+}
+
+function idempotencyKeyValue(value: unknown): string {
+  if (
+    typeof value !== "string"
+    || value.length < 1
+    || value.length > IDEMPOTENCY_KEY_MAX_LENGTH
+    || value.trim() !== value
+    || /[\r\n\0]/.test(value)
+  ) {
+    return invalid("$request.idempotencyKey", "has an invalid format");
+  }
+  return value;
+}
+
 function parseListRequest(value: ListRunsRequest): ListRunsRequest {
   const path = "$request";
   const object = strictObject(value, path, [
@@ -724,7 +971,213 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
+function createRunDegraded(
+  message: string,
+  retryable = false,
+  retryAfterSeconds: number | null = null,
+): Extract<CreateRunAdapterResult, { kind: "degraded" }> {
+  return { kind: "degraded", message, retryable, retryAfterSeconds };
+}
+
+function createRunUnknownOutcome(
+  retryAfterSeconds: number | null = null,
+): RunUnknownOutcomeResult {
+  return {
+    kind: "unknown-outcome",
+    message: "Relay could not confirm whether the run was accepted. Retry only the exact request with the same idempotency key.",
+    retryable: true,
+    retryMode: "exact-request",
+    retryAfterSeconds,
+  };
+}
+
+function allowanceFailure(
+  error: ApiError,
+): Extract<CreateRunAdapterResult, { kind: "allowance-exceeded" }> | null {
+  if (error.status !== 429 || error.code !== "allowance_exceeded" || error.details === null) {
+    return null;
+  }
+  try {
+    const path = "$error.details";
+    const object = strictObject(error.details, path, [
+      "metric",
+      "unit",
+      "limitAmount",
+      "consumedAmount",
+      "reservedAmount",
+      "requestedAmount",
+    ]);
+    return {
+      kind: "allowance-exceeded",
+      metric: stringValue(required(object, "metric", path), `${path}.metric`, {
+        pattern: SAFE_CODE_PATTERN,
+      }),
+      unit: stringValue(required(object, "unit", path), `${path}.unit`, {
+        pattern: SAFE_CODE_PATTERN,
+      }),
+      limitAmount: stringValue(required(object, "limitAmount", path), `${path}.limitAmount`, {
+        pattern: DECIMAL_AMOUNT_PATTERN,
+      }),
+      consumedAmount: stringValue(
+        required(object, "consumedAmount", path),
+        `${path}.consumedAmount`,
+        { pattern: DECIMAL_AMOUNT_PATTERN },
+      ),
+      reservedAmount: stringValue(
+        required(object, "reservedAmount", path),
+        `${path}.reservedAmount`,
+        { pattern: DECIMAL_AMOUNT_PATTERN },
+      ),
+      requestedAmount: stringValue(
+        required(object, "requestedAmount", path),
+        `${path}.requestedAmount`,
+        { pattern: DECIMAL_AMOUNT_PATTERN },
+      ),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function queueFullFailure(
+  error: ApiError,
+): Extract<CreateRunAdapterResult, { kind: "queue-full" }> | null {
+  if (
+    error.status !== 429
+    || error.code !== "tool_queue_full"
+    || error.retryable !== true
+    || error.details === null
+  ) {
+    return null;
+  }
+  try {
+    const path = "$error.details";
+    const object = strictObject(error.details, path, ["scope"]);
+    return {
+      kind: "queue-full",
+      scope: enumValue(
+        required(object, "scope", path),
+        `${path}.scope`,
+        ["global_tool", "workspace_total", "workspace_tool"] as const,
+      ),
+      retryable: true,
+      retryAfterSeconds: error.retryAfterSeconds,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isMeteringUnavailable(error: ApiError): boolean {
+  if (
+    error.status !== 503
+    || error.code !== "dependency_unavailable"
+    || error.retryable !== true
+    || error.details === null
+  ) {
+    return false;
+  }
+  try {
+    const path = "$error.details";
+    const object = strictObject(error.details, path, ["dependency"]);
+    return required(object, "dependency", path) === "metering";
+  } catch {
+    return false;
+  }
+}
+
+function createRunHttpFailure(
+  error: ApiError,
+  requestedToolKey: string,
+): CreateRunAdapterResult {
+  if (error.status === 401) return { kind: "auth-expired" };
+  if (error.status === 404 && error.code === "not_found") return { kind: "not_found" };
+  if (error.status === 409 && error.code === "idempotency_conflict") {
+    return { kind: "idempotency-conflict" };
+  }
+  if (error.status === 403 && error.code === "not_entitled") {
+    return { kind: "not-entitled" };
+  }
+
+  const allowance = allowanceFailure(error);
+  if (allowance !== null) return allowance;
+  const queueFull = queueFullFailure(error);
+  if (queueFull !== null) return queueFull;
+
+  if (error.status === 409 && error.code === "tool_unavailable" && error.details !== null) {
+    try {
+      const path = "$error.details";
+      const object = strictObject(error.details, path, ["toolKey", "reason"]);
+      if (
+        required(object, "toolKey", path) === requestedToolKey
+        && required(object, "reason", path) === "unavailable"
+      ) {
+        return { kind: "tool-unavailable" };
+      }
+    } catch {
+      // A malformed error envelope remains a deterministic degraded response.
+    }
+  }
+
+  if (isMeteringUnavailable(error)) {
+    return createRunDegraded(
+      "Usage admission is temporarily unavailable. Retry the exact request with the same idempotency key.",
+      true,
+      error.retryAfterSeconds,
+    );
+  }
+  if (error.status >= 500) return createRunUnknownOutcome(error.retryAfterSeconds);
+  return createRunDegraded(
+    "Relay rejected the run request. No automatic retry was attempted.",
+    error.retryable === true,
+    error.retryAfterSeconds,
+  );
+}
+
 export const httpRunsAdapter: RunsAdapter = {
+  async create(request, idempotencyKey, signal) {
+    let parsedRequest: CreateRunRequest;
+    let parsedKey: string;
+    try {
+      parsedRequest = parseCreateRunRequest(request);
+      parsedKey = idempotencyKeyValue(idempotencyKey);
+    } catch {
+      return createRunDegraded(
+        "Relay could not prepare the run request. Review the fields and reuse a stable idempotency key.",
+      );
+    }
+
+    try {
+      const response = await fetchJsonResponse<unknown>(RUNS_PATH, {
+        method: "POST",
+        cache: "no-store",
+        signal,
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": parsedKey,
+        },
+        body: JSON.stringify(parsedRequest),
+      });
+      const parsed = parseCreateRunResponse(response.data);
+      if (response.status !== 202 || parsed.kind !== "accepted") {
+        throw new InvalidRunResponseError("$response", "must be an accepted HTTP 202 result");
+      }
+      const expectedLocation = runPath(parsed.run.id);
+      if (response.location !== expectedLocation) {
+        throw new InvalidRunResponseError(
+          "$response.location",
+          "must identify the accepted run",
+        );
+      }
+      return parsed;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return createRunHttpFailure(error, parsedRequest.toolKey);
+      }
+      return createRunUnknownOutcome();
+    }
+  },
+
   async list(request = {}, signal) {
     try {
       const response = await fetchJson<unknown>(listPath(request), {

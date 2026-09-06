@@ -4,6 +4,18 @@ export type {
   AdminChangelogService,
 } from "./admin_changelog.ts";
 
+export {
+  ADMIN_CAPACITY_PATHS,
+  ADMIN_CAPACITY_POLICIES_PATH,
+  ADMIN_CAPACITY_POLICY_PATH,
+  adminCapacityPolicyPath,
+  createAdminCapacityRoutes,
+} from "./admin_capacity.ts";
+export type {
+  AdminCapacityRouteDependencies,
+  AdminCapacityService,
+} from "./admin_capacity.ts";
+
 export { createPublicChangelogRoutes } from "./changelog.ts";
 export type {
   PublicChangelogReader,
@@ -27,3 +39,11 @@ export type {
   WorkspaceEventWaitRequest,
   WorkspaceMembershipRole,
 } from "./v1.ts";
+export {
+  createAdminAllowanceRoutes,
+  createPostgresAdminAllowanceService,
+} from "./admin_allowances.ts";
+export type {
+  AdminAllowanceRouteDependencies,
+  AdminAllowanceService,
+} from "./admin_allowances.ts";

@@ -1188,13 +1188,15 @@ code {
 }
 
 .product-shell {
-  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
   display: grid;
   grid-template-columns: var(--relay-rail-width) minmax(0, 1fr);
 }
 
 .product-rail {
-  min-height: 100dvh;
+  min-height: 0;
+  overflow-y: auto;
   border-right: 1px solid var(--surface-border);
   background: var(--surface-bg-alt);
   display: flex;
@@ -1385,6 +1387,8 @@ code {
 
 .product-main {
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .product-mobile-header,
@@ -1467,6 +1471,60 @@ code {
 .connection-ledger dd {
   color: var(--surface-copy);
   font-size: 0.8rem;
+}
+
+.confirm-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  background: rgb(14 19 16 / 78%);
+  opacity: 1;
+  transition: opacity 160ms var(--relay-ease-out);
+}
+
+.confirm-dialog {
+  width: min(100%, 420px);
+  border: 1px solid var(--surface-border-strong);
+  padding: 22px;
+  display: grid;
+  gap: 14px;
+  background: var(--surface-bg);
+  box-shadow: 0 24px 48px rgb(0 0 0 / 40%);
+  color: var(--surface-ink);
+  transform: translateY(0) scale(1);
+  transition: transform 220ms var(--relay-ease-out);
+}
+
+@starting-style {
+  .confirm-dialog-scrim {
+    opacity: 0;
+  }
+
+  .confirm-dialog {
+    transform: translateY(12px) scale(0.98);
+  }
+}
+
+.confirm-dialog h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  letter-spacing: -0.025em;
+}
+
+.confirm-dialog p {
+  margin: 0;
+  color: var(--surface-copy);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .dashboard-contract {
@@ -1554,11 +1612,17 @@ code {
 
 @media (max-width: 900px) {
   .product-shell {
+    height: auto;
+    overflow: visible;
     display: block;
   }
 
   .product-rail {
     display: none;
+  }
+
+  .product-main {
+    overflow: visible;
   }
 
   .product-mobile-header {

@@ -355,7 +355,7 @@ describe("tool detail page", () => {
     expect(
       await screen.findByRole("heading", {
         level: 1,
-        name: TEST_ONLY_TOOL_DETAIL_FIXTURE.key,
+        name: TEST_ONLY_TOOL_DETAIL_FIXTURE.name,
       }),
     ).toBeVisible();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);

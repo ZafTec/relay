@@ -1,7 +1,11 @@
 import type pg from "pg";
 import { sha256Hex, withTransaction } from "@relay/database";
 import type { DatabasePool } from "@relay/database";
-import { generatePublicId, ID_PREFIXES } from "@relay/contracts";
+import {
+  generatePublicId,
+  ID_PREFIXES,
+  PUBLIC_ID_PATTERNS,
+} from "@relay/contracts";
 import { getMembership } from "@relay/auth";
 import {
   type CatalogRouteSelection,
@@ -52,27 +56,70 @@ export interface AdmissionUsageRequest {
   readonly toolVersionId: string;
   readonly createdBy: string;
   readonly input: unknown;
+  /** The caller-supplied run key; adapters must domain-separate derived keys. */
+  readonly runIdempotencyKey: string;
   readonly route: CatalogRouteSelection;
   readonly schedulingProfile: WorkspaceSchedulingProfile;
 }
+
+export interface AdmissionUsageMeasureRange {
+  readonly minimum: string;
+  readonly expected: string;
+  readonly maximum: string;
+}
+
+export type AdmissionUsageMeasures = Readonly<
+  Record<string, AdmissionUsageMeasureRange>
+>;
 
 export interface AdmissionUsageQuote {
   readonly estimatedCostUnits: number;
   /** Stable version/fingerprint of the server-owned estimate policy. */
   readonly policyKey: string;
+  /** Exact normalized measures that metering-backed reservation must reuse. */
+  readonly measures?: AdmissionUsageMeasures;
 }
 
-/** Future metering integrates here without changing the acceptance transaction. */
+export type AdmissionUsageUnavailableReason =
+  | "unavailable"
+  | "invalid_configuration";
+
+export type AdmissionUsageFailure =
+  | { readonly kind: "not_entitled" }
+  | {
+    readonly kind: "allowance_exceeded";
+    readonly metric: string;
+    readonly unit: string;
+    readonly limitAmount: string;
+    readonly consumedAmount: string;
+    readonly reservedAmount: string;
+    readonly requestedAmount: string;
+  }
+  | {
+    readonly kind: "usage_unavailable";
+    readonly reason: AdmissionUsageUnavailableReason;
+  }
+  | { readonly kind: "idempotency_conflict" };
+
+export type AdmissionUsageQuoteResult =
+  | AdmissionUsageQuote
+  | AdmissionUsageFailure;
+export type AdmissionUsageReservationResult =
+  | string
+  | null
+  | AdmissionUsageFailure;
+
+/** Metering integrates here without owning the surrounding acceptance transaction. */
 export interface AdmissionUsagePort {
   quote(
     client: pg.PoolClient,
     request: AdmissionUsageRequest,
-  ): Promise<AdmissionUsageQuote>;
+  ): Promise<AdmissionUsageQuoteResult>;
   reserve(
     client: pg.PoolClient,
     request: AdmissionUsageRequest,
     quote: AdmissionUsageQuote,
-  ): Promise<string | null>;
+  ): Promise<AdmissionUsageReservationResult>;
 }
 
 export interface AdmitRunDependencies {
@@ -89,7 +136,6 @@ export type AdmitRunResult =
     readonly jobId: string;
   }
   | { readonly kind: "replayed"; readonly runId: string }
-  | { readonly kind: "idempotency_conflict" }
   | { readonly kind: "not_a_member" }
   /** No matching `relay.tool_versions` row, it isn't published, or its tool is disabled/retired. */
   | { readonly kind: "tool_version_unavailable" }
@@ -98,7 +144,8 @@ export type AdmitRunResult =
   | {
     readonly kind: "queue_full";
     readonly scope: "global_tool" | "workspace_total" | "workspace_tool";
-  };
+  }
+  | AdmissionUsageFailure;
 
 const TOOL_VERSION_UNAVAILABLE_CODES = new Set([
   "tool_version_not_found",
@@ -268,6 +315,7 @@ async function lockWorkspaceToolCounter(
  * Never escapes `admitToolRun`.
  */
 class IdempotencyRaceLost extends Error {}
+class UsageReservationMissing extends Error {}
 
 function resolveAgainstRecord(
   record: { canonical_payload_hash: string; run_id: string | null } | undefined,
@@ -398,10 +446,13 @@ export async function admitToolRun(
         toolVersionId: input.toolVersionId,
         createdBy: input.createdBy,
         input: input.input,
+        runIdempotencyKey: input.idempotencyKey,
         route: routeSelection,
         schedulingProfile,
       };
-      const usageQuote = await usagePort.quote(client, usageRequest);
+      const usageQuoteResult = await usagePort.quote(client, usageRequest);
+      if ("kind" in usageQuoteResult) return usageQuoteResult;
+      const usageQuote = usageQuoteResult;
       assertEstimatedCostUnits(usageQuote.estimatedCostUnits);
       if (usageQuote.policyKey.trim() === "") {
         throw new Error("Admission usage policy key must not be empty");
@@ -457,13 +508,23 @@ export async function admitToolRun(
         return { kind: "queue_full", scope: "workspace_tool" };
       }
 
-      const reservationId = await usagePort.reserve(
+      const reservation = await usagePort.reserve(
         client,
         usageRequest,
         usageQuote,
       );
+      if (reservation !== null && typeof reservation !== "string") {
+        return reservation;
+      }
+      if (
+        reservation === null ||
+        !PUBLIC_ID_PATTERNS.usageReservation.test(reservation)
+      ) {
+        throw new UsageReservationMissing();
+      }
+      const reservationId = reservation;
 
-      const runId = generatePublicId(ID_PREFIXES.toolRun);
+      const runId = generatePublicId(ID_PREFIXES.run);
       await client.query(
         `insert into relay.tool_runs
            (id, workspace_id, tool_version_id, status, input, reservation_id,
@@ -601,6 +662,9 @@ export async function admitToolRun(
       return { kind: "admitted", runId, jobId };
     });
   } catch (error) {
+    if (error instanceof UsageReservationMissing) {
+      return { kind: "usage_unavailable", reason: "invalid_configuration" };
+    }
     if (
       error instanceof IdempotencyRaceLost && canonicalPayloadHash !== undefined
     ) {

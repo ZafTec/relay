@@ -306,6 +306,34 @@ export function createV1Routes(
         });
       case "idempotency_conflict":
         throw conflict("idempotency_conflict");
+      case "not_entitled":
+        throw new HttpAdapterError({
+          status: 403,
+          code: "not_entitled",
+          message: "The workspace is not entitled to use this tool.",
+        });
+      case "allowance_exceeded":
+        throw new HttpAdapterError({
+          status: 429,
+          code: "allowance_exceeded",
+          message: "The workspace usage allowance has been exceeded.",
+          details: {
+            metric: result.metric,
+            unit: result.unit,
+            limitAmount: result.limitAmount,
+            consumedAmount: result.consumedAmount,
+            reservedAmount: result.reservedAmount,
+            requestedAmount: result.requestedAmount,
+          },
+        });
+      case "usage_unavailable":
+        throw new HttpAdapterError({
+          status: 503,
+          code: "dependency_unavailable",
+          message: "Usage admission is temporarily unavailable.",
+          retryable: true,
+          details: { dependency: "metering" },
+        });
       case "queue_full":
         throw queueFull(result.scope, queueRetryAfterSeconds);
     }
@@ -442,12 +470,17 @@ export function createV1Routes(
       dependencies.resolveIdentity,
       context.req.raw,
     );
+    const idempotencyKey = requireIdempotencyKey(context.req.raw);
     const request = parseContractInput(
       createArtifactUploadRequestSchema,
       await readJsonBody(context.req.raw, maxJsonBodyBytes),
     );
     const result = createArtifactUploadResultSchema.parse(
-      await dependencies.services.artifacts.createUpload(identity, request),
+      await dependencies.services.artifacts.createUpload(
+        identity,
+        request,
+        idempotencyKey,
+      ),
     );
     switch (result.kind) {
       case "created":
@@ -460,6 +493,8 @@ export function createV1Routes(
           code: "upload_quota_exceeded",
           message: "The workspace upload quota has been exceeded.",
         });
+      case "idempotency_conflict":
+        throw conflict("idempotency_conflict");
     }
   });
 
@@ -469,13 +504,18 @@ export function createV1Routes(
       dependencies.resolveIdentity,
       context.req.raw,
     );
+    const idempotencyKey = requireIdempotencyKey(context.req.raw);
     await assertEmptyBody(context.req.raw);
     const uploadId = requireResourceId(
       context.req.param("uploadId"),
       PUBLIC_ID_PATTERNS.artifactUpload,
     );
     const result = completeArtifactUploadResultSchema.parse(
-      await dependencies.services.artifacts.completeUpload(identity, uploadId),
+      await dependencies.services.artifacts.completeUpload(
+        identity,
+        uploadId,
+        idempotencyKey,
+      ),
     );
     switch (result.kind) {
       case "completed":
@@ -492,6 +532,8 @@ export function createV1Routes(
       case "expired":
       case "not_found":
         throw notFound();
+      case "idempotency_conflict":
+        throw conflict("idempotency_conflict");
     }
   });
 
@@ -501,6 +543,7 @@ export function createV1Routes(
       dependencies.resolveIdentity,
       context.req.raw,
     );
+    const idempotencyKey = requireIdempotencyKey(context.req.raw);
     const artifactId = requireResourceId(
       context.req.param("artifactId"),
       PUBLIC_ID_PATTERNS.artifact,
@@ -514,7 +557,11 @@ export function createV1Routes(
       bindPathField(body as Record<string, unknown>, "artifactId", artifactId),
     );
     const result = createShareLinkResultSchema.parse(
-      await dependencies.services.artifacts.createShareLink(identity, request),
+      await dependencies.services.artifacts.createShareLink(
+        identity,
+        request,
+        idempotencyKey,
+      ),
     );
     switch (result.kind) {
       case "created":
@@ -524,6 +571,8 @@ export function createV1Routes(
         throw notFound();
       case "conflict":
         throw conflict("invalid_request", "share_policy_conflict");
+      case "idempotency_conflict":
+        throw conflict("idempotency_conflict");
     }
   });
 
@@ -533,8 +582,9 @@ export function createV1Routes(
       dependencies.resolveIdentity,
       context.req.raw,
     );
+    const idempotencyKey = requireIdempotencyKey(context.req.raw);
     await assertEmptyBody(context.req.raw);
-    requireResourceId(
+    const artifactId = requireResourceId(
       context.req.param("artifactId"),
       PUBLIC_ID_PATTERNS.artifact,
     );
@@ -545,10 +595,15 @@ export function createV1Routes(
     const result = revokeShareLinkResultSchema.parse(
       await dependencies.services.artifacts.revokeShareLink(
         identity,
+        artifactId,
         shareLinkId,
+        idempotencyKey,
       ),
     );
     if (result.kind === "not_found") throw notFound();
+    if (result.kind === "idempotency_conflict") {
+      throw conflict("idempotency_conflict");
+    }
     return context.json(result);
   });
 

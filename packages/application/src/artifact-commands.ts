@@ -21,7 +21,10 @@ import {
   revokeShareLinkResultSchema,
 } from "@relay/contracts";
 import type { WorkspaceActorContext } from "./context.ts";
-import { validateWorkspaceActorContext } from "./context.ts";
+import {
+  validateIdempotencyKey,
+  validateWorkspaceActorContext,
+} from "./context.ts";
 import type { ArtifactCommandApplicationService } from "./services.ts";
 
 interface DomainAuthorization {
@@ -68,6 +71,7 @@ export interface ArtifactCommandPort {
     readonly durationMs?: number | null;
     readonly metadata?: Readonly<Record<string, unknown>>;
     readonly sourceRunId?: string | null;
+    readonly idempotencyKey: string;
   }): Promise<
     | {
       readonly kind: "created";
@@ -78,25 +82,60 @@ export interface ArtifactCommandPort {
         readonly sequence: number;
         readonly upload: DomainAuthorization & { readonly method: "PUT" };
       };
+      readonly replayed: boolean;
     }
-    | { readonly kind: "not_found" }
-    | { readonly kind: "quota_exceeded" }
+    | {
+      readonly kind: "completed";
+      readonly uploadId: string;
+      readonly artifactId: string;
+      readonly artifactVersionId: string;
+      readonly sequence: number;
+      readonly becameCurrent: boolean;
+      readonly replayed: true;
+    }
+    | {
+      readonly kind: "expired";
+      readonly uploadId: string;
+      readonly artifactId: string;
+      readonly artifactVersionId: string;
+      readonly sequence: number;
+      readonly replayed: true;
+    }
+    | {
+      readonly kind: "verification_failed";
+      readonly uploadId: string;
+      readonly artifactId: string;
+      readonly artifactVersionId: string;
+      readonly sequence: number;
+      readonly reason: string;
+      readonly replayed: true;
+    }
+    | { readonly kind: "not_found"; readonly replayed: false }
+    | { readonly kind: "quota_exceeded"; readonly replayed: false }
+    | { readonly kind: "idempotency_conflict" }
   >;
   completeUpload(input: {
     readonly workspaceId: string;
     readonly actorUserId: string;
     readonly uploadId: string;
+    readonly idempotencyKey: string;
   }): Promise<
     | {
       readonly kind: "completed";
       readonly artifactId: string;
       readonly artifactVersionId: string;
       readonly becameCurrent: boolean;
+      readonly replayed: boolean;
     }
-    | { readonly kind: "pending" }
-    | { readonly kind: "expired" }
-    | { readonly kind: "verification_failed"; readonly reason: string }
-    | { readonly kind: "not_found" }
+    | { readonly kind: "pending"; readonly replayed: false }
+    | { readonly kind: "expired"; readonly replayed: boolean }
+    | {
+      readonly kind: "verification_failed";
+      readonly reason: string;
+      readonly replayed: boolean;
+    }
+    | { readonly kind: "not_found"; readonly replayed: false }
+    | { readonly kind: "idempotency_conflict" }
   >;
   createShareLink(input: {
     readonly workspaceId: string;
@@ -108,6 +147,7 @@ export interface ArtifactCommandPort {
     readonly maxResolutions?: number | null;
     readonly requireAuth?: boolean;
     readonly contentDisposition: "attachment" | "inline";
+    readonly idempotencyKey: string;
   }): Promise<
     | {
       readonly kind: "created";
@@ -115,18 +155,22 @@ export interface ArtifactCommandPort {
         readonly shareLinkId: string;
         readonly token: string;
       };
+      readonly replayed: boolean;
     }
-    | { readonly kind: "not_found" }
-    | { readonly kind: "conflict" }
+    | { readonly kind: "not_found"; readonly replayed: false }
+    | { readonly kind: "conflict"; readonly replayed: false }
+    | { readonly kind: "idempotency_conflict" }
   >;
   revokeShareLink(input: {
     readonly workspaceId: string;
     readonly actorUserId: string;
+    readonly artifactId: string;
     readonly shareLinkId: string;
+    readonly idempotencyKey: string;
   }): Promise<
-    | { readonly kind: "revoked" }
-    | { readonly kind: "already_revoked" }
-    | { readonly kind: "not_found" }
+    | { readonly kind: "revoked"; readonly replayed: boolean }
+    | { readonly kind: "not_found"; readonly replayed: false }
+    | { readonly kind: "idempotency_conflict" }
   >;
   resolveShareLink(input: {
     readonly token: string;
@@ -202,52 +246,86 @@ export class ArtifactCommandAdapter
   async createUpload(
     rawContext: WorkspaceActorContext,
     rawRequest: CreateArtifactUploadRequest,
+    rawIdempotencyKey: string,
   ): Promise<CreateArtifactUploadResult> {
     const context = validateWorkspaceActorContext(rawContext);
+    const idempotencyKey = validateIdempotencyKey(rawIdempotencyKey);
     const request = createArtifactUploadRequestSchema.parse(rawRequest);
     const result = await this.#port.beginDirectUpload({
       ...context,
       ...request,
+      idempotencyKey,
     });
-    if (result.kind !== "created") {
-      return createArtifactUploadResultSchema.parse(result);
-    }
-    return createArtifactUploadResultSchema.parse({
-      kind: "created",
-      upload: {
-        id: result.value.uploadId,
-        artifactId: result.value.artifactId,
-        artifactVersionId: result.value.artifactVersionId,
-        sequence: result.value.sequence,
-        status: "pending",
-        authorization: {
-          ...result.value.upload,
-          expiresAt: result.value.upload.expiresAt.toISOString(),
+    if (result.kind === "created") {
+      return createArtifactUploadResultSchema.parse({
+        kind: "created",
+        upload: {
+          id: result.value.uploadId,
+          artifactId: result.value.artifactId,
+          artifactVersionId: result.value.artifactVersionId,
+          sequence: result.value.sequence,
+          status: "pending",
+          authorization: {
+            ...result.value.upload,
+            expiresAt: result.value.upload.expiresAt.toISOString(),
+          },
         },
-      },
-    });
+        replayed: result.replayed,
+      });
+    }
+    if (
+      result.kind === "completed" || result.kind === "expired" ||
+      result.kind === "verification_failed"
+    ) {
+      return createArtifactUploadResultSchema.parse({
+        kind: "created",
+        upload: {
+          id: result.uploadId,
+          artifactId: result.artifactId,
+          artifactVersionId: result.artifactVersionId,
+          sequence: result.sequence,
+          status: result.kind === "completed"
+            ? "completed"
+            : result.kind === "expired"
+            ? "expired"
+            : "failed",
+          authorization: null,
+        },
+        replayed: true,
+      });
+    }
+    return createArtifactUploadResultSchema.parse({ kind: result.kind });
   }
 
   async completeUpload(
     rawContext: WorkspaceActorContext,
     rawUploadId: string,
+    rawIdempotencyKey: string,
   ): Promise<CompleteArtifactUploadResult> {
     const context = validateWorkspaceActorContext(rawContext);
+    const idempotencyKey = validateIdempotencyKey(rawIdempotencyKey);
     const uploadId = validatePublicId(
       rawUploadId,
       PUBLIC_ID_PATTERNS.artifactUpload,
       "uploadId",
     );
+    const result = await this.#port.completeUpload({
+      ...context,
+      uploadId,
+      idempotencyKey,
+    });
     return completeArtifactUploadResultSchema.parse(
-      await this.#port.completeUpload({ ...context, uploadId }),
+      result.kind === "not_found" ? { kind: result.kind } : result,
     );
   }
 
   async createShareLink(
     rawContext: WorkspaceActorContext,
     rawRequest: CreateShareLinkRequest,
+    rawIdempotencyKey: string,
   ): Promise<CreateShareLinkResult> {
     const context = validateWorkspaceActorContext(rawContext);
+    const idempotencyKey = validateIdempotencyKey(rawIdempotencyKey);
     const request = createShareLinkRequestSchema.parse(rawRequest);
     const result = await this.#port.createShareLink({
       ...context,
@@ -255,30 +333,46 @@ export class ArtifactCommandAdapter
       expiresAt: request.expiresAt === undefined || request.expiresAt === null
         ? request.expiresAt
         : new Date(request.expiresAt),
+      idempotencyKey,
     });
     if (result.kind !== "created") {
-      return createShareLinkResultSchema.parse(result);
+      return createShareLinkResultSchema.parse({ kind: result.kind });
     }
     return createShareLinkResultSchema.parse({
       kind: "created",
       shareLinkId: result.value.shareLinkId,
       token: result.value.token,
       publicPath: publicSharePath(result.value.token),
+      replayed: result.replayed,
     });
   }
 
   async revokeShareLink(
     rawContext: WorkspaceActorContext,
+    rawArtifactId: string,
     rawShareLinkId: string,
+    rawIdempotencyKey: string,
   ): Promise<RevokeShareLinkResult> {
     const context = validateWorkspaceActorContext(rawContext);
+    const idempotencyKey = validateIdempotencyKey(rawIdempotencyKey);
+    const artifactId = validatePublicId(
+      rawArtifactId,
+      PUBLIC_ID_PATTERNS.artifact,
+      "artifactId",
+    );
     const shareLinkId = validatePublicId(
       rawShareLinkId,
       PUBLIC_ID_PATTERNS.shareLink,
       "shareLinkId",
     );
+    const result = await this.#port.revokeShareLink({
+      ...context,
+      artifactId,
+      shareLinkId,
+      idempotencyKey,
+    });
     return revokeShareLinkResultSchema.parse(
-      await this.#port.revokeShareLink({ ...context, shareLinkId }),
+      result.kind === "not_found" ? { kind: result.kind } : result,
     );
   }
 

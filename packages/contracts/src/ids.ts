@@ -17,8 +17,6 @@ export function generatePublicId(prefix: string): string {
 
 export const ID_PREFIXES = {
   run: "run",
-  /** @deprecated Use `run`; retained for existing queue consumers. */
-  toolRun: "run",
   artifact: "art",
   artifactVersion: "aver",
   artifactUpload: "upl",

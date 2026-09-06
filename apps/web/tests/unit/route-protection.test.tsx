@@ -286,7 +286,7 @@ describe("protected routing", () => {
       />,
     );
 
-    expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Overview", exact: true })).toBeInTheDocument();
     expect(await screen.findByText("No overview data is exposed yet")).toBeInTheDocument();
     expect(screen.getAllByText("Relay test workspace").length).toBeGreaterThan(0);
     expect(screen.getByText("Not requested")).toBeInTheDocument();

@@ -3,6 +3,7 @@ import {
   cancelRunResultSchema,
   changelogEntryPath,
   createArtifactUploadRequestSchema,
+  createRunResultSchema,
   errorEnvelopeSchema,
   HTTP_PATHS,
   listRunsRequestSchema,
@@ -124,6 +125,41 @@ Deno.test("run details enforce status-shaped output items", () => {
           artifactId: null,
         }],
       },
+    })
+  );
+});
+
+Deno.test("create run results validate metering admission failures", () => {
+  assertEquals(createRunResultSchema.parse({ kind: "not_entitled" }), {
+    kind: "not_entitled",
+  });
+  assertEquals(
+    createRunResultSchema.parse({
+      kind: "usage_unavailable",
+      reason: "invalid_configuration",
+    }),
+    { kind: "usage_unavailable", reason: "invalid_configuration" },
+  );
+  const allowance = {
+    kind: "allowance_exceeded",
+    metric: "images.generated",
+    unit: "image",
+    limitAmount: "10",
+    consumedAmount: "7.5",
+    reservedAmount: "2",
+    requestedAmount: "1",
+  } as const;
+  assertEquals(createRunResultSchema.parse(allowance), allowance);
+  assertThrows(() =>
+    createRunResultSchema.parse({
+      ...allowance,
+      metric: "https://internal.example/secret",
+    })
+  );
+  assertThrows(() =>
+    createRunResultSchema.parse({
+      ...allowance,
+      requestedAmount: "-1",
     })
   );
 });

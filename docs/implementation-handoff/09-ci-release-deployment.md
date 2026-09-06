@@ -74,8 +74,9 @@ approved. Recommended researched choices:
 
 ## PR CI
 
-Add `.github/workflows/ci.yml` with `pull_request`, `push` to main, and
-`merge_group` when merge queue is enabled. Use read-only default permissions and
+Run `.github/workflows/ci.yml` only on `pull_request`, with no duplicate CI run
+after merging to `main`. Release Please separately handles pushes to `main`
+(including PR merges). Use read-only default permissions and
 no production/Docker Hub secrets in pull-request jobs.
 
 Parallel jobs:
@@ -151,8 +152,9 @@ network. Prefer no host-published ports; run test containers on that network.
 - SARIF upload where supported
 
 Expose one stable required aggregate job that depends on all applicable jobs.
-Pin third-party Actions to reviewed full commit SHAs and use Dependabot to
-update pins.
+Pin third-party Actions to reviewed full commit SHAs. Dependency updates are
+reported in a recurring issue for review; automatic dependency PRs are disabled.
+See [dependency update reporting](../dependency-updates.md).
 
 ## Release Please
 

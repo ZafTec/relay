@@ -15,9 +15,11 @@ import {
   createApp,
   type RelayMcpHttpHandler,
 } from "./app.ts";
-import type {
-  AdminChangelogService,
-  PublicChangelogReader,
+import {
+  ADMIN_CAPACITY_POLICIES_PATH,
+  type AdminCapacityService,
+  type AdminChangelogService,
+  type PublicChangelogReader,
 } from "./routes/mod.ts";
 import {
   AUTHENTICATED_IDENTITY,
@@ -210,6 +212,11 @@ Deno.test("admin changelog routes mount independently of application services", 
     publish: () => Promise.resolve({ kind: "denied", replayed: false }),
     unpublish: () => Promise.resolve({ kind: "denied", replayed: false }),
   };
+  const capacityService: AdminCapacityService = {
+    list: () => Promise.resolve({ kind: "ok", value: [] }),
+    get: () => Promise.resolve({ kind: "not_found" }),
+    revise: () => Promise.resolve({ kind: "denied", replayed: false }),
+  };
   const app = createApp(config, {
     publicChangelog: {
       reader: {
@@ -220,6 +227,11 @@ Deno.test("admin changelog routes mount independently of application services", 
     adminChangelog: {
       auth,
       service,
+      allowedOrigins: ["https://console.relay.test"],
+    },
+    adminCapacity: {
+      auth,
+      service: capacityService,
       allowedOrigins: ["https://console.relay.test"],
     },
     v1: {
@@ -237,6 +249,9 @@ Deno.test("admin changelog routes mount independently of application services", 
   assertEquals((await app.request("/health/live")).status, 200);
   assertEquals((await app.request("/api/v1/changelog")).status, 200);
   assertEquals((await app.request("/api/v1/tools")).status, 200);
+  const capacityResponse = await app.request(ADMIN_CAPACITY_POLICIES_PATH);
+  assertEquals(capacityResponse.status, 200);
+  assertEquals(await capacityResponse.json(), { policies: [] });
 
   for (
     const request of [

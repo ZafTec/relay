@@ -10,6 +10,7 @@
     "@relay/config": "../config/src/index.ts",
     "@relay/contracts": "../contracts/src/index.ts",
     "@relay/database": "../database/src/index.ts",
+    "@relay/metering": "../metering/src/index.ts",
     "@relay/observability": "../observability/src/index.ts",
     "@relay/queue": "./src/dependency-queue.ts",
     "@relay/scheduler": "../scheduler/src/index.ts",

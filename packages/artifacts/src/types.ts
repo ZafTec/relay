@@ -50,12 +50,50 @@ export interface PendingUploadAuthorization {
   readonly upload: UploadAuthorization;
 }
 
-export type BeginUploadResult =
+export interface ArtifactMutationReplayMetadata {
+  readonly replayed: boolean;
+}
+
+export interface ArtifactIdempotencyConflictResult {
+  readonly kind: "idempotency_conflict";
+}
+
+export type ReplayedUploadState =
+  & ArtifactMutationReplayMetadata
+  & {
+    readonly replayed: true;
+    readonly uploadId: string;
+    readonly artifactId: string;
+    readonly artifactVersionId: string;
+    readonly sequence: number;
+  }
+  & (
+    | { readonly kind: "completed"; readonly becameCurrent: boolean }
+    | { readonly kind: "expired" }
+    | { readonly kind: "verification_failed"; readonly reason: string }
+  );
+
+export type NonIdempotentBeginUploadResult =
   | { readonly kind: "created"; readonly value: PendingUploadAuthorization }
   | { readonly kind: "not_found" }
   | { readonly kind: "quota_exceeded" };
 
-export type CompleteUploadResult =
+export type IdempotentBeginUploadResult =
+  | {
+    readonly kind: "created";
+    readonly value: PendingUploadAuthorization;
+    readonly replayed: boolean;
+  }
+  | { readonly kind: "not_found"; readonly replayed: false }
+  | { readonly kind: "quota_exceeded"; readonly replayed: false }
+  | ReplayedUploadState
+  | ArtifactIdempotencyConflictResult;
+
+export type BeginUploadResult =
+  | NonIdempotentBeginUploadResult
+  | IdempotentBeginUploadResult;
+
+export type NonIdempotentCompleteUploadResult =
   | {
     readonly kind: "completed";
     readonly artifactId: string;
@@ -66,6 +104,28 @@ export type CompleteUploadResult =
   | { readonly kind: "expired" }
   | { readonly kind: "verification_failed"; readonly reason: string }
   | { readonly kind: "not_found" };
+
+export type IdempotentCompleteUploadResult =
+  | {
+    readonly kind: "completed";
+    readonly artifactId: string;
+    readonly artifactVersionId: string;
+    readonly becameCurrent: boolean;
+    readonly replayed: boolean;
+  }
+  | { readonly kind: "pending"; readonly replayed: false }
+  | { readonly kind: "expired"; readonly replayed: boolean }
+  | {
+    readonly kind: "verification_failed";
+    readonly reason: string;
+    readonly replayed: boolean;
+  }
+  | { readonly kind: "not_found"; readonly replayed: false }
+  | ArtifactIdempotencyConflictResult;
+
+export type CompleteUploadResult =
+  | NonIdempotentCompleteUploadResult
+  | IdempotentCompleteUploadResult;
 
 export interface OutputItemRecord {
   readonly ordinal: number;
@@ -101,15 +161,38 @@ export interface ShareLinkSecret {
   readonly token: string;
 }
 
-export type CreateShareLinkResult =
+export type NonIdempotentCreateShareLinkResult =
   | { readonly kind: "created"; readonly value: ShareLinkSecret }
   | { readonly kind: "not_found" }
   | { readonly kind: "conflict" };
 
-export type RevokeShareLinkResult =
+export type IdempotentCreateShareLinkResult =
+  | {
+    readonly kind: "created";
+    readonly value: ShareLinkSecret;
+    readonly replayed: boolean;
+  }
+  | { readonly kind: "not_found"; readonly replayed: false }
+  | { readonly kind: "conflict"; readonly replayed: false }
+  | ArtifactIdempotencyConflictResult;
+
+export type CreateShareLinkResult =
+  | NonIdempotentCreateShareLinkResult
+  | IdempotentCreateShareLinkResult;
+
+export type NonIdempotentRevokeShareLinkResult =
   | { readonly kind: "revoked" }
   | { readonly kind: "already_revoked" }
   | { readonly kind: "not_found" };
+
+export type IdempotentRevokeShareLinkResult =
+  | { readonly kind: "revoked"; readonly replayed: boolean }
+  | { readonly kind: "not_found"; readonly replayed: false }
+  | ArtifactIdempotencyConflictResult;
+
+export type RevokeShareLinkResult =
+  | NonIdempotentRevokeShareLinkResult
+  | IdempotentRevokeShareLinkResult;
 
 export type RecordOutputFailureResult =
   | { readonly kind: "recorded" }

@@ -14,6 +14,7 @@ import {
   type ListArtifactsRequest,
   httpArtifactsAdapter,
 } from "../../lib/api/artifacts";
+import { ArtifactUploadDialog } from "./ArtifactUploadDialog";
 import { ArtifactPlate, VerificationBadge, formatBytes, formatTimestamp } from "./artifact-display";
 import "./artifacts.css";
 
@@ -139,6 +140,7 @@ export function ArtifactsPage({ adapter = httpArtifactsAdapter }: ArtifactsPageP
   const [reloadKey, setReloadKey] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [paginationError, setPaginationError] = useState<string | null>(null);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const activeRef = useRef(false);
   const listGenerationRef = useRef(0);
   const loadMoreController = useRef<AbortController | null>(null);
@@ -259,9 +261,12 @@ export function ArtifactsPage({ adapter = httpArtifactsAdapter }: ArtifactsPageP
           </p>
           <h1>Artifacts</h1>
         </div>
-        <Button variant="outline" onClick={() => setReloadKey((value) => value + 1)}>
-          Refresh
-        </Button>
+        <div className="artifact-page-header__actions">
+          <Button onClick={() => setUploadDialogOpen(true)}>Upload artifact</Button>
+          <Button variant="outline" onClick={() => setReloadKey((value) => value + 1)}>
+            Refresh
+          </Button>
+        </div>
       </header>
 
       <form className="artifact-filters" role="search" aria-label="Filter artifacts" onSubmit={applyFilters}>
@@ -366,8 +371,12 @@ export function ArtifactsPage({ adapter = httpArtifactsAdapter }: ArtifactsPageP
         ) : null}
 
         {state.kind === "ok" && state.items.length === 0 && !filtered ? (
-          <EmptyState label="Artifact registry" title="No artifacts yet">
-            <p>This workspace has no artifacts returned by the API. Run a tool or create an upload through a supported client to add one.</p>
+          <EmptyState
+            label="Artifact registry"
+            title="No artifacts yet"
+            actions={<Button onClick={() => setUploadDialogOpen(true)}>Upload artifact</Button>}
+          >
+            <p>This workspace has no artifacts returned by the API. Upload a file to create the first artifact.</p>
           </EmptyState>
         ) : null}
 
@@ -407,6 +416,15 @@ export function ArtifactsPage({ adapter = httpArtifactsAdapter }: ArtifactsPageP
           </>
         ) : null}
       </section>
+
+      {uploadDialogOpen ? (
+        <ArtifactUploadDialog
+          adapter={adapter}
+          onAuthExpired={() => expireSession(sessionId)}
+          onClose={() => setUploadDialogOpen(false)}
+          onCompleted={() => setReloadKey((value) => value + 1)}
+        />
+      ) : null}
     </div>
   );
 }

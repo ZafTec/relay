@@ -14,6 +14,7 @@ import {
   httpArtifactsAdapter,
   isArtifactId,
 } from "../../lib/api/artifacts";
+import { ArtifactUploadDialog } from "./ArtifactUploadDialog";
 import {
   ArtifactPlate,
   ShareStatusBadge,
@@ -24,17 +25,29 @@ import {
   formatVersionSource,
   shareDisplayStatus,
 } from "./artifact-display";
+import { createArtifactIdempotencyKey } from "./artifact-idempotency";
 import { CreateShareLinkDialog } from "./CreateShareLinkDialog";
 import "./artifacts.css";
 
 type DetailState = { readonly kind: "loading" } | GetArtifactAdapterResult;
-type ShareMutationBusy = "create" | "revoke" | null;
+type ShareMutationBusy = "create" | "revoke" | "upload" | null;
+
+interface FrozenRevokeRequest {
+  readonly artifactId: string;
+  readonly shareLinkId: string;
+  readonly idempotencyKey: string;
+}
 
 type RevokeState =
-  | { readonly shareLinkId: string; readonly kind: "confirming" }
-  | { readonly shareLinkId: string; readonly kind: "pending" }
-  | { readonly shareLinkId: string; readonly kind: "error"; readonly message: string }
-  | { readonly shareLinkId: string; readonly kind: "success"; readonly message: string };
+  | { readonly operation: FrozenRevokeRequest; readonly kind: "confirming" }
+  | { readonly operation: FrozenRevokeRequest; readonly kind: "pending" }
+  | {
+      readonly operation: FrozenRevokeRequest;
+      readonly kind: "error";
+      readonly message: string;
+      readonly exactRetry: boolean;
+    }
+  | { readonly operation: FrozenRevokeRequest; readonly kind: "success"; readonly message: string };
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
@@ -58,7 +71,18 @@ function DetailFacts({ artifact }: { artifact: ArtifactDetail }) {
       </div>
       <div>
         <dt>Source run</dt>
-        <dd>{artifact.sourceRunId === null ? "Not provided" : <code>{artifact.sourceRunId}</code>}</dd>
+        <dd>
+          {artifact.sourceRunId === null
+            ? "Not provided"
+            : (
+              <Link
+                className="artifact-source-link"
+                to={`/dashboard/runs/${encodeURIComponent(artifact.sourceRunId)}`}
+              >
+                <code>{artifact.sourceRunId}</code>
+              </Link>
+            )}
+        </dd>
       </div>
       <div>
         <dt>Current version</dt>
@@ -110,7 +134,18 @@ function VersionTable({ artifact }: { artifact: ArtifactDetail }) {
               <td>{formatBytes(version.sizeBytes)}</td>
               <td>
                 <span>{formatVersionSource(version.source)}</span>
-                <small>{version.sourceRunId === null ? "No source run" : version.sourceRunId}</small>
+                <small>
+                  {version.sourceRunId === null
+                    ? "No source run"
+                    : (
+                      <Link
+                        className="artifact-source-link"
+                        to={`/dashboard/runs/${encodeURIComponent(version.sourceRunId)}`}
+                      >
+                        {version.sourceRunId}
+                      </Link>
+                    )}
+                </small>
               </td>
               <td><VerificationBadge status={version.verificationStatus} /></td>
               <td><time dateTime={version.createdAt}>{formatTimestamp(version.createdAt)}</time></td>
@@ -176,10 +211,15 @@ function ShareTable({
 
   function beginConfirmation(shareLinkId: string, trigger: HTMLButtonElement) {
     if (mutationBusy !== null || revokeState !== null) return;
+    const operation = Object.freeze({
+      artifactId: artifact.id,
+      shareLinkId,
+      idempotencyKey: createArtifactIdempotencyKey("share-revoke"),
+    });
     revokeTriggerRef.current = trigger;
     revokeRowRef.current = trigger.closest("tr")?.querySelector("th") ?? null;
     onMutationBusyChange("revoke");
-    setRevokeState({ shareLinkId, kind: "confirming" });
+    setRevokeState({ operation, kind: "confirming" });
   }
 
   function dismissRevoke() {
@@ -195,13 +235,17 @@ function ShareTable({
     }, 0);
   }
 
-  async function revoke(share: ShareLinkResource) {
-    if (revokeState?.kind === "pending" || mutationBusy !== "revoke") return;
-    const artifactId = artifact.id;
+  async function revoke() {
+    if (revokeState === null || revokeState.kind === "pending" || mutationBusy !== "revoke") return;
+    const operation = revokeState.operation;
     const generation = ++revokeGenerationRef.current;
-    setRevokeState({ shareLinkId: share.id, kind: "pending" });
+    setRevokeState({ operation, kind: "pending" });
     try {
-      const result = await adapter.revokeShareLink(artifactId, share.id);
+      const result = await adapter.revokeShareLink(
+        operation.artifactId,
+        operation.shareLinkId,
+        operation.idempotencyKey,
+      );
       if (result.kind === "auth-expired") {
         if (activeRef.current && generation === revokeGenerationRef.current) {
           onMutationBusyChange(null);
@@ -212,37 +256,52 @@ function ShareTable({
       if (
         !activeRef.current
         || generation !== revokeGenerationRef.current
-        || artifactIdRef.current !== artifactId
+        || artifactIdRef.current !== operation.artifactId
       ) return;
       if (result.kind === "revoked" || result.kind === "already_revoked") {
-        onShareRevoked(artifactId, share.id);
+        onShareRevoked(operation.artifactId, operation.shareLinkId);
         onMutationBusyChange(null);
         setRevokeState({
-          shareLinkId: share.id,
+          operation,
           kind: "success",
           message: result.kind === "already_revoked"
             ? "Relay confirmed this share link was already revoked."
-            : "Share link revoked. Future Relay resolutions are blocked.",
+            : result.replayed
+              ? "Share link revoked. Relay replayed the stored result; no second revocation was created."
+              : "Share link revoked. Future Relay resolutions are blocked.",
+        });
+        return;
+      }
+      if (result.kind === "unknown_outcome") {
+        setRevokeState({
+          operation,
+          kind: "error",
+          message: result.message,
+          exactRetry: true,
         });
         return;
       }
       setRevokeState({
-        shareLinkId: share.id,
+        operation,
         kind: "error",
         message: result.kind === "not_found"
-          ? "Relay could not find this share link. No additional revoke request was sent."
-          : result.message,
+          ? "Relay could not find this share link."
+          : result.kind === "idempotency-conflict"
+            ? "The revocation idempotency key conflicts with a different request. This frozen request cannot be retried."
+            : result.message,
+        exactRetry: false,
       });
     } catch {
       if (
         !activeRef.current
         || generation !== revokeGenerationRef.current
-        || artifactIdRef.current !== artifactId
+        || artifactIdRef.current !== operation.artifactId
       ) return;
       setRevokeState({
-        shareLinkId: share.id,
+        operation,
         kind: "error",
-        message: "Relay could not revoke this share link. The operation was not repeated.",
+        message: "Relay could not confirm the revocation result. Retry only this exact frozen request with the same idempotency key.",
+        exactRetry: true,
       });
     }
   }
@@ -271,7 +330,7 @@ function ShareTable({
             </tr>
           ) : artifact.shares.map((share) => {
             const displayStatus = shareDisplayStatus(share);
-            const mutation = revokeState?.shareLinkId === share.id ? revokeState : null;
+            const mutation = revokeState?.operation.shareLinkId === share.id ? revokeState : null;
             return (
               <ShareRows
                 key={share.id}
@@ -282,7 +341,7 @@ function ShareTable({
                 anotherRevokeOpen={revokeState !== null && mutation === null}
                 onConfirm={(trigger) => beginConfirmation(share.id, trigger)}
                 onCancel={dismissRevoke}
-                onRevoke={() => void revoke(share)}
+                onRevoke={() => void revoke()}
                 setStatusElement={(element) => {
                   mutationStatusRef.current = element;
                 }}
@@ -389,12 +448,14 @@ function ShareRows({
                 <div>
                   <p>
                     {mutation.kind === "pending"
-                      ? "Revoking share link. Relay will send this request once."
+                      ? "Revoking share link with the frozen request and stable idempotency key."
                       : mutation.message}
                   </p>
                   {mutation.kind === "error" ? (
                     <div className="artifact-share-mutation-status__actions">
-                      <Button variant="outline" onClick={onRevoke}>Try revoke again</Button>
+                      {mutation.exactRetry ? (
+                        <Button variant="outline" onClick={onRevoke}>Retry exact request</Button>
+                      ) : null}
                       <Button variant="quiet" onClick={onCancel}>Dismiss</Button>
                     </div>
                   ) : mutation.kind === "success" ? (
@@ -429,6 +490,7 @@ export function ArtifactDetailPage({
   const [state, setState] = useState<DetailState>({ kind: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
   const [mutationBusy, setMutationBusy] = useState<ShareMutationBusy>(null);
   const activeRef = useRef(false);
@@ -449,6 +511,7 @@ export function ArtifactDetailPage({
     detailControllerRef.current?.abort();
     detailControllerRef.current = null;
     setShareDialogOpen(false);
+    setUploadDialogOpen(false);
     setMutationBusy(null);
     setRefreshMessage(null);
 
@@ -505,7 +568,7 @@ export function ArtifactDetailPage({
         setMutationBusy(null);
       } else {
         setRefreshMessage(mutationBusy === "create"
-          ? "Relay could not confirm the current share records. Do not retry creation. Inspect the share records again before creating or revoking a share."
+          ? "Relay could not confirm the current share records. Share mutations remain paused until an authoritative refresh succeeds."
           : result.message);
       }
     } catch (error) {
@@ -515,7 +578,7 @@ export function ArtifactDetailPage({
         || generation !== detailGenerationRef.current
       ) return;
       setRefreshMessage(mutationBusy === "create"
-        ? "Relay could not confirm the current share records. Do not retry creation. Inspect the share records again before creating or revoking a share."
+        ? "Relay could not confirm the current share records. Share mutations remain paused until an authoritative refresh succeeds."
         : "Relay could not refresh the share table.");
     } finally {
       if (detailControllerRef.current === controller) detailControllerRef.current = null;
@@ -546,6 +609,12 @@ export function ArtifactDetailPage({
     if (mutationBusy === null) setShareDialogOpen(true);
   }
 
+  function openUploadDialog() {
+    if (mutationBusy !== null) return;
+    setMutationBusy("upload");
+    setUploadDialogOpen(true);
+  }
+
   const artifact = state.kind === "found" && state.artifact.id === artifactId
     ? state.artifact
     : null;
@@ -564,13 +633,22 @@ export function ArtifactDetailPage({
           </div>
         </div>
         {artifact !== null ? (
-          <Button
-            disabled={artifact.versions.length === 0}
-            aria-disabled={artifact.versions.length > 0 && mutationBusy !== null ? true : undefined}
-            onClick={openShareDialog}
-          >
-            Create share link
-          </Button>
+          <div className="artifact-page-header__actions">
+            <Button
+              variant="outline"
+              aria-disabled={mutationBusy !== null ? true : undefined}
+              onClick={openUploadDialog}
+            >
+              Upload new version
+            </Button>
+            <Button
+              disabled={artifact.versions.length === 0}
+              aria-disabled={artifact.versions.length > 0 && mutationBusy !== null ? true : undefined}
+              onClick={openShareDialog}
+            >
+              Create share link
+            </Button>
+          </div>
         ) : null}
       </header>
 
@@ -598,7 +676,7 @@ export function ArtifactDetailPage({
 
         {refreshMessage ? (
           <InlineNotice
-            title="Share table refresh unavailable"
+            title="Artifact refresh unavailable"
             tone="warning"
             action={(
               <Button
@@ -685,10 +763,25 @@ export function ArtifactDetailPage({
         ) : null}
       </div>
 
+      {artifact !== null && uploadDialogOpen ? (
+        <ArtifactUploadDialog
+          adapter={adapter}
+          artifact={artifact}
+          onAuthExpired={() => expireSession(sessionId)}
+          onClose={() => {
+            setUploadDialogOpen(false);
+            setMutationBusy(null);
+          }}
+          onCompleted={() => {
+            void refreshDetailInPlace();
+          }}
+        />
+      ) : null}
+
       {artifact !== null && shareDialogOpen ? (
         <CreateShareLinkDialog
           artifact={artifact}
-          createShareLink={(request) => adapter.createShareLink(request)}
+          createShareLink={(request, idempotencyKey) => adapter.createShareLink(request, idempotencyKey)}
           onAuthExpired={() => expireSession(sessionId)}
           onMutationBusyChange={(busy) => setMutationBusy(busy ? "create" : null)}
           onClose={() => setShareDialogOpen(false)}

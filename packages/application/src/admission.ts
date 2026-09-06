@@ -57,24 +57,25 @@ export function requireMeteredAdmissionUsagePort(
     quote(
       client: Parameters<AdmissionUsagePort["quote"]>[0],
       request: AdmissionUsageRequest,
-    ): Promise<AdmissionUsageQuote> {
+    ): ReturnType<AdmissionUsagePort["quote"]> {
       return usage.quote(client, request);
     },
     async reserve(
       client: Parameters<AdmissionUsagePort["reserve"]>[0],
       request: AdmissionUsageRequest,
       quote: AdmissionUsageQuote,
-    ): Promise<string> {
-      const reservationId = await usage.reserve(client, request, quote);
-      if (
-        reservationId === null ||
-        !PUBLIC_ID_PATTERNS.usageReservation.test(reservationId)
-      ) {
-        throw new Error(
-          "AdmissionUsagePort must create a usage reservation; unmetered admission is disabled",
-        );
+    ): ReturnType<AdmissionUsagePort["reserve"]> {
+      const reservation = await usage.reserve(client, request, quote);
+      if (reservation !== null && typeof reservation !== "string") {
+        return reservation;
       }
-      return reservationId;
+      if (
+        reservation === null ||
+        !PUBLIC_ID_PATTERNS.usageReservation.test(reservation)
+      ) {
+        return { kind: "usage_unavailable", reason: "invalid_configuration" };
+      }
+      return reservation;
     },
   });
 }
@@ -180,6 +181,12 @@ export class RunAdmissionAdapter implements RunAdmissionApplicationService {
         return { kind: "tool_unavailable" };
       case "idempotency_conflict":
         return { kind: "idempotency_conflict" };
+      case "not_entitled":
+        return { kind: "not_entitled" };
+      case "allowance_exceeded":
+        return admitted;
+      case "usage_unavailable":
+        return admitted;
       case "queue_full":
         return { kind: "queue_full", scope: admitted.scope };
       case "admitted":
@@ -191,9 +198,7 @@ export class RunAdmissionAdapter implements RunAdmissionApplicationService {
         );
         if (current.kind === "not_found") return current;
         if (current.run.reservation === null) {
-          throw new Error(
-            "Admitted run has no usage reservation; unmetered admission is disabled",
-          );
+          return { kind: "usage_unavailable", reason: "invalid_configuration" };
         }
         return createRunResultSchema.parse({
           kind: "accepted",

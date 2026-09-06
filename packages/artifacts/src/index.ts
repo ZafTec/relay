@@ -16,6 +16,47 @@ export type {
   ArtifactQuotaReservationResult,
 } from "./quota.ts";
 export { ArtifactService } from "./service.ts";
+export {
+  ArtifactIdempotencyInvariantError,
+  canonicalJson,
+  fingerprintArtifactMutationRequest,
+  hashArtifactMutationIdempotencyKey,
+  PostgresArtifactMutationIdempotencyRepository,
+} from "./idempotency.ts";
+export type {
+  ArtifactMutationClaim,
+  ArtifactMutationOperation,
+  ArtifactMutationResultReference,
+  ClaimArtifactMutationInput,
+  ClaimArtifactMutationResult,
+  CompleteArtifactMutationResult,
+} from "./idempotency.ts";
+export {
+  ArtifactQuotaConflictError,
+  ArtifactQuotaInvariantError,
+  ArtifactQuotaLimitError,
+  artifactStorageByteString,
+  PostgresArtifactQuota,
+} from "./postgres-quota.ts";
+export type {
+  ArtifactStorageLimitDecision,
+  ArtifactStorageLimitProvider,
+  PostgresArtifactQuotaOptions,
+} from "./postgres-quota.ts";
+export {
+  createShareTokenCodec,
+  hashShareToken,
+  isShareToken,
+  SHARE_TOKEN_LENGTH,
+  ShareTokenCodec,
+} from "./share-tokens.ts";
+export type {
+  IssuedShareToken,
+  ShareTokenCodecOptions,
+  ShareTokenSigningKey,
+  ShareTokenValidationInput,
+  ShareTokenValidationResult,
+} from "./share-tokens.ts";
 export type {
   ArtifactPurgeLease,
   ArtifactServiceOptions,

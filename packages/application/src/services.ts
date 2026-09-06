@@ -90,18 +90,23 @@ export interface ArtifactCommandApplicationService {
   createUpload(
     context: WorkspaceActorContext,
     request: CreateArtifactUploadRequest,
+    idempotencyKey: string,
   ): Promise<CreateArtifactUploadResult>;
   completeUpload(
     context: WorkspaceActorContext,
     uploadId: string,
+    idempotencyKey: string,
   ): Promise<CompleteArtifactUploadResult>;
   createShareLink(
     context: WorkspaceActorContext,
     request: CreateShareLinkRequest,
+    idempotencyKey: string,
   ): Promise<CreateShareLinkResult>;
   revokeShareLink(
     context: WorkspaceActorContext,
+    artifactId: string,
     shareLinkId: string,
+    idempotencyKey: string,
   ): Promise<RevokeShareLinkResult>;
   resolveShareLink(
     token: string,

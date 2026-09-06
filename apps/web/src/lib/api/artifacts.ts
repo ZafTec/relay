@@ -1,4 +1,4 @@
-import { ApiError, fetchJson } from "./client";
+import { ApiError, fetchJson, fetchJsonResponse } from "./client";
 
 export const ARTIFACT_VERSION_SOURCES = ["upload", "generated", "restore"] as const;
 export const ARTIFACT_VERIFICATION_STATUSES = [
@@ -7,10 +7,17 @@ export const ARTIFACT_VERIFICATION_STATUSES = [
   "cryptographically_verified",
   "failed",
 ] as const;
+export const ARTIFACT_UPLOAD_STATUSES = [
+  "pending",
+  "completed",
+  "failed",
+  "expired",
+] as const;
 export const SHARE_LINK_STATUSES = ["active", "expired", "exhausted", "revoked"] as const;
 
 export type ArtifactVersionSource = typeof ARTIFACT_VERSION_SOURCES[number];
 export type ArtifactVerificationStatus = typeof ARTIFACT_VERIFICATION_STATUSES[number];
+export type ArtifactUploadStatus = typeof ARTIFACT_UPLOAD_STATUSES[number];
 export type ShareLinkStatus = typeof SHARE_LINK_STATUSES[number];
 export type JsonPrimitive = boolean | number | string | null;
 export type JsonValue = JsonPrimitive | JsonObject | readonly JsonValue[];
@@ -74,6 +81,75 @@ export interface ListArtifactsRequest {
   readonly search?: string;
 }
 
+export type UploadTarget =
+  | {
+      readonly kind: "new_artifact";
+      readonly name: string;
+      readonly mediaKind: string;
+      readonly retentionPolicyId?: string | null;
+    }
+  | {
+      readonly kind: "new_version";
+      readonly artifactId: string;
+    };
+
+export interface CreateArtifactUploadRequest {
+  readonly target: UploadTarget;
+  readonly sizeBytes: number;
+  readonly mimeType: string;
+  readonly sha256: string;
+  readonly contentMd5: string;
+  readonly width?: number | null;
+  readonly height?: number | null;
+  readonly durationMs?: number | null;
+  readonly metadata?: JsonObject;
+  readonly sourceRunId?: string | null;
+}
+
+export interface UploadAuthorizationResource {
+  readonly method: "PUT";
+  readonly url: string;
+  readonly expiresAt: string;
+  readonly requiredHeaders: Readonly<Record<string, string>>;
+}
+
+export interface ArtifactUploadResource {
+  readonly id: string;
+  readonly artifactId: string;
+  readonly artifactVersionId: string;
+  readonly sequence: number;
+  readonly status: ArtifactUploadStatus;
+  readonly authorization: UploadAuthorizationResource | null;
+}
+
+export type CreateArtifactUploadResponse =
+  | {
+      readonly kind: "created";
+      readonly upload: ArtifactUploadResource;
+      readonly replayed: boolean;
+    }
+  | { readonly kind: "not_found" }
+  | { readonly kind: "quota_exceeded" }
+  | { readonly kind: "idempotency_conflict" };
+
+export type CompleteArtifactUploadResponse =
+  | {
+      readonly kind: "completed";
+      readonly artifactId: string;
+      readonly artifactVersionId: string;
+      readonly becameCurrent: boolean;
+      readonly replayed: boolean;
+    }
+  | { readonly kind: "pending"; readonly replayed: false }
+  | { readonly kind: "expired"; readonly replayed: boolean }
+  | {
+      readonly kind: "verification_failed";
+      readonly reason: string;
+      readonly replayed: boolean;
+    }
+  | { readonly kind: "not_found" }
+  | { readonly kind: "idempotency_conflict" };
+
 export interface CreateShareLinkRequest {
   readonly artifactId: string;
   readonly followCurrent: boolean;
@@ -83,6 +159,69 @@ export interface CreateShareLinkRequest {
   readonly requireAuth?: boolean;
   readonly contentDisposition: "attachment" | "inline";
 }
+
+export type CreateShareLinkResponse =
+  | {
+      readonly kind: "created";
+      readonly shareLinkId: string;
+      readonly token: string;
+      readonly publicPath: string;
+      readonly replayed: boolean;
+    }
+  | { readonly kind: "not_found" }
+  | { readonly kind: "conflict" }
+  | { readonly kind: "idempotency_conflict" };
+
+export type RevokeShareLinkResponse =
+  | { readonly kind: "revoked"; readonly replayed: boolean }
+  | { readonly kind: "already_revoked" }
+  | { readonly kind: "not_found" }
+  | { readonly kind: "idempotency_conflict" };
+
+export interface ArtifactUnknownOutcomeResult {
+  readonly kind: "unknown_outcome";
+  readonly message: string;
+  readonly retryable: true;
+  readonly retryMode: "exact-request";
+  readonly retryAfterSeconds: number | null;
+}
+
+export interface ArtifactMutationDegradedResult {
+  readonly kind: "degraded";
+  readonly message: string;
+  readonly retryable?: boolean;
+  readonly retryAfterSeconds?: number | null;
+}
+
+export interface ArtifactIdempotencyConflictResult {
+  readonly kind: "idempotency-conflict";
+  readonly message: string;
+}
+
+export type CreateArtifactUploadAdapterResult =
+  | Extract<CreateArtifactUploadResponse, { readonly kind: "created" }>
+  | { readonly kind: "not_found" }
+  | { readonly kind: "quota-exceeded" }
+  | { readonly kind: "auth-expired" }
+  | ArtifactIdempotencyConflictResult
+  | ArtifactMutationDegradedResult
+  | ArtifactUnknownOutcomeResult;
+
+export type CompleteArtifactUploadAdapterResult =
+  | Extract<CompleteArtifactUploadResponse, { readonly kind: "completed" | "pending" }>
+  | { readonly kind: "not_found" }
+  | { readonly kind: "verification-failed"; readonly reason: string }
+  | { readonly kind: "auth-expired" }
+  | ArtifactIdempotencyConflictResult
+  | ArtifactMutationDegradedResult
+  | ArtifactUnknownOutcomeResult;
+
+export type PutArtifactUploadResult =
+  | { readonly kind: "uploaded"; readonly status: number }
+  | { readonly kind: "authorization-expired" }
+  | { readonly kind: "rejected"; readonly status: number }
+  | ArtifactMutationDegradedResult
+  | ArtifactUnknownOutcomeResult;
 
 export type ListArtifactsAdapterResult =
   | {
@@ -106,19 +245,23 @@ export type CreateShareLinkAdapterResult =
       readonly shareLinkId: string;
       readonly token: string;
       readonly publicPath: string;
+      readonly replayed: boolean;
     }
   | { readonly kind: "not_found" }
   | { readonly kind: "conflict" }
   | { readonly kind: "auth-expired" }
-  | { readonly kind: "degraded"; readonly message: string }
-  | { readonly kind: "unknown_outcome"; readonly message: string };
+  | ArtifactIdempotencyConflictResult
+  | ArtifactMutationDegradedResult
+  | ArtifactUnknownOutcomeResult;
 
 export type RevokeShareLinkAdapterResult =
-  | { readonly kind: "revoked" }
+  | { readonly kind: "revoked"; readonly replayed: boolean }
   | { readonly kind: "already_revoked" }
   | { readonly kind: "not_found" }
   | { readonly kind: "auth-expired" }
-  | { readonly kind: "degraded"; readonly message: string };
+  | ArtifactIdempotencyConflictResult
+  | ArtifactMutationDegradedResult
+  | ArtifactUnknownOutcomeResult;
 
 export interface ArtifactsAdapter {
   list(
@@ -126,10 +269,31 @@ export interface ArtifactsAdapter {
     signal?: AbortSignal,
   ): Promise<ListArtifactsAdapterResult>;
   get(artifactId: string, signal?: AbortSignal): Promise<GetArtifactAdapterResult>;
-  createShareLink(request: CreateShareLinkRequest): Promise<CreateShareLinkAdapterResult>;
+  createUpload(
+    request: CreateArtifactUploadRequest,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<CreateArtifactUploadAdapterResult>;
+  putUpload(
+    authorization: UploadAuthorizationResource,
+    file: Blob,
+    signal?: AbortSignal,
+  ): Promise<PutArtifactUploadResult>;
+  completeUpload(
+    uploadId: string,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<CompleteArtifactUploadAdapterResult>;
+  createShareLink(
+    request: CreateShareLinkRequest,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<CreateShareLinkAdapterResult>;
   revokeShareLink(
     artifactId: string,
     shareLinkId: string,
+    idempotencyKey: string,
+    signal?: AbortSignal,
   ): Promise<RevokeShareLinkAdapterResult>;
 }
 
@@ -142,17 +306,21 @@ export class InvalidArtifactResponseError extends TypeError {
 
 const ARTIFACT_ID_PATTERN = /^art_[0-9a-f]{32}$/;
 const ARTIFACT_VERSION_ID_PATTERN = /^aver_[0-9a-f]{32}$/;
+const ARTIFACT_UPLOAD_ID_PATTERN = /^upl_[0-9a-f]{32}$/;
 const RUN_ID_PATTERN = /^run_[0-9a-f]{32}$/;
 const SHARE_LINK_ID_PATTERN = /^share_[0-9a-f]{32}$/;
 const CURSOR_PATTERN = /^[A-Za-z0-9_-]+$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const CONTENT_MD5_PATTERN = /^[A-Za-z0-9+/]{22}==$/;
+const SAFE_CODE_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,127}$/;
 const MEDIA_KIND_PATTERN = /^[a-z][a-z0-9._-]{0,63}$/;
 const MIME_TYPE_PATTERN =
   /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+(?:\s*;\s*[a-z0-9!#$&^_.+-]+=(?:[a-z0-9!#$&^_.+-]+|"[^"\r\n]*"))*$/;
 const SHARE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const ISO_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const RAW_URL_PATTERN = /\b[a-z][a-z0-9+.-]*:\/\//i;
+const HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+const IDEMPOTENCY_KEY_MAX_LENGTH = 255;
 const MAX_JSON_DEPTH = 16;
 const MAX_JSON_NODES = 4_096;
 const MAX_METADATA_BYTES = 64 * 1_024;
@@ -365,6 +533,206 @@ function jsonObject(value: unknown, path: string): JsonObject {
   return parsed as JsonObject;
 }
 
+function safeUrl(value: unknown, path: string): string {
+  const parsed = stringValue(value, path, { minLength: 1, maxLength: 4_096 });
+  let url: URL;
+  try {
+    url = new URL(parsed);
+  } catch {
+    return invalid(path, "must be an absolute HTTP(S) URL");
+  }
+  if (
+    (url.protocol !== "https:" && url.protocol !== "http:")
+    || url.username !== ""
+    || url.password !== ""
+    || url.hash !== ""
+  ) {
+    return invalid(path, "must be an absolute HTTP(S) URL without credentials or a fragment");
+  }
+  return parsed;
+}
+
+function headerRecord(value: unknown, path: string): Readonly<Record<string, string>> {
+  const keys = value !== null && typeof value === "object" && !Array.isArray(value)
+    ? Object.keys(value)
+    : [];
+  const object = strictObject(value, path, keys);
+  if (keys.length > 128) invalid(path, "contains too many headers");
+
+  const result: Record<string, string> = Object.create(null) as Record<string, string>;
+  const normalizedNames = new Set<string>();
+  for (const key of keys) {
+    if (key.length > 256 || !HEADER_NAME_PATTERN.test(key)) {
+      invalid(path, "contains an invalid header name");
+    }
+    const normalized = key.toLowerCase();
+    if (normalizedNames.has(normalized)) {
+      invalid(path, "contains duplicate case-insensitive header names");
+    }
+    normalizedNames.add(normalized);
+    const headerValue = stringValue(object[key], `${path}.${key}`, { maxLength: 4_096 });
+    if (/[\r\n\0]/.test(headerValue)) {
+      invalid(`${path}.${key}`, "contains an invalid header value");
+    }
+    result[key] = headerValue;
+  }
+  return result;
+}
+
+function uploadAuthorization(value: unknown, path: string): UploadAuthorizationResource {
+  const object = strictObject(value, path, ["method", "url", "expiresAt", "requiredHeaders"]);
+  return {
+    method: enumValue(required(object, "method", path), `${path}.method`, ["PUT"] as const),
+    url: safeUrl(required(object, "url", path), `${path}.url`),
+    expiresAt: isoTimestamp(required(object, "expiresAt", path), `${path}.expiresAt`),
+    requiredHeaders: headerRecord(
+      required(object, "requiredHeaders", path),
+      `${path}.requiredHeaders`,
+    ),
+  };
+}
+
+function artifactUpload(value: unknown, path: string): ArtifactUploadResource {
+  const object = strictObject(value, path, [
+    "id",
+    "artifactId",
+    "artifactVersionId",
+    "sequence",
+    "status",
+    "authorization",
+  ]);
+  const status = enumValue(
+    required(object, "status", path),
+    `${path}.status`,
+    ARTIFACT_UPLOAD_STATUSES,
+  );
+  const authorization = nullable(
+    required(object, "authorization", path),
+    `${path}.authorization`,
+    uploadAuthorization,
+  );
+  if ((status === "pending") !== (authorization !== null)) {
+    invalid(
+      `${path}.authorization`,
+      "must be present only while an upload is pending",
+    );
+  }
+  return {
+    id: identifier(required(object, "id", path), `${path}.id`, ARTIFACT_UPLOAD_ID_PATTERN),
+    artifactId: identifier(
+      required(object, "artifactId", path),
+      `${path}.artifactId`,
+      ARTIFACT_ID_PATTERN,
+    ),
+    artifactVersionId: identifier(
+      required(object, "artifactVersionId", path),
+      `${path}.artifactVersionId`,
+      ARTIFACT_VERSION_ID_PATTERN,
+    ),
+    sequence: integerValue(required(object, "sequence", path), `${path}.sequence`, {
+      minimum: 1,
+    }),
+    status,
+    authorization,
+  };
+}
+
+function uploadTarget(value: unknown, path: string): UploadTarget {
+  const candidate = strictObject(value, path, [
+    "kind",
+    "name",
+    "mediaKind",
+    "retentionPolicyId",
+    "artifactId",
+  ]);
+  const kind = enumValue(
+    required(candidate, "kind", path),
+    `${path}.kind`,
+    ["new_artifact", "new_version"] as const,
+  );
+  if (kind === "new_version") {
+    const object = strictObject(value, path, ["kind", "artifactId"]);
+    return {
+      kind,
+      artifactId: identifier(
+        required(object, "artifactId", path),
+        `${path}.artifactId`,
+        ARTIFACT_ID_PATTERN,
+      ),
+    };
+  }
+
+  const object = strictObject(value, path, ["kind", "name", "mediaKind", "retentionPolicyId"]);
+  const retentionPolicyId = optionalNullable(
+    object,
+    "retentionPolicyId",
+    path,
+    (item, itemPath) => stringValue(item, itemPath, { minLength: 1, maxLength: 255 }),
+  );
+  return {
+    kind,
+    name: stringValue(required(object, "name", path), `${path}.name`, {
+      minLength: 1,
+      maxLength: 255,
+      trim: true,
+    }),
+    mediaKind: stringValue(required(object, "mediaKind", path), `${path}.mediaKind`, {
+      pattern: MEDIA_KIND_PATTERN,
+    }),
+    ...(retentionPolicyId === undefined ? {} : { retentionPolicyId }),
+  };
+}
+
+export function parseCreateArtifactUploadRequest(
+  value: unknown,
+): CreateArtifactUploadRequest {
+  const path = "$request";
+  const object = strictObject(value, path, [
+    "target",
+    "sizeBytes",
+    "mimeType",
+    "sha256",
+    "contentMd5",
+    "width",
+    "height",
+    "durationMs",
+    "metadata",
+    "sourceRunId",
+  ]);
+  const positiveNullable = (key: "width" | "height" | "durationMs") =>
+    optionalNullable(object, key, path, (item, itemPath) =>
+      integerValue(item, itemPath, { minimum: 1 }));
+  const width = positiveNullable("width");
+  const height = positiveNullable("height");
+  const durationMs = positiveNullable("durationMs");
+  const metadata = optional(object, "metadata", path, jsonObject);
+  const sourceRunId = optionalNullable(object, "sourceRunId", path, (item, itemPath) =>
+    identifier(item, itemPath, RUN_ID_PATTERN));
+
+  return {
+    target: uploadTarget(required(object, "target", path), `${path}.target`),
+    sizeBytes: integerValue(required(object, "sizeBytes", path), `${path}.sizeBytes`, {
+      minimum: 0,
+    }),
+    mimeType: stringValue(required(object, "mimeType", path), `${path}.mimeType`, {
+      minLength: 1,
+      maxLength: 255,
+      pattern: MIME_TYPE_PATTERN,
+    }),
+    sha256: stringValue(required(object, "sha256", path), `${path}.sha256`, {
+      pattern: SHA256_PATTERN,
+    }),
+    contentMd5: stringValue(required(object, "contentMd5", path), `${path}.contentMd5`, {
+      pattern: CONTENT_MD5_PATTERN,
+    }),
+    ...(width === undefined ? {} : { width }),
+    ...(height === undefined ? {} : { height }),
+    ...(durationMs === undefined ? {} : { durationMs }),
+    ...(metadata === undefined ? {} : { metadata }),
+    ...(sourceRunId === undefined ? {} : { sourceRunId }),
+  };
+}
+
 function arrayValue<T>(
   value: unknown,
   path: string,
@@ -554,6 +922,106 @@ function artifactDetail(value: unknown, path: string): ArtifactDetail {
   };
 }
 
+export function parseCreateArtifactUploadResponse(
+  value: unknown,
+): CreateArtifactUploadResponse {
+  const path = "$input";
+  const object = strictObject(value, path, ["kind", "upload", "replayed"]);
+  const kind = enumValue(
+    required(object, "kind", path),
+    `${path}.kind`,
+    ["created", "not_found", "quota_exceeded", "idempotency_conflict"] as const,
+  );
+  if (kind !== "created") {
+    strictObject(value, path, ["kind"]);
+    return { kind };
+  }
+  return {
+    kind,
+    upload: artifactUpload(required(object, "upload", path), `${path}.upload`),
+    replayed: booleanValue(required(object, "replayed", path), `${path}.replayed`),
+  };
+}
+
+export function parseCompleteArtifactUploadResponse(
+  value: unknown,
+): CompleteArtifactUploadResponse {
+  const path = "$input";
+  const object = strictObject(value, path, [
+    "kind",
+    "artifactId",
+    "artifactVersionId",
+    "becameCurrent",
+    "reason",
+    "replayed",
+  ]);
+  const kind = enumValue(
+    required(object, "kind", path),
+    `${path}.kind`,
+    [
+      "completed",
+      "pending",
+      "expired",
+      "verification_failed",
+      "not_found",
+      "idempotency_conflict",
+    ] as const,
+  );
+  if (kind === "completed") {
+    strictObject(value, path, [
+      "kind",
+      "artifactId",
+      "artifactVersionId",
+      "becameCurrent",
+      "replayed",
+    ]);
+    return {
+      kind,
+      artifactId: identifier(
+        required(object, "artifactId", path),
+        `${path}.artifactId`,
+        ARTIFACT_ID_PATTERN,
+      ),
+      artifactVersionId: identifier(
+        required(object, "artifactVersionId", path),
+        `${path}.artifactVersionId`,
+        ARTIFACT_VERSION_ID_PATTERN,
+      ),
+      becameCurrent: booleanValue(
+        required(object, "becameCurrent", path),
+        `${path}.becameCurrent`,
+      ),
+      replayed: booleanValue(required(object, "replayed", path), `${path}.replayed`),
+    };
+  }
+  if (kind === "pending") {
+    strictObject(value, path, ["kind", "replayed"]);
+    if (booleanValue(required(object, "replayed", path), `${path}.replayed`)) {
+      invalid(`${path}.replayed`, "must be false while upload completion is pending");
+    }
+    return { kind, replayed: false };
+  }
+  if (kind === "expired") {
+    strictObject(value, path, ["kind", "replayed"]);
+    return {
+      kind,
+      replayed: booleanValue(required(object, "replayed", path), `${path}.replayed`),
+    };
+  }
+  if (kind === "verification_failed") {
+    strictObject(value, path, ["kind", "reason", "replayed"]);
+    return {
+      kind,
+      reason: stringValue(required(object, "reason", path), `${path}.reason`, {
+        pattern: SAFE_CODE_PATTERN,
+      }),
+      replayed: booleanValue(required(object, "replayed", path), `${path}.replayed`),
+    };
+  }
+  strictObject(value, path, ["kind"]);
+  return { kind };
+}
+
 export function parseListArtifactsResponse(value: unknown): Extract<ListArtifactsAdapterResult, { kind: "ok" | "not_found" }> {
   const path = "$input";
   const object = strictObject(value, path, ["kind", "items", "nextCursor"]);
@@ -587,13 +1055,19 @@ export function parseGetArtifactResponse(value: unknown): Extract<GetArtifactAda
 
 export function parseCreateShareLinkResponse(
   value: unknown,
-): Extract<CreateShareLinkAdapterResult, { kind: "created" | "not_found" | "conflict" }> {
+): CreateShareLinkResponse {
   const path = "$input";
-  const object = strictObject(value, path, ["kind", "shareLinkId", "token", "publicPath"]);
+  const object = strictObject(value, path, [
+    "kind",
+    "shareLinkId",
+    "token",
+    "publicPath",
+    "replayed",
+  ]);
   const kind = enumValue(
     required(object, "kind", path),
     `${path}.kind`,
-    ["created", "not_found", "conflict"] as const,
+    ["created", "not_found", "conflict", "idempotency_conflict"] as const,
   );
   if (kind !== "created") {
     strictObject(value, path, ["kind"]);
@@ -619,20 +1093,27 @@ export function parseCreateShareLinkResponse(
     ),
     token,
     publicPath,
+    replayed: booleanValue(required(object, "replayed", path), `${path}.replayed`),
   };
 }
 
 export function parseRevokeShareLinkResponse(
   value: unknown,
-): Extract<RevokeShareLinkAdapterResult, { kind: "revoked" | "already_revoked" | "not_found" }> {
+): RevokeShareLinkResponse {
   const path = "$input";
-  const object = strictObject(value, path, ["kind"]);
+  const object = strictObject(value, path, ["kind", "replayed"]);
+  const kind = enumValue(
+    required(object, "kind", path),
+    `${path}.kind`,
+    ["revoked", "already_revoked", "not_found", "idempotency_conflict"] as const,
+  );
+  if (kind !== "revoked") {
+    strictObject(value, path, ["kind"]);
+    return { kind };
+  }
   return {
-    kind: enumValue(
-      required(object, "kind", path),
-      `${path}.kind`,
-      ["revoked", "already_revoked", "not_found"] as const,
-    ),
+    kind,
+    replayed: booleanValue(required(object, "replayed", path), `${path}.replayed`),
   };
 }
 
@@ -720,7 +1201,51 @@ function parseCreateShareRequest(value: CreateShareLinkRequest): CreateShareLink
 }
 
 function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
+  return (
+    (typeof DOMException !== "undefined" && error instanceof DOMException && error.name === "AbortError")
+    || (typeof error === "object" && error !== null && "name" in error && error.name === "AbortError")
+  );
+}
+
+function idempotencyKeyValue(value: unknown): string {
+  if (
+    typeof value !== "string"
+    || value.length < 1
+    || value.length > IDEMPOTENCY_KEY_MAX_LENGTH
+    || value.trim() !== value
+    || /[\r\n\0]/.test(value)
+  ) {
+    return invalid("$request.idempotencyKey", "has an invalid format");
+  }
+  return value;
+}
+
+function artifactMutationDegraded(
+  message: string,
+  retryable = false,
+  retryAfterSeconds: number | null = null,
+): ArtifactMutationDegradedResult {
+  return { kind: "degraded", message, retryable, retryAfterSeconds };
+}
+
+function artifactUnknownOutcome(
+  operation: "create upload" | "complete upload" | "upload bytes" | "create share" | "revoke share",
+  retryAfterSeconds: number | null = null,
+): ArtifactUnknownOutcomeResult {
+  return {
+    kind: "unknown_outcome",
+    message: `Relay could not confirm the ${operation} result. Retry only the exact request with the same authorization or idempotency key.`,
+    retryable: true,
+    retryMode: "exact-request",
+    retryAfterSeconds,
+  };
+}
+
+function idempotencyConflictResult(): ArtifactIdempotencyConflictResult {
+  return {
+    kind: "idempotency-conflict",
+    message: "This idempotency key was already used for a different request.",
+  };
 }
 
 function listPath(request: ListArtifactsRequest): string {
@@ -739,6 +1264,223 @@ function listPath(request: ListArtifactsRequest): string {
 function artifactPath(artifactId: string): string {
   const parsed = identifier(artifactId, "$request.artifactId", ARTIFACT_ID_PATTERN);
   return `/api/v1/artifacts/${encodeURIComponent(parsed)}`;
+}
+
+function uploadCompletePath(uploadId: string): string {
+  const parsed = identifier(uploadId, "$request.uploadId", ARTIFACT_UPLOAD_ID_PATTERN);
+  return `/api/v1/artifacts/uploads/${encodeURIComponent(parsed)}/complete`;
+}
+
+const FORBIDDEN_BROWSER_HEADERS = new Set([
+  "accept-charset",
+  "accept-encoding",
+  "access-control-request-headers",
+  "access-control-request-method",
+  "connection",
+  "cookie",
+  "cookie2",
+  "date",
+  "dnt",
+  "expect",
+  "host",
+  "keep-alive",
+  "origin",
+  "permissions-policy",
+  "referer",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "via",
+]);
+
+function isForbiddenBrowserHeader(name: string): boolean {
+  return FORBIDDEN_BROWSER_HEADERS.has(name)
+    || name.startsWith("proxy-")
+    || name.startsWith("sec-");
+}
+
+function browserUploadHeaders(
+  requiredHeaders: Readonly<Record<string, string>>,
+  sizeBytes: number,
+): Headers {
+  let signedContentLength: string | null = null;
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(requiredHeaders)) {
+    const normalized = name.toLowerCase();
+    if (normalized === "content-length") {
+      signedContentLength = value;
+      continue;
+    }
+    if (isForbiddenBrowserHeader(normalized)) {
+      invalid("$authorization.requiredHeaders", "contains a browser-forbidden header");
+    }
+    headers.set(name, value);
+    if (headers.get(name) !== value) {
+      invalid(
+        `$authorization.requiredHeaders.${name}`,
+        "cannot be represented exactly by browser Fetch",
+      );
+    }
+  }
+  if (signedContentLength !== String(sizeBytes)) {
+    invalid(
+      "$authorization.requiredHeaders.content-length",
+      "must exactly match the Blob size",
+    );
+  }
+  if (headers.has("content-length")) {
+    invalid(
+      "$authorization.requiredHeaders.content-length",
+      "must be left to browser Fetch",
+    );
+  }
+  return headers;
+}
+
+export async function putArtifactUpload(
+  authorizationValue: UploadAuthorizationResource,
+  file: Blob,
+  signal?: AbortSignal,
+): Promise<PutArtifactUploadResult> {
+  let authorization: UploadAuthorizationResource;
+  let headers: Headers;
+  try {
+    authorization = uploadAuthorization(authorizationValue, "$authorization");
+    if (!(file instanceof Blob)) {
+      return artifactMutationDegraded("The upload body must be a Blob or File.");
+    }
+    if (Date.parse(authorization.expiresAt) <= Date.now()) {
+      return { kind: "authorization-expired" };
+    }
+    headers = browserUploadHeaders(authorization.requiredHeaders, file.size);
+  } catch {
+    return artifactMutationDegraded(
+      "Relay returned an unusable upload authorization. No file bytes were sent.",
+    );
+  }
+
+  try {
+    const response = await fetch(authorization.url, {
+      method: "PUT",
+      body: file,
+      headers,
+      signal,
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "error",
+      referrerPolicy: "no-referrer",
+    });
+    if (response.ok) return { kind: "uploaded", status: response.status };
+    if (response.status >= 500 || [408, 425, 429].includes(response.status)) {
+      return artifactUnknownOutcome("upload bytes");
+    }
+    return { kind: "rejected", status: response.status };
+  } catch {
+    return artifactUnknownOutcome("upload bytes");
+  }
+}
+
+function strictErrorReason(error: ApiError, expected: string): boolean {
+  if (error.details === null) return false;
+  try {
+    const path = "$error.details";
+    const object = strictObject(error.details, path, ["reason"]);
+    return required(object, "reason", path) === expected;
+  } catch {
+    return false;
+  }
+}
+
+function verificationFailureReason(error: ApiError): string | null {
+  if (
+    error.status !== 422
+    || error.code !== "upload_verification_failed"
+    || error.details === null
+  ) {
+    return null;
+  }
+  try {
+    const path = "$error.details";
+    const object = strictObject(error.details, path, ["reason"]);
+    return stringValue(required(object, "reason", path), `${path}.reason`, {
+      pattern: SAFE_CODE_PATTERN,
+    });
+  } catch {
+    return null;
+  }
+}
+
+function createUploadHttpFailure(error: ApiError): CreateArtifactUploadAdapterResult {
+  if (error.status === 401) return { kind: "auth-expired" };
+  if (error.status === 404 && error.code === "not_found") return { kind: "not_found" };
+  if (error.status === 403 && error.code === "upload_quota_exceeded") {
+    return { kind: "quota-exceeded" };
+  }
+  if (error.status === 409 && error.code === "idempotency_conflict") {
+    return idempotencyConflictResult();
+  }
+  if (error.status >= 500) {
+    return artifactUnknownOutcome("create upload", error.retryAfterSeconds);
+  }
+  return artifactMutationDegraded(
+    "Relay rejected the upload request. No automatic retry was attempted.",
+    error.retryable === true,
+    error.retryAfterSeconds,
+  );
+}
+
+function completeUploadHttpFailure(error: ApiError): CompleteArtifactUploadAdapterResult {
+  if (error.status === 401) return { kind: "auth-expired" };
+  if (error.status === 404 && error.code === "not_found") return { kind: "not_found" };
+  if (error.status === 409 && error.code === "idempotency_conflict") {
+    return idempotencyConflictResult();
+  }
+  const reason = verificationFailureReason(error);
+  if (reason !== null) return { kind: "verification-failed", reason };
+  if (error.status >= 500) {
+    return artifactUnknownOutcome("complete upload", error.retryAfterSeconds);
+  }
+  return artifactMutationDegraded(
+    "Relay rejected upload completion. No automatic retry was attempted.",
+    error.retryable === true,
+    error.retryAfterSeconds,
+  );
+}
+
+function shareHttpFailure(
+  error: ApiError,
+  operation: "create share",
+): CreateShareLinkAdapterResult;
+function shareHttpFailure(
+  error: ApiError,
+  operation: "revoke share",
+): RevokeShareLinkAdapterResult;
+function shareHttpFailure(
+  error: ApiError,
+  operation: "create share" | "revoke share",
+): CreateShareLinkAdapterResult | RevokeShareLinkAdapterResult {
+  if (error.status === 401) return { kind: "auth-expired" };
+  if (error.status === 404 && error.code === "not_found") return { kind: "not_found" };
+  if (error.status === 409 && error.code === "idempotency_conflict") {
+    return idempotencyConflictResult();
+  }
+  if (
+    operation === "create share"
+    && error.status === 409
+    && error.code === "invalid_request"
+    && strictErrorReason(error, "share_policy_conflict")
+  ) {
+    return { kind: "conflict" };
+  }
+  if (error.status >= 500) {
+    return artifactUnknownOutcome(operation, error.retryAfterSeconds);
+  }
+  return artifactMutationDegraded(
+    "Relay rejected the share mutation. No automatic retry was attempted.",
+    error.retryable === true,
+    error.retryAfterSeconds,
+  );
 }
 
 export const httpArtifactsAdapter: ArtifactsAdapter = {
@@ -794,58 +1536,172 @@ export const httpArtifactsAdapter: ArtifactsAdapter = {
     }
   },
 
-  async createShareLink(request) {
+  async createUpload(request, idempotencyKey, signal) {
+    let parsedRequest: CreateArtifactUploadRequest;
+    let parsedKey: string;
+    try {
+      parsedRequest = parseCreateArtifactUploadRequest(request);
+      parsedKey = idempotencyKeyValue(idempotencyKey);
+    } catch {
+      return artifactMutationDegraded(
+        "Relay could not prepare the upload request. Review the metadata and reuse a stable idempotency key.",
+      );
+    }
+
+    try {
+      const response = await fetchJsonResponse<unknown>("/api/v1/artifacts/uploads", {
+        method: "POST",
+        cache: "no-store",
+        signal,
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": parsedKey,
+        },
+        body: JSON.stringify(parsedRequest),
+      });
+      const parsed = parseCreateArtifactUploadResponse(response.data);
+      if (response.status !== 201 || parsed.kind !== "created") {
+        throw new InvalidArtifactResponseError(
+          "$response",
+          "must be a created HTTP 201 result",
+        );
+      }
+      return parsed;
+    } catch (error) {
+      if (error instanceof ApiError) return createUploadHttpFailure(error);
+      return artifactUnknownOutcome("create upload");
+    }
+  },
+
+  putUpload(authorization, file, signal) {
+    return putArtifactUpload(authorization, file, signal);
+  },
+
+  async completeUpload(uploadId, idempotencyKey, signal) {
+    let path: string;
+    let parsedKey: string;
+    try {
+      path = uploadCompletePath(uploadId);
+      parsedKey = idempotencyKeyValue(idempotencyKey);
+    } catch {
+      return artifactMutationDegraded(
+        "Relay could not prepare upload completion. Review the upload ID and reuse a stable idempotency key.",
+      );
+    }
+
+    try {
+      const response = await fetchJsonResponse<unknown>(path, {
+        method: "POST",
+        cache: "no-store",
+        signal,
+        headers: { "Idempotency-Key": parsedKey },
+      });
+      const parsed = parseCompleteArtifactUploadResponse(response.data);
+      if (
+        (parsed.kind === "completed" && response.status === 200)
+        || (parsed.kind === "pending" && response.status === 202)
+      ) {
+        return parsed;
+      }
+      throw new InvalidArtifactResponseError(
+        "$response",
+        "status does not match the upload completion result",
+      );
+    } catch (error) {
+      if (error instanceof ApiError) return completeUploadHttpFailure(error);
+      return artifactUnknownOutcome("complete upload");
+    }
+  },
+
+  async createShareLink(
+    request: CreateShareLinkRequest,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<CreateShareLinkAdapterResult> {
     let parsed: CreateShareLinkRequest;
+    let parsedKey: string;
     try {
       parsed = parseCreateShareRequest(request);
+      parsedKey = idempotencyKeyValue(idempotencyKey);
     } catch {
-      return {
-        kind: "degraded",
-        message: "The share policy could not be prepared. Review the fields and try again.",
-      };
+      return artifactMutationDegraded(
+        "The share policy could not be prepared. Review the fields and reuse a stable idempotency key.",
+      );
     }
 
     try {
       const { artifactId, ...body } = parsed;
-      const response = await fetchJson<unknown>(`${artifactPath(artifactId)}/share-links`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      return parseCreateShareLinkResponse(response);
+      const response = await fetchJsonResponse<unknown>(
+        `${artifactPath(artifactId)}/share-links`,
+        {
+          method: "POST",
+          cache: "no-store",
+          signal,
+          headers: {
+            "content-type": "application/json",
+            "Idempotency-Key": parsedKey,
+          },
+          body: JSON.stringify(body),
+        },
+      );
+      const result = parseCreateShareLinkResponse(response.data);
+      if (
+        response.status !== 201
+        || result.kind !== "created"
+        || response.location !== result.publicPath
+      ) {
+        throw new InvalidArtifactResponseError(
+          "$response",
+          "must be a created HTTP 201 result with the matching Location",
+        );
+      }
+      return result;
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) return { kind: "auth-expired" };
-      if (error instanceof ApiError && error.status === 404) return { kind: "not_found" };
-      if (error instanceof ApiError && error.status === 409) return { kind: "conflict" };
-      return {
-        kind: "unknown_outcome",
-        message: "Relay could not confirm whether the share link was created. Do not retry this request. Close the panel and inspect the share records.",
-      };
+      if (error instanceof ApiError) return shareHttpFailure(error, "create share");
+      return artifactUnknownOutcome("create share");
     }
   },
 
-  async revokeShareLink(artifactId, shareLinkId) {
+  async revokeShareLink(
+    artifactId: string,
+    shareLinkId: string,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<RevokeShareLinkAdapterResult> {
+    let path: string;
+    let parsedKey: string;
     try {
-      const path = `${artifactPath(artifactId)}/share-links/${encodeURIComponent(
+      path = `${artifactPath(artifactId)}/share-links/${encodeURIComponent(
         identifier(shareLinkId, "$request.shareLinkId", SHARE_LINK_ID_PATTERN),
       )}`;
-      const response = await fetchJson<unknown>(path, { method: "DELETE" });
-      return parseRevokeShareLinkResponse(response);
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 401) return { kind: "auth-expired" };
-      if (error instanceof ApiError && error.status === 404) return { kind: "not_found" };
-      if (error instanceof InvalidArtifactResponseError) {
-        return {
-          kind: "degraded",
-          message: "Relay returned an unreadable revoke result. The operation was not repeated.",
-        };
+      parsedKey = idempotencyKeyValue(idempotencyKey);
+    } catch {
+      return artifactMutationDegraded(
+        "Relay could not prepare the share revocation. Review the IDs and reuse a stable idempotency key.",
+      );
+    }
+
+    try {
+      const response = await fetchJsonResponse<unknown>(path, {
+        method: "DELETE",
+        cache: "no-store",
+        signal,
+        headers: { "Idempotency-Key": parsedKey },
+      });
+      const result = parseRevokeShareLinkResponse(response.data);
+      if (
+        response.status !== 200
+        || (result.kind !== "revoked" && result.kind !== "already_revoked")
+      ) {
+        throw new InvalidArtifactResponseError(
+          "$response",
+          "must be a successful revoke result",
+        );
       }
-      return {
-        kind: "degraded",
-        message: error instanceof TypeError
-          ? "Relay could not reach the share service. The operation was not repeated."
-          : "Relay could not revoke the share link. The operation was not repeated.",
-      };
+      return result;
+    } catch (error) {
+      if (error instanceof ApiError) return shareHttpFailure(error, "revoke share");
+      return artifactUnknownOutcome("revoke share");
     }
   },
 };

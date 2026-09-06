@@ -11,11 +11,18 @@ COPY scripts ./scripts
 COPY src ./src
 RUN npm run build
 
-FROM nginxinc/nginx-unprivileged:1.31.4-alpine@sha256:901e944d1f4fc2bd077e8f5568b98c1f6f8cdacf6b97a87747c43134a339b9a7 AS runtime
+FROM nginxinc/nginx-unprivileged:1.31.4-alpine@sha256:d9083fe47768377ef55dedafd67d4da7c2f2bc2bece7554954f29359deb0dce9 AS runtime
 
 ARG APP_VERSION=development
 ARG GIT_SHA=unknown
 ARG IMAGE_CREATED=1970-01-01T00:00:00Z
+
+# The pinned base still ships an Alpine 3.24 libexpat with a known HIGH CVE
+# fixed upstream in the same package repo; upgrade in place rather than
+# waiting on nginxinc to rebuild the tag.
+USER 0
+RUN apk update && apk upgrade --no-cache && rm -rf /var/cache/apk/*
+USER 101
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build --chown=101:101 /src/dist /usr/share/nginx/html

@@ -1,11 +1,16 @@
 import {
+  GetBucketVersioningCommand,
+  HeadBucketCommand,
+  type S3Client,
+} from "@aws-sdk/client-s3";
+import {
   assertEquals,
   assertMatch,
   assertRejects,
   assertStringIncludes,
   assertThrows,
 } from "@std/assert";
-import { createS3ObjectStorage } from "./s3.ts";
+import { checkS3StorageHealth, createS3ObjectStorage } from "./s3.ts";
 
 const credentials = {
   accessKeyId: "explicit-test-key",
@@ -13,6 +18,12 @@ const credentials = {
 };
 const key =
   "artifacts/art_0123456789abcdef0123456789abcdef/aver_fedcba9876543210fedcba9876543210/0123456789abcdef0123456789abcdef0123456789abcdef";
+
+function mockedS3Client(
+  send: (command: unknown) => Promise<unknown>,
+): Pick<S3Client, "send"> {
+  return { send } as unknown as Pick<S3Client, "send">;
+}
 
 Deno.test("S3 signing uses the public endpoint and exact required headers", async () => {
   const now = new Date("2026-08-23T00:00:00.000Z");
@@ -24,6 +35,7 @@ Deno.test("S3 signing uses the public endpoint and exact required headers", asyn
     publicSigningEndpoint: "https://objects.example.test",
     forcePathStyle: true,
     bucketVersioning: "enabled",
+    requestTimeoutMs: 1_000,
     now: () => now,
   });
 
@@ -31,6 +43,7 @@ Deno.test("S3 signing uses the public endpoint and exact required headers", asyn
     const authorization = await storage.createUploadUrl({
       key,
       uploadId: "upl_0123456789abcdef0123456789abcdef",
+      sizeBytes: 5,
       contentType: "image/png",
       contentMd5: "XUFAKrxLKna5cZ2REBfFkg==",
       sha256Hex:
@@ -50,6 +63,7 @@ Deno.test("S3 signing uses the public endpoint and exact required headers", asyn
       "2026-08-23T00:01:00.000Z",
     );
     assertEquals(authorization.requiredHeaders, {
+      "content-length": "5",
       "content-type": "image/png",
       "content-md5": "XUFAKrxLKna5cZ2REBfFkg==",
       "x-amz-checksum-sha256": "LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ=",
@@ -62,6 +76,7 @@ Deno.test("S3 signing uses the public endpoint and exact required headers", asyn
     const signedHeaders = url.searchParams.get("X-Amz-SignedHeaders") ?? "";
     for (
       const header of [
+        "content-length",
         "content-md5",
         "content-type",
         "host",
@@ -80,6 +95,82 @@ Deno.test("S3 signing uses the public endpoint and exact required headers", asyn
   } finally {
     storage.close();
   }
+});
+
+Deno.test("S3 readiness is read-only and requires Enabled versioning", async () => {
+  const commands: unknown[] = [];
+  const readiness = await checkS3StorageHealth(
+    mockedS3Client((command) => {
+      commands.push(command);
+      if (command instanceof HeadBucketCommand) return Promise.resolve({});
+      if (command instanceof GetBucketVersioningCommand) {
+        return Promise.resolve({ Status: "Enabled" });
+      }
+      return Promise.reject(new Error("unexpected S3 command"));
+    }),
+    "relay-contract",
+  );
+
+  assertEquals(readiness, { name: "storage", status: "ok" });
+  assertEquals(commands.length, 2);
+  assertEquals(commands[0] instanceof HeadBucketCommand, true);
+  assertEquals(commands[1] instanceof GetBucketVersioningCommand, true);
+  assertEquals((commands[0] as HeadBucketCommand).input, {
+    Bucket: "relay-contract",
+  });
+  assertEquals((commands[1] as GetBucketVersioningCommand).input, {
+    Bucket: "relay-contract",
+  });
+});
+
+Deno.test("S3 readiness rejects disabled and suspended versioning", async () => {
+  for (const status of [undefined, "Suspended"] as const) {
+    const readiness = await checkS3StorageHealth(
+      mockedS3Client((command) => {
+        if (command instanceof HeadBucketCommand) return Promise.resolve({});
+        return Promise.resolve(status === undefined ? {} : { Status: status });
+      }),
+      "relay-contract",
+    );
+    assertEquals(readiness, {
+      name: "storage",
+      status: "error",
+      message: "bucket versioning must be enabled",
+    });
+  }
+});
+
+Deno.test("S3 readiness sanitizes bucket and versioning errors", async () => {
+  const sensitive = "https://access:secret@private.example.test/bucket";
+  for (const name of ["NoSuchBucket", "InvalidAccessKeyId"]) {
+    const readiness = await checkS3StorageHealth(
+      mockedS3Client(() =>
+        Promise.reject(Object.assign(new Error(sensitive), { name }))
+      ),
+      "relay-contract",
+    );
+    assertEquals(readiness, {
+      name: "storage",
+      status: "error",
+      message: "bucket is unavailable",
+    });
+    assertEquals(JSON.stringify(readiness).includes(sensitive), false);
+  }
+
+  const versioning = await checkS3StorageHealth(
+    mockedS3Client((command) =>
+      command instanceof HeadBucketCommand
+        ? Promise.resolve({})
+        : Promise.reject(new Error(sensitive))
+    ),
+    "relay-contract",
+  );
+  assertEquals(versioning, {
+    name: "storage",
+    status: "error",
+    message: "unable to verify bucket versioning",
+  });
+  assertEquals(JSON.stringify(versioning).includes(sensitive), false);
 });
 
 Deno.test("S3 signing supports virtual-host addressing", async () => {
@@ -224,6 +315,7 @@ Deno.test("S3 storage rejects non-immutable keys and malformed versions", async 
         storage.createUploadUrl({
           key,
           uploadId: "caller-controlled",
+          sizeBytes: 5,
           contentType: "image/png",
           contentMd5: "XUFAKrxLKna5cZ2REBfFkg==",
           sha256Hex:
@@ -232,6 +324,21 @@ Deno.test("S3 storage rejects non-immutable keys and malformed versions", async 
         }),
       TypeError,
       "Relay upload ID",
+    );
+    await assertRejects(
+      () =>
+        storage.createUploadUrl({
+          key,
+          uploadId: "upl_0123456789abcdef0123456789abcdef",
+          sizeBytes: -1,
+          contentType: "image/png",
+          contentMd5: "XUFAKrxLKna5cZ2REBfFkg==",
+          sha256Hex:
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+          expiresInSeconds: 30,
+        }),
+      RangeError,
+      "sizeBytes",
     );
   } finally {
     storage.close();
@@ -264,5 +371,19 @@ Deno.test("S3 storage requires literal credentials and safe endpoints", () => {
       }),
     TypeError,
     "must not contain credentials",
+  );
+
+  assertThrows(
+    () =>
+      createS3ObjectStorage({
+        bucket: "relay-contract",
+        region: "us-east-1",
+        credentials,
+        forcePathStyle: true,
+        bucketVersioning: "enabled",
+        requestTimeoutMs: 0,
+      }),
+    RangeError,
+    "requestTimeoutMs",
   );
 });

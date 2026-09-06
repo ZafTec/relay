@@ -1,4 +1,11 @@
 {
   "name": "@relay/worker",
-  "exports": "./src/worker.ts"
+  "exports": {
+    ".": "./src/worker.ts",
+    "./composition": "./src/composition.ts"
+  },
+  "imports": {
+    "ajv": "npm:ajv@8.20.0",
+    "ajv/2020": "npm:ajv@8.20.0/dist/2020.js"
+  }
 }

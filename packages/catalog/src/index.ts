@@ -10,6 +10,26 @@ export type {
   HandlerRegistry,
 } from "./handlers.ts";
 export {
+  canonicalCapacityPolicyJson,
+  getCapacityPolicy,
+  listCapacityPolicies,
+  reviseCapacityPolicy,
+} from "./capacity-policies.ts";
+export type {
+  CapacityPolicy,
+  CapacityPolicyAuthorization,
+  CapacityPolicyConfiguration,
+  CapacityPolicyReadResult,
+  CapacityPolicyScope,
+  CapacityPolicySessionAuthorization,
+  CapacitySubmissionRateDefaults,
+  GetCapacityPolicyInput,
+  GetCapacityPolicyResult,
+  ListCapacityPoliciesOptions,
+  ReviseCapacityPolicyInput,
+  ReviseCapacityPolicyResult,
+} from "./capacity-policies.ts";
+export {
   createToolVersion,
   publishToolVersion,
   registerTool,

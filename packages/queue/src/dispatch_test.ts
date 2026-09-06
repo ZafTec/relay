@@ -1,4 +1,4 @@
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
 import { type AdmitRunInput, admitToolRun } from "./admission.ts";
 import {
@@ -11,7 +11,9 @@ import {
   expireQueuedJobs,
   failJob,
   heartbeatJob,
+  markAttemptSubmitted,
   markAttemptSubmitting,
+  parseSubmissionRatePolicy,
   persistCapacityLease,
   recoverExpiredJobLeases,
   requestJobCancellation,
@@ -28,6 +30,97 @@ import {
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
 const hasDatabase = databaseUrl !== undefined;
+
+Deno.test("submission rate policies parse the seeded MVP rates", () => {
+  assertEquals(parseSubmissionRatePolicy(null, null), {
+    providerPerMinute: null,
+    toolPerMinute: null,
+    capacityPoolRevision: null,
+    toolRevision: null,
+  });
+  assertEquals(
+    parseSubmissionRatePolicy(
+      {
+        revision: 2,
+        configuration: {
+          submissionRateDefaults: {
+            providerPerMinute: 12,
+            toolPerMinute: 6,
+          },
+        },
+      },
+      null,
+    ),
+    {
+      providerPerMinute: 12,
+      toolPerMinute: 6,
+      capacityPoolRevision: 2,
+      toolRevision: null,
+    },
+  );
+  for (const providerPerMinute of [12, 4, 50]) {
+    assertEquals(
+      parseSubmissionRatePolicy(
+        {
+          revision: 7,
+          configuration: {
+            submissionRateDefaults: { providerPerMinute },
+          },
+        },
+        {
+          revision: 3,
+          configuration: {
+            submissionRateDefaults: { toolPerMinute: 4 },
+          },
+        },
+      ),
+      {
+        providerPerMinute,
+        toolPerMinute: 4,
+        capacityPoolRevision: 7,
+        toolRevision: 3,
+      },
+    );
+  }
+});
+
+Deno.test("submission rate policies reject malformed present rates", () => {
+  for (const providerPerMinute of [0, -1, 1.5, "12", Number.NaN]) {
+    assertThrows(
+      () =>
+        parseSubmissionRatePolicy(
+          {
+            revision: 1,
+            configuration: {
+              submissionRateDefaults: { providerPerMinute },
+            },
+          },
+          null,
+        ),
+      Error,
+      "providerPerMinute must be a positive integer",
+    );
+  }
+  assertThrows(
+    () =>
+      parseSubmissionRatePolicy(
+        {
+          revision: 1,
+          configuration: {
+            submissionRateDefaults: { providerPerMinute: 12 },
+          },
+        },
+        {
+          revision: 2,
+          configuration: {
+            submissionRateDefaults: { toolPerMinute: "4" },
+          },
+        },
+      ),
+    Error,
+    "toolPerMinute must be a positive integer",
+  );
+});
 
 function testPool(): DatabasePool {
   return createDatabasePool(
@@ -51,8 +144,10 @@ interface AdmittedJob {
   readonly runId: string;
 }
 
-async function admitJob(pool: DatabasePool): Promise<AdmittedJob> {
-  const fixture = await createAdmissibleFixture(pool);
+async function admitJobForFixture(
+  pool: DatabasePool,
+  fixture: AdmissibleFixture,
+): Promise<Omit<AdmittedJob, "fixture">> {
   const input: AdmitRunInput = {
     workspaceId: fixture.workspaceId,
     toolVersionId: fixture.toolVersionId,
@@ -71,7 +166,12 @@ async function admitJob(pool: DatabasePool): Promise<AdmittedJob> {
   if (await armSchedulerTicket(pool, result.jobId, 0, token) === null) {
     throw new Error("fixture scheduler token arm failed");
   }
-  return { fixture, jobId: result.jobId, runId: result.runId };
+  return { jobId: result.jobId, runId: result.runId };
+}
+
+async function admitJob(pool: DatabasePool): Promise<AdmittedJob> {
+  const fixture = await createAdmissibleFixture(pool);
+  return { fixture, ...await admitJobForFixture(pool, fixture) };
 }
 
 function schedulerToken(jobId: string, dispatchGeneration: number): string {
@@ -200,6 +300,16 @@ Deno.test({
       if (result.kind !== "claimed") throw new Error("unreachable");
       assertEquals(result.job.jobId, jobId);
       assertEquals(result.job.leaseEpoch, 1);
+      assertEquals(
+        result.job.providerModelId,
+        String(admitted.fixture.providerModelId),
+      );
+      assertEquals(result.job.submissionRatePolicy, {
+        providerPerMinute: null,
+        toolPerMinute: null,
+        capacityPoolRevision: null,
+        toolRevision: null,
+      });
 
       const job = await pool.query<{ status: string; lease_owner: string }>(
         "select status, lease_owner from relay.execution_jobs where id = $1",
@@ -239,6 +349,168 @@ Deno.test({
       await assertSingleLifecycleOutbox(pool, jobId, "job.started");
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "claim snapshots current validated submission rates and revisions",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      await pool.query(
+        `insert into relay.capacity_policies
+           (scope_type, scope_id, revision, configuration, effective_at)
+         values
+           ('capacity_pool', $1, 1, $2, now() - interval '1 second'),
+           ('tool', $3, 1, $4, now() - interval '1 second')`,
+        [
+          admitted.fixture.capacityPoolId,
+          JSON.stringify({
+            submissionRateDefaults: { providerPerMinute: 12 },
+            executionConcurrency: {
+              globalTool: 2,
+              pool: 3,
+              workspaceTotal: 4,
+              workspaceTool: 5,
+            },
+          }),
+          admitted.fixture.toolId,
+          JSON.stringify({
+            submissionRateDefaults: { toolPerMinute: 4 },
+          }),
+        ],
+      );
+
+      const first = await claimJobForDispatch(
+        pool,
+        ticketFor(admitted.jobId),
+        "worker-rate-v1",
+        30_000,
+      );
+      if (first.kind !== "claimed") throw new Error("first claim failed");
+      assertEquals(
+        first.job.providerModelId,
+        String(admitted.fixture.providerModelId),
+      );
+      assertEquals(first.job.capacityLimits, {
+        globalTool: 2,
+        pool: 3,
+        workspaceTotal: 4,
+        workspaceTool: 5,
+      });
+      assertEquals(first.job.submissionRatePolicy, {
+        providerPerMinute: 12,
+        toolPerMinute: 4,
+        capacityPoolRevision: 1,
+        toolRevision: 1,
+      });
+
+      await pool.query(
+        `insert into relay.capacity_policies
+           (scope_type, scope_id, revision, configuration, effective_at)
+         values
+           ('capacity_pool', $1, 2, $2, now() - interval '1 second'),
+           ('capacity_pool', $1, 3, $3, now() + interval '1 day'),
+           ('tool', $4, 2, $5, now() - interval '1 second')`,
+        [
+          admitted.fixture.capacityPoolId,
+          JSON.stringify({
+            submissionRateDefaults: { providerPerMinute: 50 },
+          }),
+          JSON.stringify({
+            submissionRateDefaults: { providerPerMinute: 999 },
+          }),
+          admitted.fixture.toolId,
+          JSON.stringify({
+            submissionRateDefaults: { toolPerMinute: 4 },
+          }),
+        ],
+      );
+      const secondJob = await admitJobForFixture(pool, admitted.fixture);
+      const second = await claimJobForDispatch(
+        pool,
+        ticketFor(secondJob.jobId),
+        "worker-rate-v2",
+        30_000,
+      );
+      if (second.kind !== "claimed") throw new Error("second claim failed");
+      assertEquals(second.job.submissionRatePolicy, {
+        providerPerMinute: 50,
+        toolPerMinute: 4,
+        capacityPoolRevision: 2,
+        toolRevision: 2,
+      });
+    } finally {
+      if (admitted) {
+        await pool.query(
+          "delete from relay.capacity_policies where scope_type = 'capacity_pool' and scope_id = $1",
+          [admitted.fixture.capacityPoolId],
+        );
+        await cleanupAdmissibleFixture(pool, admitted.fixture);
+      }
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "claim fails closed and rolls back for a malformed current rate policy",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      await pool.query(
+        `insert into relay.capacity_policies
+           (scope_type, scope_id, revision, configuration, effective_at)
+         values ('capacity_pool', $1, 1, $2, now() - interval '1 second')`,
+        [
+          admitted.fixture.capacityPoolId,
+          JSON.stringify({
+            submissionRateDefaults: { providerPerMinute: 0 },
+          }),
+        ],
+      );
+
+      await assertRejects(
+        () =>
+          claimJobForDispatch(
+            pool,
+            ticketFor(admitted!.jobId),
+            "worker-malformed-rate",
+            30_000,
+          ),
+        Error,
+        "providerPerMinute must be a positive integer",
+      );
+      const job = await pool.query<{
+        status: string;
+        lease_epoch: string;
+        lease_owner: string | null;
+      }>(
+        `select status, lease_epoch, lease_owner
+           from relay.execution_jobs where id = $1`,
+        [admitted.jobId],
+      );
+      assertEquals(job.rows[0], {
+        status: "queued",
+        lease_epoch: "0",
+        lease_owner: null,
+      });
+    } finally {
+      if (admitted) {
+        await pool.query(
+          "delete from relay.capacity_policies where scope_type = 'capacity_pool' and scope_id = $1",
+          [admitted.fixture.capacityPoolId],
+        );
+        await cleanupAdmissibleFixture(pool, admitted.fixture);
+      }
       await pool.end();
     }
   },
@@ -905,7 +1177,7 @@ Deno.test({
 
 Deno.test({
   name:
-    "stalled recovery fences the crashed owner and emits the next generation",
+    "stalled recovery requeues a submitted operation for safe reconciliation",
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
@@ -924,12 +1196,32 @@ Deno.test({
         claim.job,
         "worker-crashed",
       );
+      assertEquals(
+        await markAttemptSubmitted(
+          pool,
+          admitted.jobId,
+          attempt.attemptId,
+          claim.job.leaseEpoch,
+          "worker-crashed",
+          "provider-operation-stalled",
+        ),
+        true,
+      );
       await pool.query(
         "update relay.execution_jobs set lease_expires_at = now() - interval '1 second' where id = $1",
         [admitted.jobId],
       );
 
-      await recoverExpiredJobLeases(pool);
+      const recovery = await recoverExpiredJobLeases(pool);
+      assertEquals(
+        {
+          recovered: recovery.recovered,
+          cancelled: recovery.cancelled,
+          failed: recovery.failed,
+          leases: recovery.capacityLeasesToRelease.length,
+        },
+        { recovered: 1, cancelled: 0, failed: 0, leases: 1 },
+      );
       const staleSuccess = await completeJobSuccessfully(
         pool,
         admitted.jobId,
@@ -967,8 +1259,90 @@ Deno.test({
       if (fresh.kind !== "claimed") throw new Error("unreachable");
       assertEquals(
         fresh.job.previousRetryClassification,
-        "submission_ambiguous",
+        "submission_confirmed",
       );
+      assertEquals(
+        fresh.job.previousProviderOperationId,
+        "provider-operation-stalled",
+      );
+    } finally {
+      if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
+      await pool.end();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "stalled recovery terminalizes a submitting attempt without provider evidence",
+  ignore: !hasDatabase,
+  fn: async () => {
+    const pool = testPool();
+    let admitted: AdmittedJob | undefined;
+    try {
+      admitted = await admitJob(pool);
+      const claim = await claimJobForDispatch(
+        pool,
+        ticketFor(admitted.jobId),
+        "worker-ambiguous",
+        30_000,
+      );
+      if (claim.kind !== "claimed") throw new Error("unreachable");
+      const attempt = await attachCapacityAndBeginAttempt(
+        pool,
+        claim.job,
+        "worker-ambiguous",
+      );
+      await pool.query(
+        "update relay.execution_jobs set lease_expires_at = now() - interval '1 second' where id = $1",
+        [admitted.jobId],
+      );
+
+      const recovery = await recoverExpiredJobLeases(pool);
+      assertEquals(
+        {
+          recovered: recovery.recovered,
+          cancelled: recovery.cancelled,
+          failed: recovery.failed,
+          leases: recovery.capacityLeasesToRelease.length,
+        },
+        { recovered: 0, cancelled: 0, failed: 1, leases: 1 },
+      );
+      const job = await pool.query<{
+        status: string;
+        dispatch_generation: number;
+        lease_epoch: string;
+      }>(
+        `select status, dispatch_generation, lease_epoch
+           from relay.execution_jobs where id = $1`,
+        [admitted.jobId],
+      );
+      assertEquals(job.rows[0], {
+        status: "failed",
+        dispatch_generation: 0,
+        lease_epoch: String(claim.job.leaseEpoch + 1),
+      });
+      const attemptRow = await pool.query<{
+        submission_state: string;
+        outcome: string;
+        retry_classification: string;
+        failure_code: string;
+        provider_operation_id: string | null;
+      }>(
+        `select submission_state, outcome, retry_classification,
+                failure_code, provider_operation_id
+           from relay.job_attempts where id = $1`,
+        [attempt.attemptId],
+      );
+      assertEquals(attemptRow.rows[0], {
+        submission_state: "ambiguous",
+        outcome: "failed",
+        retry_classification: "submission_ambiguous",
+        failure_code: "provider_submission_ambiguous",
+        provider_operation_id: null,
+      });
+      await assertSingleTerminalOutbox(pool, admitted.jobId);
+      await assertAllCounters(pool, admitted.fixture, 0, 0);
     } finally {
       if (admitted) await cleanupAdmissibleFixture(pool, admitted.fixture);
       await pool.end();

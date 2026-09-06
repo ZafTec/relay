@@ -4,6 +4,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { AuthAdapterError } from "../../auth/types";
 import { RelayBrand } from "../brand/RelayBrand";
 import { Button } from "../ui/Button";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { InlineNotice } from "../ui/InlineNotice";
 
 const AdminAccessLink = lazy(() =>
@@ -97,6 +98,7 @@ export function ProductLayout() {
   const { session, workspace, signOut, refreshWorkspace } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
 
   if (session.status !== "authenticated") return null;
 
@@ -113,6 +115,7 @@ export function ProductLayout() {
         ? "Relay could not end the session. Try again."
         : "Relay could not end the session. No account data was changed.");
       setSigningOut(false);
+      setConfirmingSignOut(false);
     }
   }
 
@@ -144,7 +147,7 @@ export function ProductLayout() {
             variant="quiet"
             pending={signingOut}
             pendingLabel="Signing out"
-            onClick={() => void handleSignOut()}
+            onClick={() => setConfirmingSignOut(true)}
           >
             Sign out
           </Button>
@@ -160,7 +163,7 @@ export function ProductLayout() {
               variant="quiet"
               pending={signingOut}
               pendingLabel="Signing out"
-              onClick={() => void handleSignOut()}
+              onClick={() => setConfirmingSignOut(true)}
             >
               Sign out
             </Button>
@@ -188,10 +191,22 @@ export function ProductLayout() {
             <InlineNotice title="Sign-out failed" tone="error"><p>{signOutError}</p></InlineNotice>
           </div>
         ) : null}
-        <main className="product-content" id="main-content">
+        <main className="product-content" id="main-content" tabIndex={0}>
           <Outlet />
         </main>
       </div>
+
+      {confirmingSignOut ? (
+        <ConfirmDialog
+          title="Sign out of Relay?"
+          description="You'll need to sign in again with Google or GitHub to continue."
+          confirmLabel="Sign out"
+          confirmPendingLabel="Signing out"
+          pending={signingOut}
+          onConfirm={() => void handleSignOut()}
+          onCancel={() => setConfirmingSignOut(false)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -2,7 +2,6 @@ import { withTransaction } from "@relay/database";
 import type { DatabasePool } from "@relay/database";
 
 const PERSONAL_WORKSPACE_LOCK_NAMESPACE = 0x524c5957;
-
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
     "",
@@ -28,6 +27,7 @@ export async function personalWorkspaceSlug(userId: string): Promise<string> {
  * for the same user before any state is inspected, so no losing caller can
  * create an orphan organization. Existing mappings are healed by inserting a
  * missing membership or restoring a downgraded membership to `owner`.
+ * Execution capabilities and usage allowances require explicit grants.
  */
 export async function ensurePersonalWorkspace(
   pool: DatabasePool,

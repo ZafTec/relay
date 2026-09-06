@@ -1,6 +1,8 @@
 import {
   DeleteObjectCommand,
+  GetBucketVersioningCommand,
   GetObjectCommand,
+  HeadBucketCommand,
   HeadObjectCommand,
   ListObjectVersionsCommand,
   PutObjectCommand,
@@ -8,6 +10,7 @@ import {
 } from "@aws-sdk/client-s3";
 import type { PutObjectCommandInput } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { ReadinessCheck } from "@relay/contracts";
 import { Readable } from "node:stream";
 import type {
   CreateDownloadUrlRequest,
@@ -50,12 +53,18 @@ export interface S3ObjectStorageConfig {
   /** Endpoint embedded into client-facing signatures. Defaults to internal. */
   readonly publicSigningEndpoint?: string | URL;
   readonly forcePathStyle: boolean;
-  /** Must match the bucket configuration; suspended versioning counts as enabled. */
+  /**
+   * Must match hard-delete behavior. Suspended remains versioned for deletion,
+   * but readiness requires the remote bucket status to be exactly Enabled.
+   */
   readonly bucketVersioning: "disabled" | "enabled";
+  /** Optional per-attempt connection and request deadline in milliseconds. */
+  readonly requestTimeoutMs?: number;
   readonly now?: () => Date;
 }
 
 export interface S3CompatibleStorage extends ObjectStorage {
+  checkHealth(): Promise<ReadinessCheck>;
   close(): void;
 }
 
@@ -125,6 +134,20 @@ function assertStorageVersionId(value: string | undefined): string | undefined {
     throw new TypeError("storageVersionId is invalid");
   }
   return normalized;
+}
+
+function assertSizeBytes(sizeBytes: number): void {
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 0) {
+    throw new RangeError("sizeBytes must be a non-negative safe integer");
+  }
+}
+
+function optionalRequestTimeout(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new RangeError("requestTimeoutMs must be a positive safe integer");
+  }
+  return value;
 }
 
 function assertSeconds(seconds: number): void {
@@ -253,6 +276,7 @@ function createClient(
   config: S3ObjectStorageConfig,
   endpoint: string | undefined,
 ): S3Client {
+  const requestTimeoutMs = optionalRequestTimeout(config.requestTimeoutMs);
   return new S3Client({
     region: requiredText(config.region, "region"),
     endpoint,
@@ -277,10 +301,52 @@ function createClient(
     },
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
+    requestHandler: requestTimeoutMs === undefined ? undefined : {
+      connectionTimeout: requestTimeoutMs,
+      requestTimeout: requestTimeoutMs,
+      throwOnRequestTimeout: true,
+    },
     // Deno deployments intentionally run without --allow-sys. Supplying a
     // deterministic provider prevents the Node default from probing OS details.
     defaultUserAgentProvider: () => Promise.resolve([["relay-storage", "1"]]),
   });
+}
+
+/** Read-only S3 readiness check; it never creates or configures the bucket. */
+export async function checkS3StorageHealth(
+  client: Pick<S3Client, "send">,
+  bucket: string,
+): Promise<ReadinessCheck> {
+  try {
+    await client.send(new HeadBucketCommand({ Bucket: bucket }));
+  } catch {
+    return {
+      name: "storage",
+      status: "error",
+      message: "bucket is unavailable",
+    };
+  }
+
+  try {
+    const versioning = await client.send(
+      new GetBucketVersioningCommand({ Bucket: bucket }),
+    );
+    if (versioning.Status !== "Enabled") {
+      return {
+        name: "storage",
+        status: "error",
+        message: "bucket versioning must be enabled",
+      };
+    }
+  } catch {
+    return {
+      name: "storage",
+      status: "error",
+      message: "unable to verify bucket versioning",
+    };
+  }
+
+  return { name: "storage", status: "ok" };
 }
 
 class AwsS3ObjectStorage implements S3CompatibleStorage {
@@ -324,6 +390,7 @@ class AwsS3ObjectStorage implements S3CompatibleStorage {
     request: CreateUploadUrlRequest,
   ): Promise<UploadAuthorization> {
     assertObjectKey(request.key);
+    assertSizeBytes(request.sizeBytes);
     assertSeconds(request.expiresInSeconds);
     assertChecksums(request.contentMd5, request.sha256Hex);
     const contentType = assertContentType(request.contentType);
@@ -335,6 +402,7 @@ class AwsS3ObjectStorage implements S3CompatibleStorage {
       const command = new PutObjectCommand({
         Bucket: this.#bucket,
         Key: request.key,
+        ContentLength: request.sizeBytes,
         ContentType: contentType,
         ContentMD5: request.contentMd5,
         ChecksumSHA256: checksumSha256,
@@ -344,7 +412,7 @@ class AwsS3ObjectStorage implements S3CompatibleStorage {
       const url = await getSignedUrl(this.#signingClient, command, {
         expiresIn: request.expiresInSeconds,
         signingDate,
-        signableHeaders: new Set(["content-type"]),
+        signableHeaders: new Set(["content-length", "content-type"]),
         unhoistableHeaders: new Set([
           "x-amz-checksum-sha256",
           "x-amz-meta-relay-upload-id",
@@ -353,6 +421,7 @@ class AwsS3ObjectStorage implements S3CompatibleStorage {
       });
 
       const requiredHeaders: Record<string, string> = {
+        "content-length": String(request.sizeBytes),
         "content-type": contentType,
         "content-md5": request.contentMd5,
         "x-amz-checksum-sha256": checksumSha256,
@@ -432,9 +501,7 @@ class AwsS3ObjectStorage implements S3CompatibleStorage {
 
   async putObject(request: PutObjectRequest): Promise<ObjectHead> {
     assertObjectKey(request.key);
-    if (!Number.isSafeInteger(request.sizeBytes) || request.sizeBytes < 0) {
-      throw new RangeError("sizeBytes must be a non-negative safe integer");
-    }
+    assertSizeBytes(request.sizeBytes);
     assertChecksums(request.contentMd5, request.sha256Hex);
     const metadata = normalizeMetadata(request.metadata);
     const contentType = assertContentType(request.contentType);
@@ -617,6 +684,10 @@ class AwsS3ObjectStorage implements S3CompatibleStorage {
       versionIdMarker = listed.NextVersionIdMarker;
     } while (true);
     return identities;
+  }
+
+  checkHealth(): Promise<ReadinessCheck> {
+    return checkS3StorageHealth(this.#internalClient, this.#bucket);
   }
 
   close(): void {

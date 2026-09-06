@@ -14,6 +14,47 @@ const validEnvironment = {
   OTEL_TRACES_SAMPLER: "always_on",
 };
 
+function withStubbedProcessEnvironment<T>(
+  environment: Record<string, string | undefined>,
+  callback: (reads: readonly string[]) => T,
+): T {
+  const originalGet = Deno.env.get;
+  const originalToObject = Deno.env.toObject;
+  const reads: string[] = [];
+  Deno.env.get = (name) => {
+    reads.push(name);
+    return environment[name];
+  };
+  Deno.env.toObject = () => {
+    throw new Error("loaders must not enumerate the process environment");
+  };
+  try {
+    return callback(reads);
+  } finally {
+    Deno.env.get = originalGet;
+    Deno.env.toObject = originalToObject;
+  }
+}
+
+Deno.test("observability defaults read only allowlisted OTel variables", () => {
+  withStubbedProcessEnvironment(
+    {
+      ...validEnvironment,
+      AZURE_API_KEY: "unrelated-worker-secret",
+      BETTER_AUTH_SECRET: "unrelated-api-secret",
+      SHARE_TOKEN_KEYS: "unrelated-api-secret",
+    },
+    (reads) => {
+      assertEquals(loadObservabilityConfig().serviceName, "relay-api");
+      assertEquals(reads.length > 0, true);
+      assertEquals(reads.every((name) => name.startsWith("OTEL_")), true);
+      assertEquals(reads.includes("AZURE_API_KEY"), false);
+      assertEquals(reads.includes("BETTER_AUTH_SECRET"), false);
+      assertEquals(reads.includes("SHARE_TOKEN_KEYS"), false);
+    },
+  );
+});
+
 Deno.test("observability config validates the single Alloy endpoint", () => {
   const config = loadObservabilityConfig(validEnvironment);
   assertEquals(config.endpoint.toString(), "http://alloy:4318/");

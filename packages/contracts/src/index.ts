@@ -6,14 +6,12 @@ export {
   RUN_RESULT_COMPLETENESS,
   RUN_STATUSES,
   TERMINAL_RUN_STATUSES,
-  TOOL_RUN_STATUSES,
 } from "./statuses.ts";
 export type {
   JobStatus,
   RunResultCompleteness,
   RunStatus,
   TerminalRunStatus,
-  ToolRunStatus,
 } from "./statuses.ts";
 
 export { ContractValidationError, defineContractSchema } from "./schema.ts";
@@ -128,6 +126,7 @@ export {
   listRunsRequestSchema,
   listRunsResultSchema,
   RUN_QUEUE_REASONS,
+  RUN_USAGE_UNAVAILABLE_REASONS,
   runDetailSchema,
   runOutputItemSchema,
   runOutputSetSchema,
@@ -148,6 +147,7 @@ export type {
   RunReservationSummary,
   RunSummary,
   RunToolReference,
+  RunUsageUnavailableReason,
 } from "./runs.ts";
 
 export {
@@ -177,6 +177,8 @@ export {
 } from "./artifacts.ts";
 export type {
   ArtifactDetail,
+  ArtifactIdempotencyConflictResult,
+  ArtifactMutationReplayMetadata,
   ArtifactSummary,
   ArtifactUploadResource,
   ArtifactUploadStatus,

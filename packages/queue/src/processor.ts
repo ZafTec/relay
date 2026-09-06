@@ -103,12 +103,21 @@ export type ExecutionHandlerResult =
     readonly retryClassification: "provider_rate_limited";
     readonly error: unknown;
     readonly retryAt: Date;
+    readonly retryable?: true;
+    readonly failureCode?: string;
+    /** Runs only when the processor makes this failure terminal. */
+    readonly finalizeTerminalFailure?: () => Promise<void>;
   }
   | {
     readonly kind: "failed";
     readonly retryClassification: NonRateLimitedRetryClassification;
     readonly error: unknown;
     readonly retryAt?: Date;
+    /** Required for retry classes whose safety depends on handler-held evidence. */
+    readonly retryable?: boolean;
+    readonly failureCode?: string;
+    /** Runs only when the processor makes this failure terminal. */
+    readonly finalizeTerminalFailure?: () => Promise<void>;
   }
   | { readonly kind: "cancelled" };
 
@@ -173,13 +182,41 @@ const BOUNDED_QUEUE_REASONS = new Set([
 
 const RETRYABLE_CLASSIFICATIONS = new Set<RetryClassification>([
   "pre_submission_failure",
-  "submission_confirmed",
-  "submission_ambiguous",
   "retrieval_failure",
-  "storage_failure",
-  "provider_transient",
   "provider_rate_limited",
 ]);
+
+type FailedExecutionHandlerResult = Extract<
+  ExecutionHandlerResult,
+  { readonly kind: "failed" }
+>;
+
+function isRetryableHandlerFailure(
+  result: FailedExecutionHandlerResult,
+  providerOperationRecorded: boolean,
+): boolean {
+  if (
+    result.retryClassification === "submission_ambiguous" &&
+    !providerOperationRecorded
+  ) {
+    return false;
+  }
+  if (result.retryClassification === "provider_rate_limited") return true;
+  return result.retryable ??
+    RETRYABLE_CLASSIFICATIONS.has(result.retryClassification);
+}
+
+async function runTerminalFailureFinalizer(
+  result: FailedExecutionHandlerResult,
+): Promise<unknown | undefined> {
+  if (result.finalizeTerminalFailure === undefined) return undefined;
+  try {
+    await result.finalizeTerminalFailure();
+    return undefined;
+  } catch (error) {
+    return error;
+  }
+}
 
 function delay(ms: number, signal: AbortSignal): Promise<boolean> {
   if (signal.aborted) return Promise.resolve(false);
@@ -388,6 +425,7 @@ export class ExecutionProcessor {
     let heartbeatTask: Promise<void> | undefined;
     let preserveCapacityLease = false;
     let capacityMetricActive = false;
+    let providerOperationRecorded = false;
 
     try {
       // Check again after the durable claim. If Redis reset in the intervening
@@ -583,6 +621,7 @@ export class ExecutionProcessor {
                 "Lost job lease while recording provider operation",
               );
             }
+            providerOperationRecorded = true;
           },
         });
       } catch (error) {
@@ -628,6 +667,7 @@ export class ExecutionProcessor {
         result = {
           kind: "failed",
           retryClassification: "provider_transient",
+          retryable: false,
           error,
         };
       }
@@ -638,14 +678,22 @@ export class ExecutionProcessor {
         return { kind: "lost_lease" };
       }
       if (completedAbortReason === DEADLINE_REASON) {
+        const finalizationError = result.kind === "failed"
+          ? await runTerminalFailureFinalizer(result)
+          : undefined;
         const failed = await failJob(
           this.pool,
           job.jobId,
           attempt.attemptId,
           job.leaseEpoch,
           this.options.leaseOwner,
-          "deadline_exceeded",
-          "Execution run deadline exceeded",
+          finalizationError === undefined
+            ? "deadline_exceeded"
+            : "schema_or_policy_failure",
+          finalizationError ?? "Execution run deadline exceeded",
+          finalizationError === undefined
+            ? "deadline_exceeded"
+            : "terminal_failure_finalization_failed",
         );
         if (failed) {
           preserveCapacityLease = false;
@@ -663,6 +711,9 @@ export class ExecutionProcessor {
         completedAbortReason === CANCELLATION_REASON &&
         result.kind !== "succeeded"
       ) {
+        if (result.kind === "failed") {
+          await runTerminalFailureFinalizer(result);
+        }
         const cancelled = await completeJobCancellation(
           this.pool,
           job.jobId,
@@ -722,7 +773,7 @@ export class ExecutionProcessor {
       const maxAttempts = this.options.maxExecutionAttempts ??
         DEFAULT_MAX_EXECUTION_ATTEMPTS;
       if (
-        RETRYABLE_CLASSIFICATIONS.has(result.retryClassification) &&
+        isRetryableHandlerFailure(result, providerOperationRecorded) &&
         attempt.attemptNumber < maxAttempts
       ) {
         const now = Date.now();
@@ -767,6 +818,7 @@ export class ExecutionProcessor {
             attemptDeadlineAt,
             result.retryClassification,
             result.error,
+            result.failureCode,
           );
           if (retried) {
             observation.queueReason = boundedQueueReason(
@@ -778,14 +830,20 @@ export class ExecutionProcessor {
         }
       }
 
+      const finalizationError = await runTerminalFailureFinalizer(result);
       const failed = await failJob(
         this.pool,
         job.jobId,
         attempt.attemptId,
         job.leaseEpoch,
         this.options.leaseOwner,
-        result.retryClassification,
-        result.error,
+        finalizationError === undefined
+          ? result.retryClassification
+          : "schema_or_policy_failure",
+        finalizationError ?? result.error,
+        finalizationError === undefined
+          ? result.failureCode
+          : "terminal_failure_finalization_failed",
       );
       if (failed) {
         preserveCapacityLease = false;

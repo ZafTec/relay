@@ -17,6 +17,9 @@ const artifactIdSchema = z.string().regex(PUBLIC_ID_PATTERNS.artifact);
 const artifactVersionIdSchema = z.string().regex(
   PUBLIC_ID_PATTERNS.artifactVersion,
 );
+const artifactUploadIdSchema = z.string().regex(
+  PUBLIC_ID_PATTERNS.artifactUpload,
+);
 const shareLinkIdSchema = z.string().regex(PUBLIC_ID_PATTERNS.shareLink);
 const isoTimestampSchema = z.string().min(24).max(24);
 
@@ -75,6 +78,10 @@ export const createArtifactUploadInputSchema = z.object({
   sourceRunId: runIdSchema.nullable().optional(),
 }).strict();
 
+export const completeArtifactUploadInputSchema = z.object({
+  uploadId: artifactUploadIdSchema,
+}).strict();
+
 export const listArtifactsInputSchema = z.object({
   cursor: cursorSchema,
   limit: limitSchema,
@@ -99,6 +106,7 @@ export const createShareLinkInputSchema = z.object({
 }).strict();
 
 export const revokeShareLinkInputSchema = z.object({
+  artifactId: artifactIdSchema,
   shareLinkId: shareLinkIdSchema,
 }).strict();
 

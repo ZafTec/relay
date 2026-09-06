@@ -1,0 +1,19 @@
+{
+  "name": "@relay/providers",
+  "version": "0.0.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "tasks": {
+    "test": "deno test src",
+    "check": "deno fmt --check deno.json src && deno lint src && deno check src/index.ts"
+  },
+  "compilerOptions": {
+    "strict": true,
+    "lib": [
+      "deno.ns",
+      "dom",
+      "dom.asynciterable"
+    ]
+  }
+}

@@ -1,137 +1,231 @@
-# Versioning proposal
+# Release and versioning policy
 
-Status: proposal for discussion; no release policy has been approved yet\
+Status: approved 2026-08-25\
 Product model authority: [`product-and-roadmap.md`](product-and-roadmap.md)
 
-Version tracking is separated into independent dimensions. A file version, API
-version, database migration, legal revision, and deployed application release
-must never be treated as the same number.
+Relay uses one product release version for the backend API, worker, migration
+command, and web application. Product releases are independent from HTTP API,
+MCP tool, database migration, artifact, legal-document, provider-policy, and
+entitlement versions.
 
-## Version dimensions
+## Product SemVer
 
-| Dimension              | Purpose                                                       | Proposed representation                                 |
-| ---------------------- | ------------------------------------------------------------- | ------------------------------------------------------- |
-| Product release        | Identifies a deployed application build                       | Semantic Versioning plus Git revision                   |
-| HTTP API               | Preserves external HTTP contracts                             | Path prefix such as `/api/v1`                           |
-| MCP tool contract      | Preserves public tool input/output compatibility              | Stable tool name; suffix only for breaking replacements |
-| Tool publication       | Identifies an immutable registry contract and handler binding | Per-tool version independent of the app release         |
-| Provider/model policy  | Explains model capability, routing, and pricing used by a run | Immutable provider/model and policy snapshots           |
-| Background job payload | Lets new workers process jobs queued by older releases        | `input_schema_version` and `handler_version`            |
-| Database schema        | Orders database changes                                       | Monotonic migration identifiers                         |
-| Artifact version       | Tracks immutable stored input and output revisions            | Per-artifact sequence plus globally unique version ID   |
-| Legal document         | Records exactly what a user accepted                          | Effective version and content hash                      |
-| Entitlement catalog    | Preserves historical plan behavior                            | Catalog or grant version independent of app release     |
+The first product baseline is `0.1.0`. Official Git tags use the exact stable
+form `vMAJOR.MINOR.PATCH`; prerelease and build suffixes are not release tags.
+The tag and its full commit SHA are the canonical release identity.
 
-## Proposed product SemVer policy
+Conventional Commit types drive Release Please:
 
-Use `MAJOR.MINOR.PATCH` for product releases and a `v` prefix for Git tags:
+- `feat`: minor release, including before `1.0.0`;
+- `fix`: patch release;
+- `perf`: patch release;
+- a documented breaking change: minor before `1.0.0`, major from `1.0.0`;
+- `docs`, `deps`, and `chore`: no version bump unless combined with a release
+  trigger understood by Release Please.
+
+Every squash-merged PR title must therefore carry the intended conventional
+prefix. Breaking changes must be explicit even during `0.x`. This mapping
+resolves the earlier pre-1.0 alternative: backward-compatible features increment
+the minor version, while fixes and performance improvements increment the patch
+version.
+
+Promote to `1.0.0` only after the public contracts, authorization model,
+migration and restore process, core MCP tools, queue compatibility, durable
+artifacts, metering, legal documents, monitoring, alerting, and operational
+runbooks have been proven in production.
+
+After `1.0.0`, incompatible public API, MCP, configuration, deployment, or
+persisted-data behavior requires a major release; backward-compatible features
+use minor releases; backward-compatible fixes, performance improvements, and
+security patches use patch releases. A database migration does not itself
+require a major release when the rollout remains backward-compatible.
+
+## Release automation
+
+For first-time repository configuration, follow the
+[Google Release Please setup guide](release-please-setup.md).
+
+`release-please-config.json` configures one repository-level `simple` release.
+`.release-please-manifest.json` and `version.txt` are bookkeeping files managed
+by the Release Please PR; they are not deployment selectors. The manifest is
+empty at bootstrap so `initial-version: 0.1.0` produces the first release, then
+the merged release PR records `0.1.0` in it. Release Please updates
+`CHANGELOG.md`, creates the protected `vMAJOR.MINOR.PATCH` tag, and creates a
+draft GitHub release.
+
+A repository-scoped GitHub App installation token is mandatory because tags
+created by the default `GITHUB_TOKEN` do not trigger the image workflow. The
+`release-please.yml` workflow requests only repository contents, pull-request,
+and issue permissions for the current repository. Configure:
+
+- repository or organization secrets `RELEASE_APP_ID` and
+  `RELEASE_APP_PRIVATE_KEY`;
+- a GitHub App installed only on this repository, with Contents read/write, Pull
+  requests read/write, Issues read/write, and Metadata read;
+- a `v*` tag ruleset that permits this App, and the documented emergency role,
+  to create tags while blocking deletion and force updates;
+- protected `main` with the existing required CI aggregate.
+
+The image workflow receives neither App credential. A release tag must resolve
+to the `version.txt` value, use a full lowercase 40-character revision, be
+reachable from `main`, and have a matching non-prerelease draft. Any mismatch
+fails before registry writes.
+
+## Docker Hub publication
+
+Defaults are:
 
 ```text
-v0.1.0
-v0.2.0
-v1.0.0
+DOCKERHUB_NAMESPACE=zaftec
+DOCKERHUB_BACKEND_REPOSITORY=relay-backend
+DOCKERHUB_WEB_REPOSITORY=relay-web
 ```
 
-### Before 1.0
+Override them with GitHub environment variables of those names. Configure a
+protected GitHub environment named `release`, with required reviewers where the
+plan permits, and provide:
 
-The recommended initial release is `0.1.0`, not `1.0.0`.
+- `DOCKERHUB_TOKEN`: required environment secret containing a Docker Hub token
+  with Read & Write permissions for both repositories and no Delete permission;
+  reads are required for conflict detection, verification, and rerun recovery;
+- `DOCKERHUB_USERNAME`: environment variable, or an environment secret when the
+  account name is intentionally hidden.
 
-Adopt a stricter policy than SemVer requires for `0.x` releases:
+Enable GitHub artifact attestations for the repository/account plan and confirm
+both Docker Hub repositories accept OCI attestations/referrers. The workflow
+fails rather than publishing when either service rejects provenance.
 
-- `0.MINOR.0`: externally breaking HTTP, MCP, configuration, deployment, or
-  persisted-data behavior; also substantial new MVP milestones
-- `0.MINOR.PATCH`: backward-compatible fixes and small internal improvements
-- Breaking changes must still be documented even though the product is pre-1.0
+The workflow fails closed when credentials are absent or registry inspection
+cannot distinguish a missing tag from an authentication/network failure. Create
+both Docker Hub repositories before the first tag. Configure Docker Hub tag
+immutability for stable SemVer tags, `git-<40 lowercase hex>` tags, and
+`candidate-<run-id>` tags; leave only `latest` mutable. Registry-side
+immutability is required in addition to the workflow's conflict checks.
 
-Examples:
+Each tag workflow builds exactly one `linux/amd64` backend image and one
+`linux/amd64` web image from the tagged SHA. Each is first pushed to the stable
+run-specific candidate tag `candidate-<github.run_id>`. A rerun reuses an
+existing candidate digest instead of rebuilding it. The exact candidate digest
+receives:
+
+- native BuildKit maximum-mode provenance and SBOM attestations;
+- a GitHub build-provenance attestation pushed to the registry;
+- an SPDX JSON SBOM release asset; and
+- a blocking HIGH/CRITICAL fixed-vulnerability Trivy JSON report.
+
+The required failure-safe sequence starts only after all candidate evidence
+succeeds: automation must first promote the same OCI digest to the immutable
+destinations:
 
 ```text
-0.1.0  Internal development foundation
-0.2.0  Authenticated landing and dashboard slice
-0.3.0  First registry, run, artifact, and MCP vertical slice
-0.3.1  Fix incorrect managed-URL expiration
+<semver without v>
+git-<full-40-character-sha>
 ```
 
-An alternative is to use patch releases for every backward-compatible feature
-during `0.x`. We should choose one rule before creating the first release tag
-and apply it consistently.
+Before writing any immutable destination, promotion inspects all backend and web
+SemVer and revision tags. A missing tag is created, an identical tag is a no-op,
+and a different digest aborts the release before any destination is overwritten.
 
-### Criteria for 1.0.0
+The GitHub release must remain a draft while automation creates and validates
+the canonical `release-manifest.json`, verifies immutable tag/digest agreement,
+and uploads the manifest, checksums, SBOMs, provenance bundles, and scan
+reports. If the release is the highest stable version known to the serialized
+workflow, the
+same verified backend and web digests are then promoted to their mutable
+`latest` tags while the GitHub release is still a draft.
 
-Do not tie `1.0.0` merely to deployment. Promote to 1.0 when:
+The registry cannot update `latest` atomically across the two Docker Hub
+repositories. Both destinations are inspected before either write, but an
+interruption can still move one repository before the other. A rerun reuses the
+preserved candidate digests, accepts already-correct immutable or `latest` tags
+as no-ops, and completes the remaining promotion. Conflicting immutable tags or
+unclassifiable registry errors continue to fail closed.
 
-- The production data model and migration process are proven
-- The core MCP tools are documented and considered stable
-- Authentication and workspace authorization are production-ready
-- Tool discovery, asynchronous runs, durable artifacts, managed delivery, image
-  generation, and usage accounting are operational
-- Backup and restore procedures have been tested
-- Legal documents and product addendum are approved
-- Monitoring, alerting, and operational runbooks exist
-- Breaking changes have an announced compatibility policy
+Only after immutable publication, evidence upload, and any eligible `latest`
+promotion have all been verified may automation publish the GitHub draft. GitHub
+publication is the final release operation. Any earlier failure leaves the draft
+unpublished and preserves the candidates and uploaded evidence for investigation
+and idempotent rerun recovery.
 
-### After 1.0
+## Deployment identity
 
-- `MAJOR`: externally incompatible API, MCP, configuration, or behavior changes
-- `MINOR`: backward-compatible features
-- `PATCH`: backward-compatible fixes and security patches
+Production and rollback use the backend and web `repository@sha256:digest`
+values from one `release-manifest.json`. SemVer, full-SHA, and `latest` tags are
+navigation aids only; `latest` is never a deployment input. Release builds embed
+the application version and full revision as OCI labels and provide them as
+runtime inputs. Version-bearing runtime, migration, and telemetry surfaces must
+use that identity as each surface is implemented.
 
-Database migrations do not automatically require a major release when deployment
-remains backward-compatible.
+See [`../deploy/README.md`](../deploy/README.md) for the pull-only Compose
+layout, external networks, Nginx fragments, non-mutating preflight, and manual
+operator runbooks. No GitHub workflow has SSH or production-host credentials.
+
+## Superseded image and tag guidance
+
+The release workflow remains tag-triggered, but deployment is not tag-selected.
+This policy explicitly supersedes earlier examples or recommendations that:
+
+- published one `zaftech/relay` image for the whole product;
+- used a truncated `git-<sha>` tag;
+- selected a production or rollback image by SemVer, Git-SHA, or `latest` tag;
+- treated `latest` as an immutable or authoritative release reference; or
+- relied on an operator-created release tag as the normal release mechanism.
+
+The approved model uses paired `zaftec/relay-backend` and
+`zaftec/relay-web` images, each built for `linux/amd64`. Release Please creates
+the protected `vMAJOR.MINOR.PATCH` tag through the repository-scoped GitHub App;
+the image workflow promotes each verified digest to the SemVer,
+`git-<full-40-character-sha>`, and eligible `latest` tags. Operators deploy and
+roll back the paired digests from `release-manifest.json`, never any of those
+tags. Tag-based deployment guidance is superseded; tag-triggered release
+automation is not.
+
+## Independent version dimensions
+
+Version tracking remains separated into independent dimensions. An API version,
+tool contract, job payload, database migration, artifact revision, legal
+revision, policy snapshot, and deployed product release must never be assumed to
+share a number merely because they shipped together.
+
+| Dimension              | Purpose                                                       | Representation                                                    |
+| ---------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Product release        | Identifies one approved product release                       | SemVer, protected Git tag, and full Git revision                   |
+| Deployment artifact    | Selects the exact paired backend and web images               | Two OCI digests in `release-manifest.json`                         |
+| HTTP API               | Preserves external HTTP contracts                             | Path prefix such as `/api/v1`                                     |
+| MCP tool contract      | Preserves public tool input/output compatibility              | Stable tool name; suffix only for breaking replacements           |
+| Tool publication       | Identifies an immutable registry contract and handler binding | Per-tool version independent of the product release                |
+| Provider/model policy  | Explains capability, routing, and pricing used by a run       | Immutable provider/model identities and policy snapshots           |
+| Background job payload | Lets new workers process jobs queued by older releases        | Input schema and handler identities                                |
+| Database schema        | Orders durable schema changes                                 | Immutable monotonic migration identifiers                          |
+| Artifact version       | Tracks immutable stored input and output revisions            | Per-artifact sequence plus globally unique version ID              |
+| Legal document         | Records exactly what a user accepted                          | Effective document version and content hash                        |
+| Entitlement catalog    | Preserves historical plan behavior                            | Catalog/grant version or immutable entitlement snapshot            |
+
+A compatibility change in one dimension can require a product SemVer bump, but
+it does not replace that dimension's own identifier. Product, HTTP API, MCP, and
+database major numbers are intentionally not required to match.
 
 ## Single product release version
 
-The API and worker should normally ship from the same source revision and share
-one product version. Do not create independent API and worker SemVer lines until
-they have truly independent release lifecycles.
+The backend API, worker, migration command, and web application ship from the
+same source revision and share one product version. The backend and web are
+separate OCI images for deployment, but they form one paired release. Do not
+create independent API, worker, or web SemVer lines until those components have
+truly independent release lifecycles.
 
-The dashboard may expose its own build revision for diagnostics, but it should
-display the product release version to users.
+The dashboard may expose component revision details for diagnostics, but the
+user-facing release remains the shared product version.
 
-## Canonical version source
+## Canonical build identity and observability
 
-Proposed approach:
+For an official release, the protected tag and its full commit SHA identify the
+product release; the paired OCI digests in `release-manifest.json` identify what
+is deployed. `version.txt` and `.release-please-manifest.json` are Release Please
+bookkeeping, not operator-selected deployment versions. Do not derive a release
+version from commit count, mutate a version file after release, or let an
+untagged development build masquerade as an official release.
 
-1. An annotated Git tag is the source for official releases.
-2. CI validates that the tag is valid SemVer.
-3. CI embeds the version, full Git SHA, and build timestamp into the compiled
-   artifact.
-4. Untagged local builds report a development identifier.
-
-Example runtime build information:
-
-```json
-{
-  "version": "0.3.1",
-  "revision": "8f91d2c51e...",
-  "builtAt": "2026-07-28T12:00:00Z"
-}
-```
-
-Possible local representation:
-
-```text
-0.0.0-dev+g8f91d2c
-```
-
-Do not infer a production version from the number of commits or mutate a version
-file after deployment.
-
-## Artifact identification
-
-OCI/Docker tags should include both a readable release and an immutable
-revision:
-
-```text
-zaftech/relay:0.3.1
-zaftech/relay:git-8f91d2c
-zaftech/relay:latest
-```
-
-Production Compose should preferably pin `0.3.1` or `git-8f91d2c`. `latest` can
-be published for convenience but is not a reliable rollback reference.
-
-The OCI image should also contain standard labels:
+Release images carry these standard identity labels:
 
 ```text
 org.opencontainers.image.version
@@ -140,62 +234,87 @@ org.opencontainers.image.created
 org.opencontainers.image.source
 ```
 
-## Runtime exposure
+`org.opencontainers.image.created` is OCI image metadata. The runtime build-info
+contract currently contains `version` and `revision`; this policy does not claim
+or require a runtime `builtAt` field.
 
-Expose build information through:
+Version and revision should be available through the surfaces that support build
+identity:
 
-- `GET /version`
-- `GET /health/live`
-- MCP `serverInfo.version`
-- Dashboard diagnostics/footer
-- Structured log resource fields
-- OpenTelemetry resource attributes
-- A low-cardinality Prometheus build-info metric
+- `GET /version` and liveness output;
+- MCP `serverInfo.version`;
+- dashboard diagnostics or footer;
+- structured log fields;
+- OpenTelemetry resource attributes; and
+- a low-cardinality Prometheus build-info metric.
 
-Do not use the version as a high-cardinality metric label when arbitrary
-development versions can appear.
+This list is compatibility and observability guidance, not a declaration that
+every surface is already implemented; current implementation state remains in
+[`implementation-status.md`](implementation-status.md). Use the bounded product
+version for `service.version`. Keep the full revision available in release
+manifests, logs, traces, or resource metadata, but out of metric labels. Do not
+allow arbitrary development identifiers to create unbounded metric cardinality.
 
-## HTTP API versioning
+## HTTP API compatibility
 
-Start external HTTP endpoints under `/api/v1`.
-
-A new API path version is required only for a breaking public contract. Internal
-refactors, additive optional fields, new endpoints, and bug fixes remain in the
-current version.
+External HTTP endpoints start under `/api/v1`. A new path version is required
+only for a breaking public contract. Internal refactors, additive optional
+fields, new endpoints, and compatible bug fixes remain in the current version.
 
 During a breaking migration:
 
-1. Add `/api/v2` alongside `/api/v1`.
-2. Publish a deprecation date.
-3. Measure remaining v1 usage.
-4. Remove v1 in a later major product release.
+1. Add the replacement path, such as `/api/v2`, alongside the existing path.
+2. Publish a deprecation date and migration guidance.
+3. Measure remaining use of the old path.
+4. Remove the old path only after the announced window, in a product release
+   carrying the required breaking-change SemVer signal.
 
-The product SemVer major and HTTP API major are related but intentionally not
-forced to have the same number.
+The HTTP API major and product SemVer major remain related compatibility signals,
+not the same counter.
 
-## MCP tool contract versioning
+## MCP tool compatibility
 
-Prefer additive evolution:
+Prefer additive MCP evolution:
 
-- Add optional input fields with defaults.
-- Add output fields without changing existing meaning.
-- Do not silently reinterpret fields.
-- Do not remove enum values without a replacement period.
-- Preserve structured error codes.
+- add optional input fields with safe defaults;
+- add output fields without changing existing meaning;
+- do not silently reinterpret fields;
+- do not remove enum values without a replacement period; and
+- preserve structured error codes and their meaning.
 
-For an unavoidable breaking change, publish a replacement tool while retaining
-the original temporarily:
+For an unavoidable breaking contract, publish a replacement tool while retaining
+the original temporarily, for example:
 
 ```text
 image.generate
 image.generate_v2
 ```
 
-The version suffix is a last resort, not a default naming convention.
+A suffix is a last resort, not the default naming convention. Tool publication
+versions remain immutable registry identities independent of both the stable MCP
+tool name and product SemVer.
 
-## Background job versioning
+**Open decision:** the exact public MCP/tool compatibility and deprecation window,
+including notice, usage-measurement, and removal criteria, is not yet approved.
+That decision does not reopen or block the approved `0.1.0` release automation,
+but it must be resolved before Relay makes a public MCP compatibility promise.
 
-Persist enough information to safely execute jobs across deployments:
+## Tool publication and provider-policy compatibility
+
+A published tool version identifies an immutable public contract and handler
+binding. Compatible product releases may continue to serve it without changing
+that tool version. A behavior-changing contract needs a new tool publication
+version even when the stable MCP name can remain additive-compatible.
+
+Provider/model identities, routing policy revisions, capability declarations,
+and pricing or meter inputs must be retained as immutable snapshots or durable
+references. Historical runs must remain explainable after the active provider or
+routing policy changes; product SemVer alone is not sufficient provenance.
+
+## Background job compatibility
+
+Jobs that can survive a deployment boundary must persist enough identity for a
+new worker to interpret them safely, including the equivalent of:
 
 ```text
 job_type
@@ -204,63 +323,55 @@ handler_version
 created_by_app_version
 ```
 
-Workers should either:
+Workers must either support all non-expired queued payload versions or upgrade
+older payloads through explicit, tested adapters before execution. A deployment
+must not strand, silently reinterpret, or corrupt queued work merely because the
+product release changed.
 
-- Support all non-expired queued payload versions, or
-- Upgrade old payloads through explicit adapters before execution.
+## Artifact compatibility
 
-A deployment must not strand queued jobs merely because the current application
-release changed.
+Artifact versions are immutable domain records and do not use SemVer. The
+artifact versioning model should retain:
 
-## Artifact versioning
+- a globally unique `artifact_version_id`;
+- a per-artifact monotonic sequence;
+- an immutable object key;
+- an optional `parent_version_id`;
+- source-run and output-set provenance; and
+- optimistic concurrency against the current version.
 
-Artifact versions are immutable domain records and do not use SemVer.
+S3-native version IDs may be recorded as storage evidence, but they are not the
+application's artifact-versioning mechanism and never substitute for Relay's
+domain identity.
 
-Use:
+## Database compatibility
 
-- A globally unique `artifact_version_id`
-- A per-artifact monotonic sequence
-- An immutable object key
-- Optional `parent_version_id`
-- Source run and output-set provenance
-- Optimistic concurrency against the current version
-
-S3-native version IDs may be recorded but are not the application versioning
-mechanism.
-
-## Database migrations
-
-Use monotonic, immutable migration identifiers. Never edit a migration after it
-has been applied outside a disposable development database.
+Use monotonic, immutable migration identifiers. Before the first production
+deployment, the implementation baseline may be consolidated as documented in
+[`implementation-status.md`](implementation-status.md). Once a migration has
+been applied to production or another non-disposable environment, never edit or
+reuse its identifier.
 
 Prefer expand-and-contract migrations:
 
 1. Add compatible schema.
-2. Deploy code supporting old and new forms.
-3. Backfill.
+2. Deploy code that supports the old and new forms.
+3. Backfill with resumable, observable work.
 4. Switch reads and writes.
-5. Remove old schema in a later release.
+5. Remove the old schema in a later compatible deployment sequence.
 
-Record the current migration state separately from the product SemVer.
+Record migration state and the release identity that applied it separately from
+product SemVer. A migration does not force a product major bump when rolling
+deployments and rollback remain compatible.
 
-## Legal and entitlement versions
+## Legal, entitlement, and policy compatibility
 
-Legal documents need immutable acceptance records based on document version and
-content hash.
+Legal documents require immutable acceptance records containing the effective
+document version and content hash. Editing text in place must never alter what a
+historical acceptance means.
 
-Plan and entitlement definitions also need historical identity. A plan named
-`pro` may change over time, so subscriptions or grants should reference a
-catalog version or snapshot of granted entitlements rather than assuming the
-current `pro` definition always applied.
-
-## Decisions required before release automation
-
-1. Confirm `0.1.0` as the first internal release.
-2. Decide whether backward-compatible pre-1.0 features increment minor or patch.
-3. Confirm Git tags as the canonical release source rather than a committed
-   `VERSION` file.
-4. Decide whether every merge to `main` publishes only an immutable SHA image or
-   also a prerelease version.
-5. Decide who or what creates official release tags.
-6. Define the compatibility and deprecation window for MCP tools before public
-   availability.
+Plan and entitlement definitions also require historical identity. A plan named
+`pro` may change over time, so subscriptions and grants must reference a catalog
+version or immutable snapshot of granted entitlements rather than assuming the
+current definition always applied. Provider, routing, pricing, and meter policies
+follow the same historical-explainability rule.

@@ -13,6 +13,7 @@ import {
 import type { ApplicationServices } from "@relay/application/services";
 import {
   cancelRunResultSchema,
+  completeArtifactUploadResultSchema,
   type ContractSchema,
   ContractValidationError,
   createArtifactUploadRequestSchema,
@@ -40,6 +41,7 @@ import {
 } from "@relay/contracts";
 import {
   cancelRunInputSchema,
+  completeArtifactUploadInputSchema,
   createArtifactUploadInputSchema,
   createShareLinkInputSchema,
   executableToolResultSchema,
@@ -61,6 +63,7 @@ export const RELAY_MCP_TOOL_NAMES: Readonly<{
   getArtifact: "relay.artifacts.get";
   listArtifacts: "relay.artifacts.list";
   createArtifactUpload: "relay.artifacts.create_upload";
+  completeArtifactUpload: "relay.artifacts.complete_upload";
   createShareLink: "relay.artifacts.create_share_link";
   revokeShareLink: "relay.artifacts.revoke_share_link";
 }> = Object.freeze({
@@ -72,6 +75,7 @@ export const RELAY_MCP_TOOL_NAMES: Readonly<{
   getArtifact: "relay.artifacts.get",
   listArtifacts: "relay.artifacts.list",
   createArtifactUpload: "relay.artifacts.create_upload",
+  completeArtifactUpload: "relay.artifacts.complete_upload",
   createShareLink: "relay.artifacts.create_share_link",
   revokeShareLink: "relay.artifacts.revoke_share_link",
 });
@@ -94,6 +98,7 @@ export const RELAY_MCP_MANAGEMENT_TOOL_SCOPES: Readonly<
   [RELAY_MCP_TOOL_NAMES.getArtifact]: ["artifacts:read"],
   [RELAY_MCP_TOOL_NAMES.listArtifacts]: ["artifacts:read"],
   [RELAY_MCP_TOOL_NAMES.createArtifactUpload]: ["artifacts:write"],
+  [RELAY_MCP_TOOL_NAMES.completeArtifactUpload]: ["artifacts:write"],
   [RELAY_MCP_TOOL_NAMES.createShareLink]: ["artifacts:share"],
   [RELAY_MCP_TOOL_NAMES.revokeShareLink]: ["artifacts:share"],
 });
@@ -209,6 +214,13 @@ function resultOutcome(
   result: Readonly<Record<string, unknown>>,
 ): ToolOutcome {
   const kind = result.kind;
+  if (kind === "idempotency_conflict") {
+    return {
+      success: false,
+      text: "The idempotency key was already used for a different request.",
+      code: "idempotency_conflict",
+    };
+  }
   switch (toolName) {
     case RELAY_MCP_TOOL_NAMES.listTools:
       return kind === "ok"
@@ -313,6 +325,24 @@ function resultOutcome(
           code: "not_found",
           details: { resource: "artifact" },
         };
+    case RELAY_MCP_TOOL_NAMES.completeArtifactUpload:
+      return kind === "completed"
+        ? { success: true, text: "Upload completion was recorded." }
+        : kind === "pending"
+        ? { success: true, text: "The upload is still pending." }
+        : kind === "verification_failed"
+        ? {
+          success: false,
+          text: "The uploaded object failed verification.",
+          code: "upload_verification_failed",
+          details: { reason: result.reason as string },
+        }
+        : {
+          success: false,
+          text: "The upload was not found.",
+          code: "not_found",
+          details: { resource: "upload" },
+        };
     case RELAY_MCP_TOOL_NAMES.createShareLink:
       return kind === "created"
         ? { success: true, text: "Share link created." }
@@ -367,6 +397,12 @@ async function callManagementTool<T>(
         details: outcome.details,
       });
   } catch (error) {
+    if (error instanceof McpInputError) {
+      return toolErrorResult(
+        "invalid_request",
+        "The required idempotency metadata is missing or invalid.",
+      );
+    }
     if (error instanceof ContractValidationError) {
       return toolErrorResult(
         "invalid_request",
@@ -457,6 +493,14 @@ function suppliedIdempotencyKey(context: ServerContext): string | undefined {
     throw new McpInputError("MCP idempotency key must be a string");
   }
   return value;
+}
+
+function requireMcpIdempotencyKey(context: ServerContext): string {
+  const value = suppliedIdempotencyKey(context);
+  if (value === undefined) {
+    throw new McpInputError("MCP idempotency key is required");
+  }
+  return checkedIdempotencyKey(value);
 }
 
 function executableError(
@@ -700,14 +744,14 @@ export async function createRelayMcpServer(
         "Create metadata and a short-lived direct object-storage upload authorization. File bytes are not accepted.",
       inputSchema: createArtifactUploadInputSchema,
       outputSchema: fromJsonSchema(createArtifactUploadResultSchema.jsonSchema),
-      annotations: { readOnlyHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, idempotentHint: true },
       _meta: requiredScopeMetadata(
         RELAY_MCP_MANAGEMENT_TOOL_SCOPES[
           RELAY_MCP_TOOL_NAMES.createArtifactUpload
         ],
       ),
     },
-    (args) =>
+    (args, context) =>
       callManagementTool(
         grantedScopes,
         RELAY_MCP_MANAGEMENT_TOOL_SCOPES[
@@ -719,6 +763,41 @@ export async function createRelayMcpServer(
           services.artifacts.createUpload(
             identity,
             createArtifactUploadRequestSchema.parse(args),
+            requireMcpIdempotencyKey(context),
+          ),
+      ),
+  );
+
+  server.registerTool(
+    RELAY_MCP_TOOL_NAMES.completeArtifactUpload,
+    {
+      title: "Complete a Relay artifact upload",
+      description:
+        "Verify a direct upload and make the uploaded artifact version available.",
+      inputSchema: completeArtifactUploadInputSchema,
+      outputSchema: fromJsonSchema(
+        completeArtifactUploadResultSchema.jsonSchema,
+      ),
+      annotations: { readOnlyHint: false, idempotentHint: true },
+      _meta: requiredScopeMetadata(
+        RELAY_MCP_MANAGEMENT_TOOL_SCOPES[
+          RELAY_MCP_TOOL_NAMES.completeArtifactUpload
+        ],
+      ),
+    },
+    (args, context) =>
+      callManagementTool(
+        grantedScopes,
+        RELAY_MCP_MANAGEMENT_TOOL_SCOPES[
+          RELAY_MCP_TOOL_NAMES.completeArtifactUpload
+        ],
+        RELAY_MCP_TOOL_NAMES.completeArtifactUpload,
+        completeArtifactUploadResultSchema,
+        () =>
+          services.artifacts.completeUpload(
+            identity,
+            args.uploadId,
+            requireMcpIdempotencyKey(context),
           ),
       ),
   );
@@ -730,14 +809,14 @@ export async function createRelayMcpServer(
       description: "Create a revocable share link for a workspace artifact.",
       inputSchema: createShareLinkInputSchema,
       outputSchema: fromJsonSchema(createShareLinkResultSchema.jsonSchema),
-      annotations: { readOnlyHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, idempotentHint: true },
       _meta: requiredScopeMetadata(
         RELAY_MCP_MANAGEMENT_TOOL_SCOPES[
           RELAY_MCP_TOOL_NAMES.createShareLink
         ],
       ),
     },
-    (args) =>
+    (args, context) =>
       callManagementTool(
         grantedScopes,
         RELAY_MCP_MANAGEMENT_TOOL_SCOPES[
@@ -749,6 +828,7 @@ export async function createRelayMcpServer(
           services.artifacts.createShareLink(
             identity,
             createShareLinkRequestSchema.parse(args),
+            requireMcpIdempotencyKey(context),
           ),
       ),
   );
@@ -767,7 +847,7 @@ export async function createRelayMcpServer(
         ],
       ),
     },
-    (args) =>
+    (args, context) =>
       callManagementTool(
         grantedScopes,
         RELAY_MCP_MANAGEMENT_TOOL_SCOPES[
@@ -775,7 +855,13 @@ export async function createRelayMcpServer(
         ],
         RELAY_MCP_TOOL_NAMES.revokeShareLink,
         revokeShareLinkResultSchema,
-        () => services.artifacts.revokeShareLink(identity, args.shareLinkId),
+        () =>
+          services.artifacts.revokeShareLink(
+            identity,
+            args.artifactId,
+            args.shareLinkId,
+            requireMcpIdempotencyKey(context),
+          ),
       ),
   );
 

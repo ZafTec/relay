@@ -6,6 +6,8 @@ import { Button, LinkButton } from "../../components/ui/Button";
 import { InlineNotice } from "../../components/ui/InlineNotice";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { StatusBadge } from "../../components/ui/StatusBadge";
+import { httpArtifactsAdapter } from "../../lib/api/artifacts";
+import { httpRunsAdapter } from "../../lib/api/runs";
 import {
   httpToolDetailAdapter,
   type ToolDetail,
@@ -13,6 +15,12 @@ import {
   type ToolDetailLoadResult,
   type ToolLifecycle,
 } from "../../lib/api/tools";
+import {
+  isProductionToolKey,
+  ToolExecutionComposer,
+  type ToolArtifactsAdapter,
+  type ToolRunsAdapter,
+} from "./ToolExecutionComposer";
 import "./tools.css";
 
 type DetailPageState =
@@ -21,6 +29,8 @@ type DetailPageState =
 
 export interface ToolDetailPageProps {
   readonly toolAdapter?: ToolDetailAdapter;
+  readonly runsAdapter?: ToolRunsAdapter;
+  readonly artifactsAdapter?: ToolArtifactsAdapter;
   readonly toolKey?: string;
 }
 
@@ -44,7 +54,7 @@ function lifecycleBadge(lifecycle: ToolLifecycle) {
 }
 
 function pageHeading(state: DetailPageState, toolKey: string): string {
-  if (state.kind === "found") return state.tool.key;
+  if (state.kind === "found") return state.tool.name;
   if (state.kind === "not-found") return "Tool not found";
   if (state.kind === "degraded") return "Tool contract unavailable";
   return toolKey.length > 0 ? toolKey : "Tool contract";
@@ -54,23 +64,47 @@ function schemaText(schema: ToolDetail["inputSchema"]): string {
   return JSON.stringify(schema, null, 2);
 }
 
-function ToolContract({ tool }: { readonly tool: ToolDetail }) {
+function ToolContract({
+  tool,
+  runsAdapter,
+  artifactsAdapter,
+  onAuthExpired,
+}: {
+  readonly tool: ToolDetail;
+  readonly runsAdapter: ToolRunsAdapter;
+  readonly artifactsAdapter: ToolArtifactsAdapter;
+  readonly onAuthExpired: () => void;
+}) {
   return (
     <>
-      <section
-        className="tool-execution-state"
-        aria-labelledby="tool-execution-title"
-      >
-        <div>
-          <h2 id="tool-execution-title">Execution unavailable</h2>
-          <p>
-            Execution is unavailable until a real provider and meter policy are
-            configured.
-          </p>
-        </div>
-        <StatusBadge tone="pending">Read only</StatusBadge>
-      </section>
+      {isProductionToolKey(tool.key)
+        ? (
+          <ToolExecutionComposer
+            key={tool.key}
+            tool={{ ...tool, key: tool.key }}
+            runsAdapter={runsAdapter}
+            artifactsAdapter={artifactsAdapter}
+            onAuthExpired={onAuthExpired}
+          />
+        )
+        : (
+          <section
+            className="tool-execution-state"
+            aria-labelledby="tool-execution-title"
+          >
+            <div>
+              <h2 id="tool-execution-title">Execution unavailable</h2>
+              <p>
+                Execution is unavailable until a real provider and meter policy are
+                configured.
+              </p>
+            </div>
+            <StatusBadge tone="pending">Read only</StatusBadge>
+          </section>
+        )}
 
+      <details className="tool-reference" open={!isProductionToolKey(tool.key)}>
+        <summary>Tool contract <span>Version, limits, and API schemas</span></summary>
       <section
         className="tool-contract-section"
         aria-labelledby="tool-facts-title"
@@ -151,12 +185,15 @@ function ToolContract({ tool }: { readonly tool: ToolDetail }) {
           </pre>
         </section>
       </div>
+      </details>
     </>
   );
 }
 
 export function ToolDetailPage({
   toolAdapter = httpToolDetailAdapter,
+  runsAdapter = httpRunsAdapter,
+  artifactsAdapter = httpArtifactsAdapter,
   toolKey,
 }: ToolDetailPageProps) {
   const params = useParams<{ toolKey: string }>();
@@ -215,7 +252,7 @@ export function ToolDetailPage({
           <div>
             <h1>{heading}</h1>
             {state.kind === "found"
-              ? <p className="tool-detail-header__name">{state.tool.name}</p>
+              ? <p className="tool-detail-header__name"><code>{state.tool.key}</code> · v{state.tool.version}</p>
               : null}
           </div>
           {state.kind === "found" ? lifecycleBadge(state.tool.lifecycle) : null}
@@ -283,7 +320,16 @@ export function ToolDetailPage({
           )
           : null}
 
-        {state.kind === "found" ? <ToolContract tool={state.tool} /> : null}
+        {state.kind === "found"
+          ? (
+            <ToolContract
+              tool={state.tool}
+              runsAdapter={runsAdapter}
+              artifactsAdapter={artifactsAdapter}
+              onAuthExpired={() => expireSession(sessionId)}
+            />
+          )
+          : null}
       </div>
     </div>
   );

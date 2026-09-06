@@ -16,11 +16,6 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 export const RUN_STATUSES = JOB_STATUSES;
 export type RunStatus = JobStatus;
 
-/** @deprecated Use `RUN_STATUSES`; retained for existing domain consumers. */
-export const TOOL_RUN_STATUSES = RUN_STATUSES;
-/** @deprecated Use `RunStatus`; retained for existing domain consumers. */
-export type ToolRunStatus = RunStatus;
-
 export const TERMINAL_RUN_STATUSES = [
   "succeeded",
   "failed",

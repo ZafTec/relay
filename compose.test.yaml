@@ -26,7 +26,16 @@ x-runtime-environment: &runtime-environment
   APP_VERSION: 0.0.0-ci
   GIT_SHA: ${RELAY_CI_GIT_SHA:-ci-local}
   OTEL_DENO: "false"
+  APP_ENV: test
   DEPLOYMENT_ENVIRONMENT_NAME: ci
+  S3_ENDPOINT: http://minio:9000
+  S3_BUCKET: relay-artifacts
+  S3_ACCESS_KEY_ID: relay_dev_only
+  S3_SECRET_ACCESS_KEY: relay_dev_only
+  S3_FORCE_PATH_STYLE: "true"
+  S3_BUCKET_VERSIONING: enabled
+  ARTIFACT_WORKSPACE_MAX_BYTES: "1073741824"
+  ARTIFACT_MAX_UPLOAD_BYTES: "104857600"
 
 services:
   postgres:
@@ -141,10 +150,16 @@ services:
       GOOGLE_CLIENT_SECRET: ci-google-secret-not-used
       GITHUB_CLIENT_ID: ci-github-client
       GITHUB_CLIENT_SECRET: ci-github-secret-not-used
+      S3_PUBLIC_ENDPOINT: http://minio:9000
+      SHARE_TOKEN_ACTIVE_VERSION: "1"
+      SHARE_TOKEN_KEYS: '{"1":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}'
+      RELAY_PROCESS_ROLE: api
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
   worker:
@@ -152,11 +167,15 @@ services:
     command: ["worker"]
     environment:
       <<: *runtime-environment
+      AZURE_API_KEY: ci-only-azure-key-not-used
+      RELAY_PROCESS_ROLE: worker
     stop_grace_period: 30s
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
   backend-probe:

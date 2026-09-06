@@ -5,7 +5,12 @@ import {
   type McpServer,
 } from "@modelcontextprotocol/server";
 import type { ApplicationServices } from "@relay/application/services";
-import type { ArtifactDetail, RunDetail, ToolDetail } from "@relay/contracts";
+import {
+  type ArtifactDetail,
+  errorEnvelopeSchema,
+  type RunDetail,
+  type ToolDetail,
+} from "@relay/contracts";
 import {
   createRelayMcpServer,
   RELAY_MCP_IDEMPOTENCY_META_KEY,
@@ -25,6 +30,8 @@ const TOOL_VERSION_ID = publicId("tver", "2");
 const RUN_ID = publicId("run", "3");
 const ARTIFACT_ID = publicId("art", "4");
 const ARTIFACT_VERSION_ID = publicId("aver", "5");
+const UPLOAD_ID = publicId("upl", "6");
+const SHARE_LINK_ID = publicId("share", "7");
 const NOW = "2026-08-24T10:00:00.000Z";
 
 const TOOL: ToolDetail = {
@@ -193,6 +200,7 @@ Deno.test("management tool names and scopes are stable", () => {
     "relay.artifacts.get",
     "relay.artifacts.list",
     "relay.artifacts.create_upload",
+    "relay.artifacts.complete_upload",
     "relay.artifacts.create_share_link",
     "relay.artifacts.revoke_share_link",
   ]);
@@ -205,6 +213,7 @@ Deno.test("management tool names and scopes are stable", () => {
     "relay.artifacts.get": ["artifacts:read"],
     "relay.artifacts.list": ["artifacts:read"],
     "relay.artifacts.create_upload": ["artifacts:write"],
+    "relay.artifacts.complete_upload": ["artifacts:write"],
     "relay.artifacts.create_share_link": ["artifacts:share"],
     "relay.artifacts.revoke_share_link": ["artifacts:share"],
   });
@@ -229,6 +238,20 @@ Deno.test("official v2 client discovers only stable tools without catalog entrie
       listed.tools.some((tool) => tool.name === "relay.test.execute"),
       false,
     );
+    for (
+      const name of [
+        RELAY_MCP_TOOL_NAMES.createArtifactUpload,
+        RELAY_MCP_TOOL_NAMES.completeArtifactUpload,
+        RELAY_MCP_TOOL_NAMES.createShareLink,
+        RELAY_MCP_TOOL_NAMES.revokeShareLink,
+      ]
+    ) {
+      assertEquals(
+        listed.tools.find((tool) => tool.name === name)?.annotations
+          ?.idempotentHint,
+        true,
+      );
+    }
   } finally {
     await connection.close();
   }
@@ -364,6 +387,208 @@ Deno.test("canonical cross-field validation rejects invalid share requests", asy
       },
     });
     assertEquals(result.isError, true);
+    assertEquals(called, false);
+  } finally {
+    await connection.close();
+  }
+});
+
+Deno.test("artifact mutation metadata errors are stable and do not call services", async () => {
+  let called = false;
+  const server = await createRelayMcpServer({
+    services: createServices({
+      artifacts: {
+        createUpload: () => {
+          called = true;
+          return Promise.resolve({ kind: "not_found" });
+        },
+      },
+    }),
+    principal: {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      scopes: ["artifacts:write"],
+    },
+  });
+  const connection = await connectClient(server);
+  const request = {
+    name: RELAY_MCP_TOOL_NAMES.createArtifactUpload,
+    arguments: {
+      target: { kind: "new_artifact", name: "Image", mediaKind: "image" },
+      sizeBytes: 4,
+      mimeType: "image/png",
+      sha256: "a".repeat(64),
+      contentMd5: `${"A".repeat(22)}==`,
+    },
+  } as const;
+  try {
+    const missing = await connection.client.callTool(request);
+    const invalid = await connection.client.callTool({
+      ...request,
+      _meta: { [RELAY_MCP_IDEMPOTENCY_META_KEY]: " invalid" },
+    });
+    for (const result of [missing, invalid]) {
+      assertEquals(result.isError, true);
+      const envelope = errorEnvelopeSchema.parse(result.structuredContent);
+      assertEquals(envelope.error.code, "invalid_request");
+      assertEquals(
+        envelope.error.message,
+        "The required idempotency metadata is missing or invalid.",
+      );
+      assertEquals(envelope.error.details, {});
+      assertEquals(JSON.stringify(result).includes(ARTIFACT_ID), false);
+    }
+    assertEquals(called, false);
+  } finally {
+    await connection.close();
+  }
+});
+
+Deno.test("artifact completion tool forwards idempotency and replay state", async () => {
+  let received: unknown;
+  const server = await createRelayMcpServer({
+    services: createServices({
+      artifacts: {
+        completeUpload: (identity, uploadId, idempotencyKey) => {
+          received = { identity, uploadId, idempotencyKey };
+          return Promise.resolve({
+            kind: "completed",
+            artifactId: ARTIFACT_ID,
+            artifactVersionId: ARTIFACT_VERSION_ID,
+            becameCurrent: true,
+            replayed: true,
+          });
+        },
+      },
+    }),
+    principal: {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      scopes: ["artifacts:write"],
+    },
+  });
+  const connection = await connectClient(server);
+  try {
+    const result = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.completeArtifactUpload,
+      arguments: { uploadId: UPLOAD_ID },
+      _meta: {
+        [RELAY_MCP_IDEMPOTENCY_META_KEY]: "artifact-complete-request-1",
+      },
+    });
+    assertEquals(result.isError, undefined);
+    assertEquals(result.structuredContent, {
+      kind: "completed",
+      artifactId: ARTIFACT_ID,
+      artifactVersionId: ARTIFACT_VERSION_ID,
+      becameCurrent: true,
+      replayed: true,
+    });
+    assertEquals(received, {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      uploadId: UPLOAD_ID,
+      idempotencyKey: "artifact-complete-request-1",
+    });
+  } finally {
+    await connection.close();
+  }
+});
+
+Deno.test("artifact revoke binds targets and sanitizes key conflicts", async () => {
+  const otherArtifactId = publicId("art", "a");
+  let claimedTarget: string | undefined;
+  const calls: unknown[] = [];
+  const server = await createRelayMcpServer({
+    services: createServices({
+      artifacts: {
+        revokeShareLink: (
+          identity,
+          artifactId,
+          shareLinkId,
+          idempotencyKey,
+        ) => {
+          calls.push({ identity, artifactId, shareLinkId, idempotencyKey });
+          const target = `${artifactId}:${shareLinkId}`;
+          if (claimedTarget === undefined) {
+            claimedTarget = target;
+            return Promise.resolve({ kind: "revoked", replayed: false });
+          }
+          return Promise.resolve(
+            claimedTarget === target
+              ? { kind: "revoked", replayed: true }
+              : { kind: "idempotency_conflict" },
+          );
+        },
+      },
+    }),
+    principal: {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      scopes: ["artifacts:share"],
+    },
+  });
+  const connection = await connectClient(server);
+  const call = (artifactId: string) =>
+    connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.revokeShareLink,
+      arguments: { artifactId, shareLinkId: SHARE_LINK_ID },
+      _meta: {
+        [RELAY_MCP_IDEMPOTENCY_META_KEY]: "artifact-revoke-same-key",
+      },
+    });
+  try {
+    const first = await call(ARTIFACT_ID);
+    assertEquals(first.structuredContent, {
+      kind: "revoked",
+      replayed: false,
+    });
+    const replay = await call(ARTIFACT_ID);
+    assertEquals(replay.structuredContent, {
+      kind: "revoked",
+      replayed: true,
+    });
+
+    const conflict = await call(otherArtifactId);
+    assertEquals(conflict.isError, true);
+    const envelope = errorEnvelopeSchema.parse(conflict.structuredContent);
+    assertEquals(envelope.error.code, "idempotency_conflict");
+    assertEquals(envelope.error.details, {});
+    assertEquals(JSON.stringify(conflict).includes(ARTIFACT_ID), false);
+    assertEquals(JSON.stringify(conflict).includes(otherArtifactId), false);
+    assertEquals(calls.length, 3);
+  } finally {
+    await connection.close();
+  }
+});
+
+Deno.test("artifact mutation scope denial precedes idempotency validation", async () => {
+  let called = false;
+  const server = await createRelayMcpServer({
+    services: createServices({
+      artifacts: {
+        completeUpload: () => {
+          called = true;
+          return Promise.resolve({ kind: "not_found" });
+        },
+      },
+    }),
+    principal: {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      scopes: ["artifacts:read"],
+    },
+  });
+  const connection = await connectClient(server);
+  try {
+    const result = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.completeArtifactUpload,
+      arguments: { uploadId: UPLOAD_ID },
+    });
+    assertEquals(result.isError, true);
+    const envelope = errorEnvelopeSchema.parse(result.structuredContent);
+    assertEquals(envelope.error.code, "authentication_required");
+    assertEquals(envelope.error.details, {});
+    assert(
+      result.content.some((item) =>
+        item.type === "text" && item.text.includes("artifacts:write")
+      ),
+    );
     assertEquals(called, false);
   } finally {
     await connection.close();

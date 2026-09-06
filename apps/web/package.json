@@ -16,22 +16,22 @@
     "check": "npm run tokens:check && tsc -b && npm run test:coverage"
   },
   "dependencies": {
-    "@better-auth/oauth-provider": "1.7.1",
-    "better-auth": "1.7.1",
+    "@better-auth/oauth-provider": "1.7.2",
+    "better-auth": "1.7.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "react-router-dom": "7.18.2"
+    "react-router-dom": "7.18.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.62.1",
     "@testing-library/jest-dom": "7.0.1",
-    "@testing-library/react": "16.3.2",
+    "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.6",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
-    "@vitejs/plugin-react": "6.1.0",
+    "@vitejs/plugin-react": "6.1.1",
     "@vitest/coverage-v8": "4.1.11",
     "axe-core": "4.13.0",
     "jsdom": "30.0.1",

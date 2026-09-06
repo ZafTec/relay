@@ -9,3 +9,4 @@ coverage/
 .ci-artifacts/
 *.log
 .vscode/
+vps_context/

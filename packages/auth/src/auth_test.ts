@@ -43,7 +43,7 @@ function activeOrganizationId(session: unknown): string | null | undefined {
 }
 
 // Initialize the test-only Better Auth context before any short-lived auth
-// instance is closed. Better Auth 1.7.1's optional OpenTelemetry integration
+// instance is closed. Better Auth's optional OpenTelemetry integration
 // can otherwise retain the first adapter context observed by the test process.
 const sharedTestPool = hasDatabase ? testPool() : undefined;
 const sharedTestAuth = sharedTestPool === undefined
@@ -83,16 +83,10 @@ async function createTestUser(
 }
 
 async function cleanupUser(pool: DatabasePool, userId: string): Promise<void> {
-  const { rows } = await pool.query<{ organization_id: string }>(
-    "select organization_id from relay.personal_workspaces where user_id = $1",
-    [userId],
-  );
+  // Personal-workspace entitlement grants are immutable governance history.
+  // Deleting the user removes sessions/membership and the personal mapping;
+  // the disposable live-test database may retain the now-unowned workspace.
   await pool.query('delete from auth."user" where id = $1', [userId]);
-  if (rows[0]) {
-    await pool.query("delete from auth.organization where id = $1", [
-      rows[0].organization_id,
-    ]);
-  }
 }
 
 Deno.test("production auth config contains only Google and GitHub", async () => {

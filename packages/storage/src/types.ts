@@ -14,6 +14,7 @@ export interface ObjectHead {
 export interface CreateUploadUrlRequest {
   readonly key: string;
   readonly uploadId: string;
+  readonly sizeBytes: number;
   readonly contentType: string;
   readonly contentMd5: string;
   readonly sha256Hex: string;

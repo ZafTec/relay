@@ -1,5 +1,6 @@
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
+import { can, limit } from "@relay/metering";
 import {
   ensurePersonalWorkspace,
   personalWorkspaceSlug,
@@ -7,11 +8,10 @@ import {
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
 const hasDatabase = databaseUrl !== undefined;
-
-function testPool(): DatabasePool {
+function testPool(url = databaseUrl!): DatabasePool {
   return createDatabasePool(
     {
-      url: new URL(databaseUrl!),
+      url: new URL(url),
       poolMax: 5,
       connectTimeoutMs: 5_000,
       statementTimeoutMs: 30_000,
@@ -34,15 +34,28 @@ async function createUser(pool: DatabasePool): Promise<string> {
   return rows[0].id;
 }
 
+async function assertNoAutomaticGrants(
+  pool: DatabasePool,
+  workspaceId: string,
+) {
+  const { rows } = await pool.query(
+    "select id from relay.entitlement_grants where workspace_id = $1",
+    [workspaceId],
+  );
+  assertEquals(rows, []);
+  return rows;
+}
+
 async function cleanup(pool: DatabasePool, userId: string): Promise<void> {
   const { rows } = await pool.query<{ organization_id: string | null }>(
     "select organization_id from relay.personal_workspaces where user_id = $1",
     [userId],
   );
+  const organizationId = rows[0]?.organization_id;
   await pool.query('delete from auth."user" where id = $1', [userId]);
-  if (rows[0]?.organization_id) {
+  if (organizationId) {
     await pool.query("delete from auth.organization where id = $1", [
-      rows[0].organization_id,
+      organizationId,
     ]);
   }
 }
@@ -59,7 +72,7 @@ Deno.test("personal workspace slugs are stable and opaque", async () => {
 
 Deno.test({
   name:
-    "ensurePersonalWorkspace creates an organization and owner membership for a new user",
+    "ensurePersonalWorkspace creates an organization, owner membership, without execution grants for a new user",
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
@@ -75,6 +88,27 @@ Deno.test({
       );
       assertEquals(membership.rows.length, 1);
       assertEquals(membership.rows[0].role, "owner");
+      // Signing in establishes ownership, never a paid-tool allowance.
+      await ensurePersonalWorkspace(pool, userId);
+      assertEquals(
+        await can(pool, {
+          workspaceId: organizationId,
+          actorUserId: userId,
+          capability: "tools.execute",
+        }),
+        { kind: "denied" },
+      );
+      for (const metric of ["images.generated", "ocr.requests"]) {
+        assertEquals(
+          await limit(pool, {
+            workspaceId: organizationId,
+            actorUserId: userId,
+            metric,
+          }),
+          { kind: "not_configured" },
+        );
+      }
+      await assertNoAutomaticGrants(pool, organizationId);
     } finally {
       if (userId) await cleanup(pool, userId);
       await pool.end();
@@ -84,7 +118,7 @@ Deno.test({
 
 Deno.test({
   name:
-    "ensurePersonalWorkspace is idempotent and returns the same organization",
+    "ensurePersonalWorkspace is idempotent and does not duplicate grants on repeat",
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
@@ -93,8 +127,10 @@ Deno.test({
       userId = await createUser(pool);
 
       const first = await ensurePersonalWorkspace(pool, userId);
+      const initialGrants = await assertNoAutomaticGrants(pool, first);
       const second = await ensurePersonalWorkspace(pool, userId);
       assertEquals(second, first);
+      assertEquals(await assertNoAutomaticGrants(pool, first), initialGrants);
 
       const members = await pool.query(
         `select id from auth.member where "organizationId" = $1 and "userId" = $2`,
@@ -114,7 +150,7 @@ Deno.test({
 
 Deno.test({
   name:
-    "concurrent ensurePersonalWorkspace calls create one organization and membership",
+    "concurrent first-sign-in provisioning creates one workspace and no implicit allowances",
   ignore: !hasDatabase,
   fn: async () => {
     const pool = testPool();
@@ -141,6 +177,7 @@ Deno.test({
         [results[0], userId],
       );
       assertEquals(members.rows.length, 1);
+      await assertNoAutomaticGrants(pool, results[0]);
 
       const organizations = await pool.query(
         "select id from auth.organization where slug = $1",

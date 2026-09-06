@@ -1,0 +1,47 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/v17.6.0/schemas/config.json",
+  "release-type": "simple",
+  "initial-version": "0.1.0",
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": false,
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "include-v-in-release-name": true,
+  "draft": true,
+  "force-tag-creation": true,
+  "changelog-type": "github",
+  "changelog-sections": [
+    {
+      "type": "feat",
+      "section": "Features"
+    },
+    {
+      "type": "fix",
+      "section": "Bug Fixes"
+    },
+    {
+      "type": "perf",
+      "section": "Performance"
+    },
+    {
+      "type": "deps",
+      "section": "Dependencies"
+    },
+    {
+      "type": "docs",
+      "section": "Documentation"
+    },
+    {
+      "type": "chore",
+      "section": "Maintenance",
+      "hidden": true
+    }
+  ],
+  "packages": {
+    ".": {
+      "component": "relay",
+      "release-type": "simple",
+      "version-file": "version.txt"
+    }
+  }
+}

@@ -524,7 +524,17 @@ export async function reserveUsageForAdmission(
     };
   }
 
-  const at = await transactionTimestamp(transaction);
+  // Grant changes serialize with new reservations. Read the clock after the
+  // lock: transaction_timestamp can predate a revocation we waited behind.
+  await transaction.query(
+    `select pg_advisory_xact_lock_shared(
+      hashtextextended('relay.allowance:workspace:' || $1, 0))`,
+    [input.workspaceId],
+  );
+  const { rows: clock } = await transaction.query<{ now: Date }>(
+    "select clock_timestamp() as now",
+  );
+  const at = clock[0].now;
   const prepared = await prepareMetering(transaction, input, at);
   if ("kind" in prepared) return prepared;
   const window = periodWindow(at, prepared.estimate.period);

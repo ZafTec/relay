@@ -5342,7 +5342,7 @@ CREATE TABLE relay.governance_operation_idempotency (
     response jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT governance_operation_idempotency_idempotency_key_hash_check CHECK ((idempotency_key_hash ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT governance_operation_idempotency_operation_check CHECK ((operation = ANY (ARRAY['changelog.create'::text, 'changelog.revise'::text, 'changelog.publish'::text, 'changelog.unpublish'::text, 'legal_document.create'::text, 'legal_document.revise'::text, 'legal_document.publish'::text, 'legal_document.unpublish'::text]))),
+    CONSTRAINT governance_operation_idempotency_operation_check CHECK ((operation = ANY (ARRAY['changelog.create'::text, 'changelog.revise'::text, 'changelog.publish'::text, 'changelog.unpublish'::text, 'legal_document.create'::text, 'legal_document.revise'::text, 'legal_document.publish'::text, 'legal_document.unpublish'::text, 'capacity_policy.revise'::text]))),
     CONSTRAINT governance_operation_idempotency_request_fingerprint_check CHECK ((request_fingerprint ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT governance_operation_idempotency_response_check CHECK ((jsonb_typeof(response) = 'object'::text))
 );
@@ -7158,6 +7158,7 @@ REVOKE ALL ON FUNCTION relay.require_complete_tool_run_metering_route() FROM PUB
 REVOKE ALL ON FUNCTION relay.require_current_user_session(p_session_id text) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION relay.require_fresh_superadmin_session(p_operator_session_id text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION relay.require_fresh_superadmin_session(p_operator_session_id text) TO relay_app;
 
 REVOKE ALL ON FUNCTION relay.revoke_superadmin(p_target_user_id text, p_operator_session_id text, p_idempotency_key_hash text) FROM PUBLIC;
 GRANT ALL ON FUNCTION relay.revoke_superadmin(p_target_user_id text, p_operator_session_id text, p_idempotency_key_hash text) TO relay_app;
@@ -7232,7 +7233,7 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE relay.capacity_pools TO relay_app;
 
 GRANT SELECT,USAGE ON SEQUENCE relay.capacity_pools_id_seq TO relay_app;
 
-GRANT SELECT ON TABLE relay.entitlement_grants TO relay_app;
+GRANT SELECT,INSERT ON TABLE relay.entitlement_grants TO relay_app;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE relay.execution_capacity_leases TO relay_app;
 
@@ -7243,6 +7244,8 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE relay.execution_jobs TO relay_app;
 GRANT SELECT,USAGE ON SEQUENCE relay.execution_jobs_fifo_sequence_seq TO relay_app;
 
 GRANT SELECT,USAGE ON SEQUENCE relay.execution_jobs_id_seq TO relay_app;
+
+GRANT SELECT,INSERT ON TABLE relay.governance_operation_idempotency TO relay_app;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE relay.idempotency_records TO relay_app;
 
@@ -7330,14 +7333,713 @@ ALTER DEFAULT PRIVILEGES FOR ROLE relay_owner IN SCHEMA auth GRANT SELECT,INSERT
 
 ALTER DEFAULT PRIVILEGES FOR ROLE relay_owner IN SCHEMA relay REVOKE ALL ON SEQUENCES FROM relay_app;
 
-ALTER DEFAULT PRIVILEGES FOR ROLE relay_owner IN SCHEMA relay REVOKE ALL ON TABLES FROM relay_app;`;
+ALTER DEFAULT PRIVILEGES FOR ROLE relay_owner IN SCHEMA relay REVOKE ALL ON TABLES FROM relay_app;
+
+-- Pre-0.1.0 Relay MVP additions consolidated into the initial baseline.
+CREATE TABLE relay.artifact_storage_accounts (
+    workspace_id text NOT NULL,
+    limit_bytes bigint NOT NULL,
+    reserved_bytes bigint DEFAULT 0 NOT NULL,
+    committed_bytes bigint DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT artifact_storage_accounts_limit_bytes_check CHECK ((limit_bytes >= 0)),
+    CONSTRAINT artifact_storage_accounts_reserved_bytes_check CHECK ((reserved_bytes >= 0)),
+    CONSTRAINT artifact_storage_accounts_committed_bytes_check CHECK ((committed_bytes >= 0)),
+    CONSTRAINT artifact_storage_accounts_capacity_check CHECK ((((reserved_bytes)::numeric + (committed_bytes)::numeric) <= (limit_bytes)::numeric)),
+    CONSTRAINT artifact_storage_accounts_updated_at_check CHECK ((updated_at >= created_at))
+);
+
+ALTER TABLE ONLY relay.artifact_storage_accounts
+    ADD CONSTRAINT artifact_storage_accounts_pkey PRIMARY KEY (workspace_id);
+
+ALTER TABLE ONLY relay.artifact_storage_accounts
+    ADD CONSTRAINT artifact_storage_accounts_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES auth.organization(id) ON DELETE CASCADE;
+
+CREATE TABLE relay.artifact_storage_reservations (
+    id text NOT NULL,
+    workspace_id text NOT NULL,
+    operation_id text NOT NULL,
+    reserved_bytes bigint NOT NULL,
+    status text DEFAULT 'reserved'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    committed_at timestamp with time zone,
+    released_at timestamp with time zone,
+    decremented_at timestamp with time zone,
+    CONSTRAINT artifact_storage_reservations_id_check CHECK ((id ~ '^aqr_[0-9a-f]{32}$'::text)),
+    CONSTRAINT artifact_storage_reservations_operation_id_check CHECK (((char_length(btrim(operation_id)) >= 1) AND (char_length(btrim(operation_id)) <= 255) AND (operation_id !~ '[[:cntrl:]]'::text) AND (operation_id !~* '[a-z][a-z0-9+.-]*://'::text))),
+    CONSTRAINT artifact_storage_reservations_reserved_bytes_check CHECK ((reserved_bytes >= 0)),
+    CONSTRAINT artifact_storage_reservations_status_check CHECK ((status = ANY (ARRAY['reserved'::text, 'committed'::text, 'released'::text, 'decremented'::text]))),
+    CONSTRAINT artifact_storage_reservations_state_check CHECK ((((status = 'reserved'::text) AND (committed_at IS NULL) AND (released_at IS NULL) AND (decremented_at IS NULL)) OR ((status = 'committed'::text) AND (committed_at IS NOT NULL) AND (released_at IS NULL) AND (decremented_at IS NULL)) OR ((status = 'released'::text) AND (committed_at IS NULL) AND (released_at IS NOT NULL) AND (decremented_at IS NULL)) OR ((status = 'decremented'::text) AND (committed_at IS NOT NULL) AND (released_at IS NULL) AND (decremented_at IS NOT NULL) AND (decremented_at >= committed_at))))
+);
+
+ALTER TABLE ONLY relay.artifact_storage_reservations
+    ADD CONSTRAINT artifact_storage_reservations_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY relay.artifact_storage_reservations
+    ADD CONSTRAINT artifact_storage_reservations_workspace_id_id_key UNIQUE (workspace_id, id);
+
+ALTER TABLE ONLY relay.artifact_storage_reservations
+    ADD CONSTRAINT artifact_storage_reservations_workspace_operation_key UNIQUE (workspace_id, operation_id);
+
+ALTER TABLE ONLY relay.artifact_storage_reservations
+    ADD CONSTRAINT artifact_storage_reservations_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES relay.artifact_storage_accounts(workspace_id) ON DELETE RESTRICT;
+
+CREATE INDEX artifact_storage_reservations_active_idx ON relay.artifact_storage_reservations USING btree (workspace_id, created_at, id) WHERE (status = 'reserved'::text);
+
+CREATE TABLE relay.artifact_mutation_idempotency (
+    workspace_id text NOT NULL,
+    actor_user_id text NOT NULL,
+    operation text NOT NULL,
+    idempotency_key_hash text NOT NULL,
+    request_hash text NOT NULL,
+    response jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT artifact_mutation_idempotency_operation_check CHECK ((operation = ANY (ARRAY['create_upload'::text, 'complete_upload'::text, 'create_share'::text, 'revoke_share'::text]))),
+    CONSTRAINT artifact_mutation_idempotency_key_hash_check CHECK ((idempotency_key_hash ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT artifact_mutation_idempotency_request_hash_check CHECK ((request_hash ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT artifact_mutation_idempotency_response_check CHECK (((jsonb_typeof(response) = 'object'::text) AND (NOT relay.jsonb_contains_raw_url(response))))
+);
+
+ALTER TABLE ONLY relay.artifact_mutation_idempotency
+    ADD CONSTRAINT artifact_mutation_idempotency_pkey PRIMARY KEY (workspace_id, actor_user_id, operation, idempotency_key_hash);
+
+ALTER TABLE ONLY relay.artifact_mutation_idempotency
+    ADD CONSTRAINT artifact_mutation_idempotency_actor_user_id_fkey FOREIGN KEY (actor_user_id) REFERENCES auth."user"(id);
+
+ALTER TABLE ONLY relay.artifact_mutation_idempotency
+    ADD CONSTRAINT artifact_mutation_idempotency_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES auth.organization(id) ON DELETE CASCADE;
+
+-- Existing random-token links remain resolvable by hash but are not replayable.
+-- New deterministic links always set an explicit signing-key version.
+ALTER TABLE relay.share_links
+    ADD COLUMN token_key_version integer;
+
+ALTER TABLE relay.share_links
+    ADD CONSTRAINT share_links_token_key_version_check CHECK ((token_key_version > 0));
+
+ALTER TABLE relay.artifacts
+    ADD COLUMN purge_available_at timestamp with time zone;
+
+UPDATE relay.artifacts
+   SET purge_available_at = purge_after
+ WHERE purge_status IN ('pending', 'claimed', 'deleting_pending', 'deleting');
+
+CREATE INDEX artifacts_purge_retry_idx ON relay.artifacts USING btree (purge_available_at, created_at) WHERE (purge_status = 'deleting_pending'::text);
+
+ALTER TABLE relay.job_attempts
+    ADD COLUMN failure_code text;
+
+ALTER TABLE relay.job_attempts
+    ADD CONSTRAINT job_attempts_failure_code_check CHECK (((failure_code IS NULL) OR (failure_code ~ '^[a-z0-9][a-z0-9._:-]{0,127}$'::text)));
+
+ALTER TABLE relay.job_attempts
+    ADD CONSTRAINT job_attempts_submission_state_check CHECK ((submission_state = ANY (ARRAY['pending'::text, 'submitting'::text, 'submitted'::text, 'completed'::text, 'interrupted'::text, 'cancelled'::text, 'ambiguous'::text])));
+
+ALTER TABLE relay.job_attempts
+    ADD CONSTRAINT job_attempts_provider_idempotency_key_check CHECK (((provider_idempotency_key IS NULL) OR (((char_length(provider_idempotency_key) >= 1) AND (char_length(provider_idempotency_key) <= 512)) AND (provider_idempotency_key !~ '[[:cntrl:]]'::text) AND (provider_idempotency_key !~* '[a-z][a-z0-9+.-]*://'::text))));
+
+ALTER TABLE relay.job_attempts
+    ADD CONSTRAINT job_attempts_provider_operation_id_check CHECK (((provider_operation_id IS NULL) OR (((char_length(provider_operation_id) >= 1) AND (char_length(provider_operation_id) <= 512)) AND (provider_operation_id !~ '[[:cntrl:]]'::text) AND (provider_operation_id !~* '[a-z][a-z0-9+.-]*://'::text))));
+
+ALTER TABLE relay.job_attempts
+    ADD CONSTRAINT job_attempts_submission_evidence_check CHECK (((submission_state <> 'submitted'::text) OR (provider_operation_id IS NOT NULL)));
+
+ALTER TABLE relay.job_attempts
+    ADD CONSTRAINT job_attempts_terminal_state_check CHECK ((((finished_at IS NULL) AND (outcome IS NULL) AND (retry_classification IS NULL) AND (failure_code IS NULL) AND (submission_state = ANY (ARRAY['pending'::text, 'submitting'::text, 'submitted'::text]))) OR ((finished_at IS NOT NULL) AND (outcome IS NOT NULL) AND (submission_state = ANY (ARRAY['completed'::text, 'interrupted'::text, 'cancelled'::text, 'ambiguous'::text])))));
+
+ALTER TABLE relay.job_attempts
+    ADD CONSTRAINT job_attempts_ambiguous_terminal_check CHECK (((submission_state <> 'ambiguous'::text) OR ((outcome = 'failed'::text) AND (retry_classification = 'submission_ambiguous'::text) AND (failure_code = 'provider_submission_ambiguous'::text) AND (provider_operation_id IS NULL))));
+
+ALTER TABLE relay.job_attempts
+    ADD CONSTRAINT job_attempts_ambiguous_retry_check CHECK ((NOT (((outcome = 'retry_scheduled'::text) AND (retry_classification = 'submission_ambiguous'::text)) AND (provider_operation_id IS NULL))));
+
+CREATE FUNCTION relay.reject_immutable_artifact_record() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog'
+    AS $$
+begin
+  raise exception 'relay.% rows are immutable', TG_TABLE_NAME
+    using errcode = '55000';
+end;
+$$;
+
+CREATE FUNCTION relay.enforce_artifact_storage_reservation_transition() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog'
+    AS $$
+begin
+  if row(
+    NEW.id,
+    NEW.workspace_id,
+    NEW.operation_id,
+    NEW.reserved_bytes,
+    NEW.created_at
+  ) is distinct from row(
+    OLD.id,
+    OLD.workspace_id,
+    OLD.operation_id,
+    OLD.reserved_bytes,
+    OLD.created_at
+  ) then
+    raise exception 'relay.artifact_storage_reservations identity is immutable'
+      using errcode = '55000';
+  end if;
+
+  if NEW.status is not distinct from OLD.status then
+    if row(NEW.committed_at, NEW.released_at, NEW.decremented_at) is distinct from
+       row(OLD.committed_at, OLD.released_at, OLD.decremented_at)
+    then
+      raise exception 'artifact storage reservation evidence may only change with status'
+        using errcode = '55000';
+    end if;
+  elsif not (
+    (OLD.status = 'reserved' and NEW.status in ('committed', 'released'))
+    or (OLD.status = 'committed' and NEW.status = 'decremented')
+  ) then
+    raise exception 'invalid artifact storage reservation transition'
+      using errcode = '55000';
+  end if;
+
+  return NEW;
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION relay.protect_share_link_policy() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog'
+    AS $$
+begin
+  if TG_OP = 'DELETE' then
+    raise exception 'relay.share_links policies cannot be deleted'
+      using errcode = '55000';
+  end if;
+
+  if row(
+    NEW.id,
+    NEW.workspace_id,
+    NEW.artifact_id,
+    NEW.artifact_version_id,
+    NEW.token_hash,
+    NEW.token_key_version,
+    NEW.follow_current,
+    NEW.expires_at,
+    NEW.max_resolutions,
+    NEW.require_auth,
+    NEW.content_disposition,
+    NEW.created_by,
+    NEW.created_at
+  ) is distinct from row(
+    OLD.id,
+    OLD.workspace_id,
+    OLD.artifact_id,
+    OLD.artifact_version_id,
+    OLD.token_hash,
+    OLD.token_key_version,
+    OLD.follow_current,
+    OLD.expires_at,
+    OLD.max_resolutions,
+    OLD.require_auth,
+    OLD.content_disposition,
+    OLD.created_by,
+    OLD.created_at
+  ) then
+    raise exception 'relay.share_links durable policy is immutable'
+      using errcode = '55000';
+  end if;
+
+  if NEW.resolution_count = OLD.resolution_count then
+    if NEW.last_resolved_at is distinct from OLD.last_resolved_at then
+      raise exception 'share-link resolution timestamp requires a counted resolution'
+        using errcode = '55000';
+    end if;
+  elsif NEW.resolution_count = OLD.resolution_count + 1 then
+    if OLD.revoked_at is not null
+      or NEW.last_resolved_at is null
+      or (
+        OLD.last_resolved_at is not null
+        and NEW.last_resolved_at < OLD.last_resolved_at
+      )
+    then
+      raise exception 'share-link resolution cannot advance after revocation or move backward'
+        using errcode = '55000';
+    end if;
+  else
+    raise exception 'share-link resolution count must advance atomically'
+      using errcode = '55000';
+  end if;
+
+  if NEW.revoked_at is distinct from OLD.revoked_at and not (
+    OLD.revoked_at is null and NEW.revoked_at is not null
+  ) then
+    raise exception 'share-link revocation is irreversible'
+      using errcode = '55000';
+  end if;
+
+  return NEW;
+end;
+$$;
+
+CREATE TRIGGER artifact_storage_reservations_transition_guard BEFORE DELETE OR UPDATE ON relay.artifact_storage_reservations FOR EACH ROW EXECUTE FUNCTION relay.enforce_artifact_storage_reservation_transition();
+
+CREATE TRIGGER artifact_mutation_idempotency_immutable BEFORE DELETE OR UPDATE ON relay.artifact_mutation_idempotency FOR EACH ROW EXECUTE FUNCTION relay.reject_immutable_artifact_record();
+
+REVOKE ALL ON FUNCTION relay.enforce_artifact_storage_reservation_transition() FROM PUBLIC;
+REVOKE ALL ON FUNCTION relay.reject_immutable_artifact_record() FROM PUBLIC;
+
+-- Fixed public IDs are SHA-256-derived opaque identifiers for the stable keys.
+INSERT INTO relay.providers
+  (id, key, name, lifecycle, configuration_reference, created_at)
+OVERRIDING SYSTEM VALUE
+VALUES
+  (7200200100000001, 'azure-gpt-image-2', 'Azure GPT Image 2', 'published', 'azure-gpt-image-2', timestamp with time zone '2026-08-25 00:00:00+00'),
+  (7200200100000002, 'azure-flux-2-pro', 'Azure FLUX.2 Pro', 'published', 'azure-flux-2-pro', timestamp with time zone '2026-08-25 00:00:00+00'),
+  (7200200100000003, 'azure-mistral-ocr', 'Azure Mistral OCR', 'published', 'azure-mistral-ocr', timestamp with time zone '2026-08-25 00:00:00+00');
+
+INSERT INTO relay.tools
+  (id, key, name, category, summary, lifecycle, active_version_id, visibility, created_at, updated_at, readiness_critical)
+VALUES
+  ('tool_d84ca194052d72d603485742598726c3', 'image.generate.gpt-image-2', 'GPT Image 2', 'image', 'Generate images with GPT Image 2 on Azure.', 'internal', null, 'public', timestamp with time zone '2026-08-25 00:00:00+00', timestamp with time zone '2026-08-25 00:00:00+00', false),
+  ('tool_0cd15820ee05ddd83c2734d174f01d7b', 'image.generate.flux-2-pro', 'FLUX.2 Pro', 'image', 'Generate images with FLUX.2 Pro on Azure.', 'internal', null, 'public', timestamp with time zone '2026-08-25 00:00:00+00', timestamp with time zone '2026-08-25 00:00:00+00', false),
+  ('tool_9c347a9a7f4202d9ec92941ca4532809', 'document.ocr', 'Document OCR', 'document', 'Extract text and structured content from a Relay artifact with Mistral OCR on Azure.', 'internal', null, 'public', timestamp with time zone '2026-08-25 00:00:00+00', timestamp with time zone '2026-08-25 00:00:00+00', false);
+
+WITH seeded_meter_policies (
+  id, policy_key, revision, document, effective_at, expires_at
+) AS (
+  VALUES
+  (
+    'meter_c4cb2884f8474160fa2b61d5c6fb9c46'::text,
+    'images.generated'::text,
+    1,
+    $json$ {
+      "schemaVersion": 1,
+      "metric": "images.generated",
+      "unit": "image",
+      "period": "calendar_month",
+      "estimate": {
+        "base": "0",
+        "terms": [{ "measure": "requested_units", "rate": "1" }]
+      },
+      "reservation": { "multiplier": "1", "minimum": "0" },
+      "settlement": {
+        "success": "commit_actual",
+        "partial_output": "commit_actual",
+        "validation_rejected": "release",
+        "safety_rejected": "release",
+        "provider_failure": "release",
+        "cancelled": "release",
+        "timed_out": "release",
+        "storage_failure": "release"
+      }
+    }$json$::jsonb,
+    timestamp with time zone '2026-08-25 00:00:00+00',
+    null::timestamp with time zone
+  ),
+  (
+    'meter_ebafb531114359dfe541f419b0c5bc13'::text,
+    'ocr.requests'::text,
+    1,
+    $json$ {
+      "schemaVersion": 1,
+      "metric": "ocr.requests",
+      "unit": "request",
+      "period": "calendar_month",
+      "estimate": {
+        "base": "0",
+        "terms": [{ "measure": "requested_units", "rate": "1" }]
+      },
+      "reservation": { "multiplier": "1", "minimum": "0" },
+      "settlement": {
+        "success": "commit_actual",
+        "partial_output": "commit_actual",
+        "validation_rejected": "release",
+        "safety_rejected": "release",
+        "provider_failure": "release",
+        "cancelled": "release",
+        "timed_out": "release",
+        "storage_failure": "release"
+      }
+    }$json$::jsonb,
+    timestamp with time zone '2026-08-25 00:00:00+00',
+    null::timestamp with time zone
+  )
+)
+INSERT INTO relay.meter_policies (
+  id, policy_key, revision, document, effective_at, expires_at, immutable_hash,
+  created_at
+)
+SELECT
+  id, policy_key, revision, document, effective_at, expires_at,
+  relay.compute_meter_policy_immutable_hash(
+    id, policy_key, revision, document, effective_at, expires_at
+  ),
+  timestamp with time zone '2026-08-25 00:00:00+00'
+FROM seeded_meter_policies;
+
+-- Workspaces require explicit operator-assigned execution and usage grants.
+
+WITH seeded_versions (
+  id, tool_id, version, input_schema, output_schema, handler_key,
+  input_schema_version, handler_version, execution_mode,
+  max_duration_seconds, meter_policy_id, entitlement_key,
+  compatibility_metadata, published_at, created_at
+) AS (
+  VALUES
+  (
+    'tver_11916cf469e30a49a4becb0ca4b994a5'::text,
+    'tool_d84ca194052d72d603485742598726c3'::text,
+    1,
+    $json$ {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:relay:tool:image.generate.gpt-image-2:input:1",
+      "title": "GPT Image 2 input",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt"],
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 32000 },
+        "n": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "size": { "type": "string", "maxLength": 9, "pattern": "^(auto|[1-9][0-9]{0,3}x[1-9][0-9]{0,3})$" },
+        "quality": { "type": "string", "enum": ["low", "medium", "high"] },
+        "outputFormat": { "type": "string", "enum": ["png", "jpeg"] },
+        "outputCompression": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "background": { "type": "string", "enum": ["auto", "transparent", "opaque"] },
+        "moderation": { "type": "string", "enum": ["auto", "low"] }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["outputCompression"] },
+          "then": {
+            "required": ["outputFormat"],
+            "properties": { "outputFormat": { "const": "jpeg" } }
+          }
+        },
+        {
+          "if": {
+            "required": ["background"],
+            "properties": { "background": { "const": "transparent" } }
+          },
+          "then": { "properties": { "outputFormat": { "const": "png" } } }
+        }
+      ],
+      "x-relay-size-constraints": {
+        "multipleOf": 16,
+        "minimumPixels": 655360,
+        "maximumPixels": 8294400,
+        "maximumEdge": 3840,
+        "maximumAspectRatio": 3
+      }
+    }$json$::jsonb,
+    $json$ {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:relay:tool:image.generate.gpt-image-2:output:1",
+      "title": "GPT Image 2 output",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifacts"],
+      "properties": {
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["artifactId", "artifactVersionId", "mimeType", "width", "height", "sha256"],
+            "properties": {
+              "artifactId": { "type": "string", "pattern": "^art_[0-9a-f]{32}$" },
+              "artifactVersionId": { "type": "string", "pattern": "^aver_[0-9a-f]{32}$" },
+              "mimeType": { "type": "string", "enum": ["image/png", "image/jpeg"] },
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 },
+              "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          }
+        },
+        "revisedPrompt": { "type": ["string", "null"] }
+      }
+    }$json$::jsonb,
+    'image.generate.azure-openai.gpt-image-2.v1'::text,
+    1,
+    '1'::text,
+    'async'::text,
+    300,
+    'meter_c4cb2884f8474160fa2b61d5c6fb9c46'::text,
+    'tools.execute'::text,
+    $json$ {"handler":{"key":"image.generate.azure-openai.gpt-image-2.v1","inputSchemaVersion":1,"handlerVersion":"1"},"submission":{"providerIdempotency":"unsupported","operationLookup":false,"ambiguousRetry":"forbidden"},"routing":{"fallback":"none"}}$json$::jsonb,
+    timestamp with time zone '2026-08-25 00:00:00+00',
+    timestamp with time zone '2026-08-25 00:00:00+00'
+  ),
+  (
+    'tver_d1136a97173f7ba1f2bf117a86dfa98e'::text,
+    'tool_0cd15820ee05ddd83c2734d174f01d7b'::text,
+    1,
+    $json$ {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:relay:tool:image.generate.flux-2-pro:input:1",
+      "title": "FLUX.2 Pro input",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt"],
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 32000 },
+        "disablePromptUpsampling": { "type": "boolean" },
+        "inputArtifactVersionIds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^aver_[0-9a-f]{32}$" }
+        },
+        "seed": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+        "width": { "type": "integer", "minimum": 64, "maximum": 65536 },
+        "height": { "type": "integer", "minimum": 64, "maximum": 65536 },
+        "safetyTolerance": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "outputFormat": { "type": "string", "enum": ["jpeg", "png", "webp"] }
+      },
+      "x-relay-maximum-pixels": 4194304
+    }$json$::jsonb,
+    $json$ {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:relay:tool:image.generate.flux-2-pro:output:1",
+      "title": "FLUX.2 Pro output",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifacts"],
+      "properties": {
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["artifactId", "artifactVersionId", "mimeType", "width", "height", "sha256"],
+            "properties": {
+              "artifactId": { "type": "string", "pattern": "^art_[0-9a-f]{32}$" },
+              "artifactVersionId": { "type": "string", "pattern": "^aver_[0-9a-f]{32}$" },
+              "mimeType": { "type": "string", "enum": ["image/jpeg", "image/png", "image/webp"] },
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 },
+              "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          }
+        },
+        "seed": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 }
+      }
+    }$json$::jsonb,
+    'image.generate.azure-flux.flux-2-pro.v1'::text,
+    1,
+    '1'::text,
+    'async'::text,
+    300,
+    'meter_c4cb2884f8474160fa2b61d5c6fb9c46'::text,
+    'tools.execute'::text,
+    $json$ {"handler":{"key":"image.generate.azure-flux.flux-2-pro.v1","inputSchemaVersion":1,"handlerVersion":"1"},"submission":{"providerIdempotency":"unsupported","operationLookup":false,"ambiguousRetry":"forbidden"},"routing":{"fallback":"none"}}$json$::jsonb,
+    timestamp with time zone '2026-08-25 00:00:00+00',
+    timestamp with time zone '2026-08-25 00:00:00+00'
+  ),
+  (
+    'tver_4ce03a4c68bb39f4be709e76360eb277'::text,
+    'tool_9c347a9a7f4202d9ec92941ca4532809'::text,
+    1,
+    $json$ {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:relay:tool:document.ocr:input:1",
+      "title": "Document OCR input",
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [
+        { "required": ["sourceArtifactId"] },
+        { "required": ["sourceArtifactVersionId"] }
+      ],
+      "properties": {
+        "sourceArtifactId": { "type": "string", "pattern": "^art_[0-9a-f]{32}$" },
+        "sourceArtifactVersionId": { "type": "string", "pattern": "^aver_[0-9a-f]{32}$" },
+        "pages": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*$" },
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1000,
+              "uniqueItems": true,
+              "items": { "type": "integer", "minimum": 0, "maximum": 99999 }
+            }
+          ]
+        },
+        "includeImages": { "type": "boolean" },
+        "imageLimit": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "imageMinSize": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "imageAnnotationSchema": { "type": "object", "maxProperties": 256 },
+        "extractionSchema": { "type": "object", "maxProperties": 256 },
+        "extractionPrompt": { "type": "string", "minLength": 1, "maxLength": 32000 },
+        "tableFormat": { "type": "string", "enum": ["markdown", "html"] },
+        "extractHeader": { "type": "boolean" },
+        "extractFooter": { "type": "boolean" },
+        "confidenceGranularity": { "type": "string", "enum": ["word", "page"] }
+      },
+      "dependentRequired": {
+        "extractionPrompt": ["extractionSchema"]
+      }
+    }$json$::jsonb,
+    $json$ {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:relay:tool:document.ocr:output:1",
+      "title": "Document OCR output",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceArtifactVersionId", "pages", "images"],
+      "properties": {
+        "sourceArtifactId": { "type": "string", "pattern": "^art_[0-9a-f]{32}$" },
+        "sourceArtifactVersionId": { "type": "string", "pattern": "^aver_[0-9a-f]{32}$" },
+        "pages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["pageNumber", "markdown"],
+            "properties": {
+              "pageNumber": { "type": "integer", "minimum": 0 },
+              "markdown": { "type": "string" },
+              "header": { "type": ["string", "null"] },
+              "footer": { "type": ["string", "null"] },
+              "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+            }
+          }
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["artifactId", "artifactVersionId", "mimeType", "sha256"],
+            "properties": {
+              "artifactId": { "type": "string", "pattern": "^art_[0-9a-f]{32}$" },
+              "artifactVersionId": { "type": "string", "pattern": "^aver_[0-9a-f]{32}$" },
+              "mimeType": { "type": "string", "minLength": 1, "maxLength": 255 },
+              "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "pageNumber": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "extractedData": { "type": ["object", "array", "string", "number", "boolean", "null"] },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    }$json$::jsonb,
+    'document.ocr.azure-mistral.v1'::text,
+    1,
+    '1'::text,
+    'async'::text,
+    600,
+    'meter_ebafb531114359dfe541f419b0c5bc13'::text,
+    'tools.execute'::text,
+    $json$ {"handler":{"key":"document.ocr.azure-mistral.v1","inputSchemaVersion":1,"handlerVersion":"1"},"submission":{"providerIdempotency":"unsupported","operationLookup":false,"ambiguousRetry":"forbidden"},"routing":{"fallback":"none"}}$json$::jsonb,
+    timestamp with time zone '2026-08-25 00:00:00+00',
+    timestamp with time zone '2026-08-25 00:00:00+00'
+  )
+)
+INSERT INTO relay.tool_versions (
+  id, tool_id, version, input_schema, output_schema, handler_key,
+  input_schema_version, handler_version, execution_mode,
+  max_duration_seconds, meter_policy_id, entitlement_key,
+  compatibility_metadata, published_at, immutable_hash, created_at
+)
+SELECT
+  id, tool_id, version, input_schema, output_schema, handler_key,
+  input_schema_version, handler_version, execution_mode,
+  max_duration_seconds, meter_policy_id, entitlement_key,
+  compatibility_metadata, published_at,
+  relay.compute_tool_version_immutable_hash(
+    id, tool_id, version, input_schema, output_schema, handler_key,
+    input_schema_version, handler_version, execution_mode,
+    max_duration_seconds, meter_policy_id, entitlement_key,
+    compatibility_metadata
+  ),
+  created_at
+FROM seeded_versions;
+
+INSERT INTO relay.provider_models
+  (id, provider_id, key, display_name, capability_schema, pricing_policy_id, lifecycle, region_constraints, created_at)
+OVERRIDING SYSTEM VALUE
+SELECT seeded.id,
+       seeded.provider_id,
+       seeded.key,
+       seeded.display_name,
+       version.input_schema,
+       null,
+       'published',
+       null,
+       timestamp with time zone '2026-08-25 00:00:00+00'
+FROM (
+  VALUES
+    (7200200200000001::bigint, 7200200100000001::bigint, 'gpt-image-2'::text, 'GPT Image 2'::text, 'tver_11916cf469e30a49a4becb0ca4b994a5'::text),
+    (7200200200000002::bigint, 7200200100000002::bigint, 'FLUX.2-pro'::text, 'FLUX.2 Pro'::text, 'tver_d1136a97173f7ba1f2bf117a86dfa98e'::text),
+    (7200200200000003::bigint, 7200200100000003::bigint, 'mistral-ocr-4-0'::text, 'Mistral OCR 4.0'::text, 'tver_4ce03a4c68bb39f4be709e76360eb277'::text)
+) AS seeded(id, provider_id, key, display_name, tool_version_id)
+JOIN relay.tool_versions AS version ON version.id = seeded.tool_version_id;
+
+INSERT INTO relay.capacity_pools
+  (id, key, provider_model_id, region, execution_class, enabled)
+OVERRIDING SYSTEM VALUE
+VALUES
+  (7200200300000001, 'azure-gpt-image-2', 7200200200000001, null, 'standard', true),
+  (7200200300000002, 'azure-flux-2-pro', 7200200200000002, null, 'standard', true),
+  (7200200300000003, 'azure-mistral-ocr', 7200200200000003, null, 'standard', true);
+
+-- Each version has exactly one route and no routing policy, so fallback is not possible.
+INSERT INTO relay.tool_provider_bindings
+  (id, tool_version_id, provider_model_id, capacity_pool_id, routing_order, enabled, routing_policy_id, created_at)
+OVERRIDING SYSTEM VALUE
+VALUES
+  (7200200400000001, 'tver_11916cf469e30a49a4becb0ca4b994a5', 7200200200000001, 7200200300000001, 1, true, null, timestamp with time zone '2026-08-25 00:00:00+00'),
+  (7200200400000002, 'tver_d1136a97173f7ba1f2bf117a86dfa98e', 7200200200000002, 7200200300000002, 1, true, null, timestamp with time zone '2026-08-25 00:00:00+00'),
+  (7200200400000003, 'tver_4ce03a4c68bb39f4be709e76360eb277', 7200200200000003, 7200200300000003, 1, true, null, timestamp with time zone '2026-08-25 00:00:00+00');
+
+-- These operational defaults are deliberately editable capacity policies.
+-- Provider rates stay hard-limited while execution and queue depth start from
+-- conservative defaults; provider pricing remains unknown and unseeded.
+INSERT INTO relay.capacity_policies
+  (id, scope_type, scope_id, revision, configuration, effective_at, expires_at)
+OVERRIDING SYSTEM VALUE
+VALUES
+  (7200200500000001, 'capacity_pool', '7200200300000001', 1, $json$ {"submissionRateDefaults":{"providerPerMinute":12},"executionConcurrency":{"globalTool":1,"pool":1,"workspaceTotal":1,"workspaceTool":1}}$json$::jsonb, timestamp with time zone '2026-08-25 00:00:00+00', null),
+  (7200200500000002, 'capacity_pool', '7200200300000002', 1, $json$ {"submissionRateDefaults":{"providerPerMinute":4},"executionConcurrency":{"globalTool":1,"pool":1,"workspaceTotal":1,"workspaceTool":1}}$json$::jsonb, timestamp with time zone '2026-08-25 00:00:00+00', null),
+  (7200200500000003, 'capacity_pool', '7200200300000003', 1, $json$ {"submissionRateDefaults":{"providerPerMinute":50},"executionConcurrency":{"globalTool":1,"pool":1,"workspaceTotal":1,"workspaceTool":1}}$json$::jsonb, timestamp with time zone '2026-08-25 00:00:00+00', null),
+  (7200200500000004, 'tool', 'tool_d84ca194052d72d603485742598726c3', 1, $json$ {"globalTool":50,"workspaceTotal":20,"workspaceTool":5}$json$::jsonb, timestamp with time zone '2026-08-25 00:00:00+00', null),
+  (7200200500000005, 'tool', 'tool_0cd15820ee05ddd83c2734d174f01d7b', 1, $json$ {"globalTool":50,"workspaceTotal":20,"workspaceTool":5}$json$::jsonb, timestamp with time zone '2026-08-25 00:00:00+00', null),
+  (7200200500000006, 'tool', 'tool_9c347a9a7f4202d9ec92941ca4532809', 1, $json$ {"globalTool":50,"workspaceTotal":20,"workspaceTool":5}$json$::jsonb, timestamp with time zone '2026-08-25 00:00:00+00', null);
+
+UPDATE relay.tools AS tool
+   SET lifecycle = 'published',
+       active_version_id = seeded.tool_version_id,
+       updated_at = timestamp with time zone '2026-08-25 00:00:00+00'
+  FROM (
+    VALUES
+      ('tool_d84ca194052d72d603485742598726c3'::text, 'tver_11916cf469e30a49a4becb0ca4b994a5'::text),
+      ('tool_0cd15820ee05ddd83c2734d174f01d7b'::text, 'tver_d1136a97173f7ba1f2bf117a86dfa98e'::text),
+      ('tool_9c347a9a7f4202d9ec92941ca4532809'::text, 'tver_4ce03a4c68bb39f4be709e76360eb277'::text)
+  ) AS seeded(tool_id, tool_version_id)
+ WHERE tool.id = seeded.tool_id;
+
+REVOKE ALL ON TABLE relay.artifact_storage_accounts FROM PUBLIC;
+REVOKE ALL ON TABLE relay.artifact_storage_accounts FROM relay_app;
+GRANT SELECT, INSERT, UPDATE ON TABLE relay.artifact_storage_accounts TO relay_app;
+
+REVOKE ALL ON TABLE relay.artifact_storage_reservations FROM PUBLIC;
+REVOKE ALL ON TABLE relay.artifact_storage_reservations FROM relay_app;
+GRANT SELECT, INSERT, UPDATE ON TABLE relay.artifact_storage_reservations TO relay_app;
+
+REVOKE ALL ON TABLE relay.artifact_mutation_idempotency FROM PUBLIC;
+REVOKE ALL ON TABLE relay.artifact_mutation_idempotency FROM relay_app;
+GRANT SELECT, INSERT ON TABLE relay.artifact_mutation_idempotency TO relay_app;`;
 
 export { CANONICAL_SQL };
 
 export const migration: Migration = {
   id: "0001_relay_baseline",
   checksumSha256:
-    "817d9f2edbefc4a5a53f35e651673af39d07920e2421923494d19a76a39dcb36",
+    "fddd062a6aa828571a2c12493bf98ddf74aea81ff0a474f7abb17127925624ba",
   transactional: true,
   up: async (db) => {
     await sql.raw(CANONICAL_SQL).execute(db);

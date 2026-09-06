@@ -1,11 +1,18 @@
 import type { Worker } from "bullmq";
 import type { RuntimeConfig } from "@relay/config";
 import { loadRuntimeConfig } from "@relay/config";
-import { createDatabasePool, type DatabasePool } from "@relay/database";
+import {
+  checkDatabaseHealth,
+  checkMigrationLedgerHealth,
+  createDatabasePool,
+  type DatabasePool,
+  MIGRATIONS,
+} from "@relay/database";
 import {
   CapacityCoordinator,
   capacityKeys,
   type ExecutionLease,
+  type RateLimitCheck,
 } from "@relay/capacity";
 import {
   loadSchedulingClassProfiles,
@@ -31,6 +38,7 @@ import {
   RedisDispatchGate,
   relayOutboxBatch,
 } from "@relay/queue";
+import type { ReadinessCheck } from "@relay/contracts";
 import {
   createJsonLogger,
   createRelayTelemetry,
@@ -43,6 +51,7 @@ import {
   createRegistryBackedExecutionHandler,
   type ExecutionHandlerRegistry,
 } from "./handlers.ts";
+import type { ArtifactMaintenanceLoop } from "./artifact-maintenance.ts";
 import { createWorkerRuntimeMetrics } from "./metrics.ts";
 
 const EXECUTION_OUTBOX_EVENTS = [
@@ -54,8 +63,21 @@ const EXECUTION_OUTBOX_EVENTS = [
   "job.terminal",
 ] as const;
 
+export type WorkerReadinessCheck = (
+  pool: DatabasePool,
+) => Promise<ReadinessCheck>;
+
+export type ArtifactMaintenanceLifecycle = Pick<
+  ArtifactMaintenanceLoop,
+  "start" | "stop"
+>;
+
 export interface WorkerRuntimeOptions {
   readonly handlerRegistry?: ExecutionHandlerRegistry;
+  /** Injected pools remain caller-owned; otherwise startWorker owns its pool. */
+  readonly pool?: DatabasePool;
+  readonly artifactMaintenance?: ArtifactMaintenanceLifecycle;
+  readonly additionalReadinessChecks?: readonly WorkerReadinessCheck[];
   readonly signal?: AbortSignal;
   readonly installSignalHandlers?: boolean;
   readonly instanceId?: string;
@@ -91,6 +113,8 @@ export interface WorkerRuntimeOptions {
 
 interface ResolvedWorkerOptions {
   readonly handlerRegistry: ExecutionHandlerRegistry;
+  readonly artifactMaintenance?: ArtifactMaintenanceLifecycle;
+  readonly additionalReadinessChecks: readonly WorkerReadinessCheck[];
   readonly signal?: AbortSignal;
   readonly installSignalHandlers: boolean;
   readonly instanceId: string;
@@ -122,6 +146,32 @@ interface ResolvedWorkerOptions {
   readonly telemetry: RelayTelemetry;
 }
 
+export interface WorkerRuntimeDependencies {
+  readonly createDatabasePool: typeof createDatabasePool;
+  readonly createWorkerRuntimeMetrics: typeof createWorkerRuntimeMetrics;
+  readonly createRedisConnection: typeof createRedisConnection;
+  readonly createExecutionQueueRegistry: (
+    connection: Redis,
+    queuePrefix: string,
+  ) => ExecutionQueueRegistry;
+  readonly createRedisDispatchGate: (
+    connection: Redis,
+    queuePrefix: string,
+  ) => RedisDispatchGate;
+  readonly createExecutionWorker: typeof createExecutionWorker;
+}
+
+const WORKER_RUNTIME_DEPENDENCIES: WorkerRuntimeDependencies = {
+  createDatabasePool,
+  createWorkerRuntimeMetrics,
+  createRedisConnection,
+  createExecutionQueueRegistry: (connection, queuePrefix) =>
+    new ExecutionQueueRegistry(connection, queuePrefix),
+  createRedisDispatchGate: (connection, queuePrefix) =>
+    new RedisDispatchGate(connection, queuePrefix),
+  createExecutionWorker,
+};
+
 function workerLogger(options: WorkerRuntimeOptions): JsonLogger {
   if (options.logger !== undefined) return options.logger;
   if (options.log === undefined) return createJsonLogger();
@@ -145,6 +195,8 @@ function resolveOptions(
   return {
     handlerRegistry: options.handlerRegistry ??
       createExecutionHandlerRegistry(),
+    artifactMaintenance: options.artifactMaintenance,
+    additionalReadinessChecks: options.additionalReadinessChecks ?? [],
     signal: options.signal,
     installSignalHandlers: options.installSignalHandlers ?? true,
     instanceId: options.instanceId ?? `worker-${crypto.randomUUID()}`,
@@ -191,14 +243,17 @@ function toExecutionLease(lease: AcquiredCapacityLease): ExecutionLease {
   };
 }
 
-class CoordinatorAdapter implements ExecutionCapacityController {
+export class CoordinatorAdapter implements ExecutionCapacityController {
   constructor(
     private readonly coordinator: CapacityCoordinator,
     private readonly retryMs: number,
     private readonly ownerId: string,
+    private readonly now: () => number = Date.now,
   ) {}
 
-  async acquire(job: Parameters<ExecutionCapacityController["acquire"]>[0]) {
+  async acquire(
+    job: Parameters<ExecutionCapacityController["acquire"]>[0],
+  ): ReturnType<ExecutionCapacityController["acquire"]> {
     const result = await this.coordinator.acquireExecutionLease(
       {
         toolKey: job.toolKey,
@@ -240,13 +295,28 @@ class CoordinatorAdapter implements ExecutionCapacityController {
 
   async acquireSubmissionPermit(
     job: Parameters<ExecutionCapacityController["acquireSubmissionPermit"]>[0],
-  ) {
-    // Rate-limit checks require provider policy data that is not yet present in
-    // ClaimedJob. Passing no GCRA checks still atomically enforces the pool's
-    // provider cooldown before any attempt is opened.
+  ): ReturnType<ExecutionCapacityController["acquireSubmissionPermit"]> {
+    const checks: RateLimitCheck[] = [];
+    if (job.submissionRatePolicy.providerPerMinute !== null) {
+      checks.push({
+        key: this.coordinator.rateKeys.provider(job.providerModelId),
+        emissionIntervalMs: 60_000 /
+          job.submissionRatePolicy.providerPerMinute,
+        burstMs: 0,
+        cost: 1,
+      });
+    }
+    if (job.submissionRatePolicy.toolPerMinute !== null) {
+      checks.push({
+        key: this.coordinator.rateKeys.tool(job.toolKey),
+        emissionIntervalMs: 60_000 / job.submissionRatePolicy.toolPerMinute,
+        burstMs: 0,
+        cost: 1,
+      });
+    }
     const result = await this.coordinator.acquireSubmissionPermit(
       job.capacityPoolId,
-      [],
+      checks,
     );
     if (result.ok) return { kind: "acquired" as const };
     return {
@@ -266,7 +336,7 @@ class CoordinatorAdapter implements ExecutionCapacityController {
   ): Promise<void> {
     await this.coordinator.setProviderCooldown(
       job.capacityPoolId,
-      expiresAt.getTime(),
+      Math.max(1, expiresAt.getTime() - this.now()),
     );
   }
 
@@ -292,8 +362,25 @@ class CoordinatorAdapter implements ExecutionCapacityController {
 
 interface WorkerRecord {
   readonly worker: Worker;
-  readonly connection: Redis;
-  readonly run: Promise<void>;
+  run?: Promise<void>;
+}
+
+export async function acquireReadyConsumer<
+  Connection,
+  Consumer extends { waitUntilReady(): Promise<unknown> },
+  Ownership,
+>(
+  createConnection: () => Connection,
+  ownConnection: (connection: Connection) => void,
+  createConsumer: (connection: Connection) => Consumer,
+  ownConsumer: (consumer: Consumer) => Ownership,
+): Promise<{ readonly consumer: Consumer; readonly ownership: Ownership }> {
+  const connection = createConnection();
+  ownConnection(connection);
+  const consumer = createConsumer(connection);
+  const ownership = ownConsumer(consumer);
+  await consumer.waitUntilReady();
+  return { consumer, ownership };
 }
 
 export interface ClosableWorker {
@@ -301,32 +388,147 @@ export interface ClosableWorker {
   close(force?: boolean): Promise<void>;
 }
 
+type CompletionStatus = "fulfilled" | "rejected" | "timeout";
+
 function remainingBudgetMs(deadlineAt: number): number {
   return Math.max(0, deadlineAt - Date.now());
 }
 
-async function settlesBefore(
+function invokeAsync(action: () => void | Promise<void>): Promise<void> {
+  return Promise.resolve().then(action);
+}
+
+async function allSuccessful(
+  promises: readonly Promise<unknown>[],
+): Promise<void> {
+  const results = await Promise.allSettled(promises);
+  const errors = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason] : []
+  );
+  if (errors.length > 0) {
+    throw new AggregateError(errors, "One or more lifecycle operations failed");
+  }
+}
+
+async function completionBefore(
   promise: Promise<unknown>,
   deadlineAt: number,
-): Promise<boolean> {
+): Promise<CompletionStatus> {
   const remaining = remainingBudgetMs(deadlineAt);
   if (remaining === 0) {
     void promise.catch(() => undefined);
-    return false;
+    return "timeout";
   }
 
   let timeout: ReturnType<typeof setTimeout> | undefined;
-  const result = await Promise.race([
+  const result = await Promise.race<CompletionStatus>([
     promise.then(
-      () => true,
-      () => true,
+      () => "fulfilled" as const,
+      () => "rejected" as const,
     ),
-    new Promise<false>((resolve) => {
-      timeout = setTimeout(() => resolve(false), remaining);
+    new Promise<"timeout">((resolve) => {
+      timeout = setTimeout(() => resolve("timeout"), remaining);
     }),
   ]);
   if (timeout !== undefined) clearTimeout(timeout);
   return result;
+}
+
+interface OwnedRedisConnection {
+  readonly connection: Redis;
+  readonly close: () => Promise<void>;
+  readonly forceDisconnect: () => void;
+}
+
+function ownRedisConnection(connection: Redis): OwnedRedisConnection {
+  let disposed = connection.status === "end";
+  let closeTask: Promise<void> | undefined;
+  const forceDisconnect = () => {
+    if (disposed || connection.status === "end") {
+      disposed = true;
+      return;
+    }
+    disposed = true;
+    connection.disconnect(false);
+  };
+  const close = () => {
+    closeTask ??= (async () => {
+      if (disposed || connection.status === "end") {
+        disposed = true;
+        return;
+      }
+      try {
+        await connection.quit();
+        disposed = true;
+      } catch {
+        forceDisconnect();
+      }
+    })();
+    return closeTask;
+  };
+  return { connection, close, forceDisconnect };
+}
+
+/** Owns one maintenance start/stop pair and exposes its full termination. */
+export class ArtifactMaintenanceOwner {
+  readonly #stopOnce: () => Promise<void>;
+  #startTask: Promise<void> | undefined;
+  #terminationTask: Promise<void> | undefined;
+  #stopping = false;
+  #terminated = false;
+
+  constructor(
+    private readonly lifecycle: ArtifactMaintenanceLifecycle,
+    private readonly onUnexpectedStop: (error?: unknown) => void,
+  ) {
+    let stopTask: Promise<void> | undefined;
+    this.#stopOnce = () => {
+      stopTask ??= invokeAsync(() => this.lifecycle.stop());
+      return stopTask;
+    };
+  }
+
+  get terminated(): boolean {
+    return this.#terminated;
+  }
+
+  start(): Promise<void> {
+    this.#startTask ??= (async () => {
+      try {
+        await this.lifecycle.start();
+        if (!this.#stopping) this.reportUnexpectedStop();
+      } catch (error) {
+        if (!this.#stopping) this.reportUnexpectedStop(error);
+      }
+    })();
+    return this.#startTask;
+  }
+
+  terminate(): Promise<void> {
+    this.#stopping = true;
+    if (this.#startTask === undefined) return Promise.resolve();
+    this.#terminationTask ??= allSuccessful([
+      this.#startTask,
+      this.#stopOnce(),
+    ]);
+    void this.#terminationTask.then(
+      () => {
+        this.#terminated = true;
+      },
+      () => {
+        this.#terminated = true;
+      },
+    );
+    return this.#terminationTask;
+  }
+
+  private reportUnexpectedStop(error?: unknown): void {
+    try {
+      this.onUnexpectedStop(error);
+    } catch {
+      // Lifecycle ownership must not be defeated by an observer failure.
+    }
+  }
 }
 
 /** Stops intake, drains, aborts, and closes under one absolute time budget. */
@@ -337,21 +539,32 @@ export async function gracefullyCloseWorkers(
   deadlineMs: number,
 ): Promise<{ readonly forced: boolean }> {
   const deadlineAt = Date.now() + Math.max(0, deadlineMs);
-  let forced = !(await settlesBefore(
-    Promise.allSettled(workers.map((worker) => worker.pause(true))),
+  let forced = (await completionBefore(
+    allSuccessful(
+      workers.map((worker) => invokeAsync(() => worker.pause(true))),
+    ),
     deadlineAt,
-  ));
+  )) !== "fulfilled";
 
   if (!forced) {
-    forced = !(await settlesBefore(waitForIdle(), deadlineAt));
+    forced = (await completionBefore(invokeAsync(waitForIdle), deadlineAt)) !==
+      "fulfilled";
   }
-  if (forced) abortActive();
+  if (forced) {
+    try {
+      abortActive();
+    } catch {
+      // Continue force-closing every worker even if active abortion fails.
+    }
+  }
 
-  const closed = await settlesBefore(
-    Promise.allSettled(workers.map((worker) => worker.close(forced))),
+  const closed = await completionBefore(
+    allSuccessful(
+      workers.map((worker) => invokeAsync(() => worker.close(forced))),
+    ),
     deadlineAt,
   );
-  if (!closed) forced = true;
+  if (closed !== "fulfilled") forced = true;
   return { forced };
 }
 
@@ -441,13 +654,28 @@ export async function restoreDurableRedisLease(
   );
 }
 
-async function closeRedis(redis: Redis): Promise<void> {
-  if (redis.status === "end") return;
+async function checkRedisHealth(
+  connections: readonly Pick<Redis, "ping">[],
+): Promise<ReadinessCheck> {
   try {
-    await redis.quit();
+    await Promise.all(connections.map((connection) => connection.ping()));
+    return { name: "redis", status: "ok" };
   } catch {
-    redis.disconnect(false);
+    return { name: "redis", status: "error", message: "unreachable" };
   }
+}
+
+export async function checkWorkerReadiness(
+  pool: DatabasePool,
+  redisConnections: readonly Pick<Redis, "ping">[],
+  additionalChecks: readonly WorkerReadinessCheck[] = [],
+): Promise<readonly ReadinessCheck[]> {
+  return await Promise.all([
+    checkDatabaseHealth(pool),
+    checkMigrationLedgerHealth(pool, MIGRATIONS),
+    checkRedisHealth(redisConnections),
+    ...additionalChecks.map((check) => check(pool)),
+  ]);
 }
 
 /**
@@ -458,232 +686,328 @@ async function closeRedis(redis: Redis): Promise<void> {
 export async function startWorker(
   config: RuntimeConfig = loadRuntimeConfig(),
   runtimeOptions: WorkerRuntimeOptions = {},
+  dependencyOverrides: Partial<WorkerRuntimeDependencies> = {},
 ): Promise<void> {
+  const dependencies = {
+    ...WORKER_RUNTIME_DEPENDENCIES,
+    ...dependencyOverrides,
+  };
   const options = resolveOptions(runtimeOptions, config);
   const lifecycle = new AbortController();
   const stop = () => lifecycle.abort("shutdown_requested");
   const externalAbort = () => stop();
-  options.signal?.addEventListener("abort", externalAbort, { once: true });
-
   const signals: Deno.Signal[] = ["SIGINT"];
   if (Deno.build.os !== "windows") signals.push("SIGTERM");
-  if (options.installSignalHandlers) {
-    for (const signal of signals) Deno.addSignalListener(signal, stop);
-  }
 
-  const pool = createDatabasePool(config.database, "relay-worker");
-  const runtimeMetrics = createWorkerRuntimeMetrics(pool, options.telemetry);
-  const producerRedis = createRedisConnection(
-    config.redis,
-    `${options.instanceId}-queue-producer`,
-  );
-  const capacityRedis = createRedisConnection(
-    config.redis,
-    `${options.instanceId}-capacity`,
-  );
-  const schedulerRedis = createRedisConnection(
-    config.redis,
-    `${options.instanceId}-scheduler`,
-  );
-  const cancellationRedis = createRedisConnection(
-    config.redis,
-    `${options.instanceId}-cancellation-subscriber`,
-  );
-  const cancellationChannel = `${options.queuePrefix}:execution-cancellations`;
-  const queues = new ExecutionQueueRegistry(
-    producerRedis,
-    options.queuePrefix,
-  );
-  const gate = new RedisDispatchGate(capacityRedis, options.queuePrefix);
-  const coordinator = new CapacityCoordinator(capacityRedis, {
-    env: options.environment,
-    leaseDurationMs: options.leaseDurationMs,
-  });
-  const scheduler = new WeightedFairScheduler(schedulerRedis, {
-    env: options.environment,
-    dispatchLeaseDurationMs: options.schedulerDispatchLeaseMs,
-    maxCostUnits: options.schedulerMaxCostUnits,
-    idleDeficitCapUnits: options.schedulerDeficitCapUnits,
-  });
-  const processor = new ExecutionProcessor(
-    pool,
-    new CoordinatorAdapter(
-      coordinator,
-      options.coordinationRetryMs,
-      options.instanceId,
-    ),
-    gate,
-    createRegistryBackedExecutionHandler(pool, options.handlerRegistry),
-    {
-      leaseOwner: options.instanceId,
-      leaseDurationMs: options.leaseDurationMs,
-      heartbeatIntervalMs: options.heartbeatIntervalMs,
-      coordinationRetryMs: options.coordinationRetryMs,
-      maxDeferralJitterMs: options.maxDeferralJitterMs,
-      maxExecutionAttempts: options.maxExecutionAttempts,
-      retryBaseDelayMs: options.retryBaseDelayMs,
-      retryMaxDelayMs: options.retryMaxDelayMs,
-      retryJitterRatio: options.retryJitterRatio,
-      maxRetryWaitMs: options.maxRetryWaitMs,
-      telemetry: options.telemetry,
-    },
-  );
-  const schedulerBridge = new ExecutionSchedulerBridge(
-    pool,
-    schedulerRedis,
-    scheduler,
-    queues,
-    {
-      environment: options.environment,
-      maxBullmqWaitingPerPool: options.bullmqWaitingLimitPerPool,
-      maxDispatchesPerIteration: options.schedulerDispatchBatchSize,
-      bufferRetryDelayMs: options.schedulerBufferRetryMs,
-      poolBufferLockDurationMs: options.schedulerDispatchLeaseMs,
-    },
-  );
+  const installedSignals: Deno.Signal[] = [];
+  const redisConnections: OwnedRedisConnection[] = [];
   const workerRecords = new Map<string, WorkerRecord>();
   const loopTasks: Promise<void>[] = [];
-  cancellationRedis.on("message", (channel, jobId) => {
-    if (channel === cancellationChannel) processor.abortJob(jobId);
-  });
-
-  const syncConsumers = async () => {
-    if (options.handlerRegistry.keys.size === 0) {
-      await Promise.allSettled(
-        [...workerRecords.values()].map((record) => record.worker.pause(true)),
-      );
-      return;
-    }
-    for (const capacityPoolKey of await listEnabledCapacityPoolKeys(pool)) {
-      const existing = workerRecords.get(capacityPoolKey);
-      if (existing !== undefined) {
-        await existing.worker.resume();
-        continue;
-      }
-      const connection = createRedisConnection(
-        config.redis,
-        `${options.instanceId}-consumer-${capacityPoolKey}`,
-      );
-      const worker = createExecutionWorker(
-        connection,
-        capacityPoolKey,
-        options.queuePrefix,
-        processor.processor,
-        {
-          concurrency: options.concurrency,
-          lockDuration: options.leaseDurationMs,
-          stalledInterval: Math.max(1_000, options.heartbeatIntervalMs),
-          maxStalledCount: 1,
-        },
-      );
-      worker.on("error", (error) =>
-        options.logger.error({
-          eventName: "worker.bullmq.error",
-          message: "BullMQ worker error",
-          operation: "consume",
-          outcome: "failure",
-          error,
-        }));
-      worker.on("failed", (_job, error) =>
-        options.logger.error({
-          eventName: "worker.ticket.failed",
-          message: "BullMQ ticket failed",
-          operation: "consume",
-          outcome: "failure",
-          error,
-        }));
-      await worker.waitUntilReady();
-      const run = worker.run().catch((error) => {
-        if (!lifecycle.signal.aborted) {
-          options.logger.error({
-            eventName: "worker.consumer.stopped",
-            message: "BullMQ consumer stopped unexpectedly",
-            operation: "consume",
-            outcome: "failure",
-            error,
-          });
-          lifecycle.abort("consumer_failed");
-        }
-      });
-      workerRecords.set(capacityPoolKey, { worker, connection, run });
-    }
-  };
-
-  const releaseRecoveredLeases = async (
-    leases: readonly DurableCapacityLease[],
-  ) => {
-    for (const lease of leases) {
-      await releaseDurableRedisLease(
-        coordinator,
-        options.environment,
-        lease,
-      );
-    }
-  };
-
-  const maintain = async () => {
-    await expireQueuedJobs(pool);
-    await scheduler.configureProfiles(
-      await loadSchedulingClassProfiles(pool),
-    );
-    if (!(await gate.isReady())) {
-      const reconciliation = await reconcileRedisReset(
-        pool,
-        gate,
-        {
-          restoreCapacityLease: (lease) =>
-            restoreDurableRedisLease(
-              capacityRedis,
-              options.environment,
-              lease,
-            ),
-          releaseCapacityLease: (lease) =>
-            releaseDurableRedisLease(
-              coordinator,
-              options.environment,
-              lease,
-            ),
-          rebuildScheduler: () => schedulerBridge.rebuildAll(),
-        },
-        {
-          owner: options.instanceId,
-          lockDurationMs: options.reconciliationLockMs,
-          conservativeDelayMs: options.redisResetCooldownMs,
-          retryWaitMs: options.maxRetryWaitMs,
-        },
-      );
-      if (reconciliation.kind === "reconciled") {
-        runtimeMetrics.recordReconciledJobs(reconciliation.recoveredJobs);
-      }
-    } else {
-      const stalled = await recoverExpiredJobLeases(
-        pool,
-        undefined,
-        100,
-        options.maxRetryWaitMs,
-      );
-      runtimeMetrics.recordReconciledJobs(
-        stalled.recovered + stalled.cancelled + stalled.failed,
-      );
-      await releaseRecoveredLeases(stalled.capacityLeasesToRelease);
-      await reconcileQueueCounters(pool);
-      await schedulerBridge.rebuildAll();
-    }
-    await syncConsumers();
-    void runtimeMetrics.refresh();
-    runtimeMetrics.heartbeat();
-  };
+  let externalAbortInstalled = false;
+  let closeOwnedPool: (() => Promise<void>) | undefined;
+  let disposeRuntimeMetrics: (() => Promise<void>) | undefined;
+  let closeQueues: (() => Promise<void>) | undefined;
+  let processor: ExecutionProcessor | undefined;
+  let artifactMaintenanceOwner: ArtifactMaintenanceOwner | undefined;
+  let artifactMaintenanceFailure: unknown;
 
   try {
-    await Promise.all([
-      pool.query("select 1"),
-      producerRedis.ping(),
-      capacityRedis.ping(),
-      schedulerRedis.ping(),
-      cancellationRedis.ping(),
-    ]);
+    if (options.signal !== undefined) {
+      options.signal.addEventListener("abort", externalAbort, { once: true });
+      externalAbortInstalled = true;
+      if (options.signal.aborted) stop();
+    }
+    if (options.installSignalHandlers) {
+      for (const signal of signals) {
+        Deno.addSignalListener(signal, stop);
+        installedSignals.push(signal);
+      }
+    }
+
+    const ownsPool = runtimeOptions.pool === undefined;
+    const pool = runtimeOptions.pool ??
+      dependencies.createDatabasePool(config.database, "relay-worker");
+    if (ownsPool) {
+      let poolCloseTask: Promise<void> | undefined;
+      closeOwnedPool = () => {
+        poolCloseTask ??= invokeAsync(() => pool.end());
+        return poolCloseTask;
+      };
+    }
+
+    const runtimeMetrics = dependencies.createWorkerRuntimeMetrics(
+      pool,
+      options.telemetry,
+    );
+    let metricsDisposeTask: Promise<void> | undefined;
+    disposeRuntimeMetrics = () => {
+      metricsDisposeTask ??= invokeAsync(() => runtimeMetrics.dispose());
+      return metricsDisposeTask;
+    };
+
+    const acquireRedis = (connectionName: string): Redis => {
+      const owned = ownRedisConnection(
+        dependencies.createRedisConnection(config.redis, connectionName),
+      );
+      redisConnections.push(owned);
+      return owned.connection;
+    };
+    const producerRedis = acquireRedis(
+      `${options.instanceId}-queue-producer`,
+    );
+    const capacityRedis = acquireRedis(`${options.instanceId}-capacity`);
+    const schedulerRedis = acquireRedis(`${options.instanceId}-scheduler`);
+    const cancellationRedis = acquireRedis(
+      `${options.instanceId}-cancellation-subscriber`,
+    );
+    const cancellationChannel =
+      `${options.queuePrefix}:execution-cancellations`;
+    const queues = dependencies.createExecutionQueueRegistry(
+      producerRedis,
+      options.queuePrefix,
+    );
+    let queueCloseTask: Promise<void> | undefined;
+    closeQueues = () => {
+      queueCloseTask ??= invokeAsync(() => queues.close());
+      return queueCloseTask;
+    };
+
+    const gate = dependencies.createRedisDispatchGate(
+      capacityRedis,
+      options.queuePrefix,
+    );
+    const coordinator = new CapacityCoordinator(capacityRedis, {
+      env: options.environment,
+      leaseDurationMs: options.leaseDurationMs,
+    });
+    const scheduler = new WeightedFairScheduler(schedulerRedis, {
+      env: options.environment,
+      dispatchLeaseDurationMs: options.schedulerDispatchLeaseMs,
+      maxCostUnits: options.schedulerMaxCostUnits,
+      idleDeficitCapUnits: options.schedulerDeficitCapUnits,
+    });
+    const executionProcessor = new ExecutionProcessor(
+      pool,
+      new CoordinatorAdapter(
+        coordinator,
+        options.coordinationRetryMs,
+        options.instanceId,
+      ),
+      gate,
+      createRegistryBackedExecutionHandler(pool, options.handlerRegistry),
+      {
+        leaseOwner: options.instanceId,
+        leaseDurationMs: options.leaseDurationMs,
+        heartbeatIntervalMs: options.heartbeatIntervalMs,
+        coordinationRetryMs: options.coordinationRetryMs,
+        maxDeferralJitterMs: options.maxDeferralJitterMs,
+        maxExecutionAttempts: options.maxExecutionAttempts,
+        retryBaseDelayMs: options.retryBaseDelayMs,
+        retryMaxDelayMs: options.retryMaxDelayMs,
+        retryJitterRatio: options.retryJitterRatio,
+        maxRetryWaitMs: options.maxRetryWaitMs,
+        telemetry: options.telemetry,
+      },
+    );
+    processor = executionProcessor;
+    const schedulerBridge = new ExecutionSchedulerBridge(
+      pool,
+      schedulerRedis,
+      scheduler,
+      queues,
+      {
+        environment: options.environment,
+        maxBullmqWaitingPerPool: options.bullmqWaitingLimitPerPool,
+        maxDispatchesPerIteration: options.schedulerDispatchBatchSize,
+        bufferRetryDelayMs: options.schedulerBufferRetryMs,
+        poolBufferLockDurationMs: options.schedulerDispatchLeaseMs,
+      },
+    );
+    cancellationRedis.on("message", (channel, jobId) => {
+      if (channel === cancellationChannel) executionProcessor.abortJob(jobId);
+    });
+
+    const syncConsumers = async () => {
+      if (options.handlerRegistry.keys.size === 0) {
+        await Promise.allSettled(
+          [...workerRecords.values()].map((record) =>
+            record.worker.pause(true)
+          ),
+        );
+        return;
+      }
+      for (const capacityPoolKey of await listEnabledCapacityPoolKeys(pool)) {
+        const existing = workerRecords.get(capacityPoolKey);
+        if (existing !== undefined) {
+          await existing.worker.resume();
+          continue;
+        }
+        const { consumer: worker, ownership: record } =
+          await acquireReadyConsumer(
+            () =>
+              dependencies.createRedisConnection(
+                config.redis,
+                `${options.instanceId}-consumer-${capacityPoolKey}`,
+              ),
+            (connection) => {
+              redisConnections.push(ownRedisConnection(connection));
+            },
+            (connection) =>
+              dependencies.createExecutionWorker(
+                connection,
+                capacityPoolKey,
+                options.queuePrefix,
+                executionProcessor.processor,
+                {
+                  concurrency: options.concurrency,
+                  lockDuration: options.leaseDurationMs,
+                  stalledInterval: Math.max(1_000, options.heartbeatIntervalMs),
+                  maxStalledCount: 1,
+                },
+              ),
+            (worker) => {
+              const record: WorkerRecord = { worker };
+              workerRecords.set(capacityPoolKey, record);
+              worker.on("error", (error) =>
+                options.logger.error({
+                  eventName: "worker.bullmq.error",
+                  message: "BullMQ worker error",
+                  operation: "consume",
+                  outcome: "failure",
+                  error,
+                }));
+              worker.on("failed", (_job, error) =>
+                options.logger.error({
+                  eventName: "worker.ticket.failed",
+                  message: "BullMQ ticket failed",
+                  operation: "consume",
+                  outcome: "failure",
+                  error,
+                }));
+              return record;
+            },
+          );
+        record.run = worker.run().catch((error) => {
+          if (!lifecycle.signal.aborted) {
+            options.logger.error({
+              eventName: "worker.consumer.stopped",
+              message: "BullMQ consumer stopped unexpectedly",
+              operation: "consume",
+              outcome: "failure",
+              error,
+            });
+            lifecycle.abort("consumer_failed");
+          }
+        });
+      }
+    };
+
+    const releaseRecoveredLeases = async (
+      leases: readonly DurableCapacityLease[],
+    ) => {
+      for (const lease of leases) {
+        await releaseDurableRedisLease(
+          coordinator,
+          options.environment,
+          lease,
+        );
+      }
+    };
+
+    const maintain = async () => {
+      await expireQueuedJobs(pool);
+      await scheduler.configureProfiles(
+        await loadSchedulingClassProfiles(pool),
+      );
+      if (!(await gate.isReady())) {
+        const reconciliation = await reconcileRedisReset(
+          pool,
+          gate,
+          {
+            restoreCapacityLease: (lease) =>
+              restoreDurableRedisLease(
+                capacityRedis,
+                options.environment,
+                lease,
+              ),
+            releaseCapacityLease: (lease) =>
+              releaseDurableRedisLease(
+                coordinator,
+                options.environment,
+                lease,
+              ),
+            rebuildScheduler: () => schedulerBridge.rebuildAll(),
+          },
+          {
+            owner: options.instanceId,
+            lockDurationMs: options.reconciliationLockMs,
+            conservativeDelayMs: options.redisResetCooldownMs,
+            retryWaitMs: options.maxRetryWaitMs,
+          },
+        );
+        if (reconciliation.kind === "reconciled") {
+          runtimeMetrics.recordReconciledJobs(reconciliation.recoveredJobs);
+        }
+      } else {
+        const stalled = await recoverExpiredJobLeases(
+          pool,
+          undefined,
+          100,
+          options.maxRetryWaitMs,
+        );
+        runtimeMetrics.recordReconciledJobs(
+          stalled.recovered + stalled.cancelled + stalled.failed,
+        );
+        await releaseRecoveredLeases(stalled.capacityLeasesToRelease);
+        await reconcileQueueCounters(pool);
+        await schedulerBridge.rebuildAll();
+      }
+      await syncConsumers();
+      void runtimeMetrics.refresh();
+      runtimeMetrics.heartbeat();
+    };
+
+    const readiness = await checkWorkerReadiness(
+      pool,
+      [producerRedis, capacityRedis, schedulerRedis, cancellationRedis],
+      options.additionalReadinessChecks,
+    );
+    if (readiness.some((check) => check.status !== "ok")) {
+      throw new Error("Worker dependencies are not ready");
+    }
     await cancellationRedis.subscribe(cancellationChannel);
     await maintain();
+
+    if (
+      !lifecycle.signal.aborted && options.artifactMaintenance !== undefined
+    ) {
+      const owner = new ArtifactMaintenanceOwner(
+        options.artifactMaintenance,
+        (error) => {
+          artifactMaintenanceFailure = error ?? new Error(
+            "Artifact maintenance stopped unexpectedly",
+          );
+          lifecycle.abort(
+            error === undefined
+              ? "artifact_maintenance_stopped"
+              : "artifact_maintenance_failed",
+          );
+          try {
+            options.logger.error({
+              eventName: "worker.artifact_maintenance.stopped",
+              message: "Artifact maintenance stopped unexpectedly",
+              operation: "artifact_maintenance",
+              outcome: "failure",
+              error: artifactMaintenanceFailure,
+            });
+          } catch {
+            // The lifecycle failure still owns shutdown if logging fails.
+          }
+        },
+      );
+      artifactMaintenanceOwner = owner;
+      void owner.start();
+    }
 
     loopTasks.push((async () => {
       while (!lifecycle.signal.aborted) {
@@ -694,7 +1018,7 @@ export async function startWorker(
               async (event) => {
                 const action = executionOutboxAction(event);
                 if (action.kind === "cancel") {
-                  processor.abortJob(action.payload.domainJobId);
+                  executionProcessor.abortJob(action.payload.domainJobId);
                   await producerRedis.publish(
                     cancellationChannel,
                     action.payload.domainJobId,
@@ -793,76 +1117,138 @@ export async function startWorker(
         })
       );
     }
+    if (artifactMaintenanceFailure !== undefined) {
+      throw new Error("Artifact maintenance lifecycle failed", {
+        cause: artifactMaintenanceFailure,
+      });
+    }
   } finally {
     const shutdownDeadlineAt = Date.now() + options.shutdownDeadlineMs;
     let forced = false;
     lifecycle.abort("shutdown_requested");
 
-    if (
-      !(await settlesBefore(Promise.allSettled(loopTasks), shutdownDeadlineAt))
-    ) {
+    const maintenanceTermination = artifactMaintenanceOwner?.terminate();
+    const backgroundTasks = [...loopTasks];
+    if (maintenanceTermination !== undefined) {
+      backgroundTasks.push(maintenanceTermination);
+    }
+    const backgroundStatus = await completionBefore(
+      allSuccessful(backgroundTasks),
+      shutdownDeadlineAt,
+    );
+    if (backgroundStatus !== "fulfilled") {
       forced = true;
-      processor.abortActive();
+      try {
+        processor?.abortActive();
+      } catch {
+        // Continue through the remaining owned resources.
+      }
+    }
+    if (
+      backgroundStatus === "timeout" &&
+      artifactMaintenanceOwner !== undefined &&
+      !artifactMaintenanceOwner.terminated
+    ) {
+      try {
+        options.logger.error({
+          eventName: "worker.artifact_maintenance.shutdown_timeout",
+          message:
+            "Artifact maintenance exceeded the shutdown deadline; waiting for termination before releasing dependencies",
+          operation: "artifact_maintenance",
+          outcome: "timeout",
+        });
+      } catch {
+        // Cleanup must continue even if the log sink fails.
+      }
     }
 
     const records = [...workerRecords.values()];
     const shutdown = await gracefullyCloseWorkers(
       records.map((record) => record.worker),
-      () => processor.waitForIdle(),
-      () => processor.abortActive(),
+      () => processor?.waitForIdle() ?? Promise.resolve(),
+      () => processor?.abortActive(),
       remainingBudgetMs(shutdownDeadlineAt),
     );
     forced ||= shutdown.forced;
 
+    const runTasks = records.flatMap((record) =>
+      record.run === undefined ? [] : [record.run]
+    );
     if (
-      !(await settlesBefore(
-        Promise.allSettled(records.map((record) => record.run)),
+      (await completionBefore(
+        allSuccessful(runTasks),
         shutdownDeadlineAt,
-      ))
-    ) forced = true;
-    if (!(await settlesBefore(queues.close(), shutdownDeadlineAt))) {
-      forced = true;
-    }
-    if (
-      !(await settlesBefore(
-        Promise.allSettled(
-          records.map((record) => closeRedis(record.connection)),
-        ),
-        shutdownDeadlineAt,
-      ))
+      )) !== "fulfilled"
     ) forced = true;
     if (
-      !(await settlesBefore(
-        Promise.allSettled([
-          closeRedis(producerRedis),
-          closeRedis(capacityRedis),
-          closeRedis(schedulerRedis),
-          closeRedis(cancellationRedis),
-        ]),
-        shutdownDeadlineAt,
-      ))
+      closeQueues !== undefined &&
+      (await completionBefore(closeQueues(), shutdownDeadlineAt)) !==
+        "fulfilled"
     ) forced = true;
-    if (!(await settlesBefore(pool.end(), shutdownDeadlineAt))) forced = true;
+    if (
+      (await completionBefore(
+        allSuccessful(redisConnections.map((owned) => owned.close())),
+        shutdownDeadlineAt,
+      )) !== "fulfilled"
+    ) forced = true;
 
     if (forced) {
-      for (const record of records) record.connection.disconnect(false);
-      producerRedis.disconnect(false);
-      capacityRedis.disconnect(false);
-      schedulerRedis.disconnect(false);
-      cancellationRedis.disconnect(false);
+      for (const owned of redisConnections) {
+        try {
+          owned.forceDisconnect();
+        } catch {
+          // Attempt every owned connection exactly once.
+        }
+      }
     }
 
-    options.signal?.removeEventListener("abort", externalAbort);
-    if (options.installSignalHandlers) {
-      for (const signal of signals) Deno.removeSignalListener(signal, stop);
+    if (externalAbortInstalled) {
+      try {
+        options.signal?.removeEventListener("abort", externalAbort);
+      } catch {
+        forced = true;
+      }
+      externalAbortInstalled = false;
     }
-    runtimeMetrics.dispose();
-    options.logger.info({
-      eventName: "worker.stopped",
-      message: "Worker stopped",
-      operation: "shutdown",
-      outcome: forced ? "timeout" : "success",
-    });
+    for (const signal of installedSignals.splice(0)) {
+      try {
+        Deno.removeSignalListener(signal, stop);
+      } catch {
+        forced = true;
+      }
+    }
+    if (
+      disposeRuntimeMetrics !== undefined &&
+      (await completionBefore(
+          disposeRuntimeMetrics(),
+          shutdownDeadlineAt,
+        )) !== "fulfilled"
+    ) forced = true;
+
+    if (maintenanceTermination !== undefined) {
+      try {
+        await maintenanceTermination;
+      } catch {
+        forced = true;
+      }
+    }
+
+    if (
+      closeOwnedPool !== undefined &&
+      (await completionBefore(closeOwnedPool(), shutdownDeadlineAt)) !==
+        "fulfilled"
+    ) forced = true;
+
+    try {
+      options.logger.info({
+        eventName: "worker.stopped",
+        message: "Worker stopped",
+        operation: "shutdown",
+        outcome: forced ? "timeout" : "success",
+      });
+    } catch {
+      // All owned resources have already received their disposal request.
+    }
   }
 }
 

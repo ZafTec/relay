@@ -89,6 +89,9 @@ docker run --rm \
   -ec 'test -r /usr/share/nginx/html/index.html && test ! -e /src && test ! -e /usr/share/nginx/html/src && ! find /usr/share/nginx/html -type f -name "*.map" -print -quit | grep -q .'
 
 compose up -d --wait --wait-timeout 120 postgres redis minio
+compose exec -T minio mc alias set relay-ci http://127.0.0.1:9000 relay_dev_only relay_dev_only >/dev/null
+compose exec -T minio mc mb --ignore-existing relay-ci/relay-artifacts >/dev/null
+compose exec -T minio mc version enable relay-ci/relay-artifacts >/dev/null
 compose run --rm migrate
 compose run --rm migrate
 compose run --rm migrate migrate status

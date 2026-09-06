@@ -209,19 +209,181 @@ Deno.test("v1 rejects oversized JSON and file bodies before upload admission", a
 
   const oversized = await app.request(
     HTTP_PATHS.artifactUploads,
-    jsonRequest({ value: "x".repeat(100) }),
+    jsonRequest(
+      { value: "x".repeat(100) },
+      { "idempotency-key": "artifact-upload-request-oversized" },
+    ),
   );
   assertEquals(oversized.status, 413);
   assertEquals(errorCode(await oversized.json()), "invalid_request");
 
   const fileBody = await app.request(HTTP_PATHS.artifactUploads, {
     method: "POST",
-    headers: { "content-type": "application/octet-stream" },
+    headers: {
+      "content-type": "application/octet-stream",
+      "idempotency-key": "artifact-upload-request-file-body",
+    },
     body: new Uint8Array([1, 2, 3]),
   });
   assertEquals(fileBody.status, 415);
   assertEquals(errorCode(await fileBody.json()), "invalid_request");
   assertEquals(uploadCalls, 0);
+});
+
+Deno.test("artifact mutations require valid idempotency before body or service", async () => {
+  let calls = 0;
+  const app = createV1Routes({
+    services: createStubServices({
+      artifacts: {
+        createUpload: () => {
+          calls += 1;
+          return Promise.resolve({ kind: "not_found" });
+        },
+        completeUpload: () => {
+          calls += 1;
+          return Promise.resolve({ kind: "not_found" });
+        },
+        createShareLink: () => {
+          calls += 1;
+          return Promise.resolve({ kind: "not_found" });
+        },
+        revokeShareLink: () => {
+          calls += 1;
+          return Promise.resolve({ kind: "not_found" });
+        },
+      },
+    }),
+    resolveIdentity: AUTHENTICATED_IDENTITY,
+    createRequestId: () => REQUEST_ID,
+  });
+  const sharePath = HTTP_PATHS.artifactShareLinks.replace(
+    ":artifactId",
+    ARTIFACT_ID,
+  );
+  const revokePath = HTTP_PATHS.artifactShareLink
+    .replace(":artifactId", ARTIFACT_ID)
+    .replace(":shareLinkId", SHARE_LINK_ID);
+  const requests = [
+    app.request(HTTP_PATHS.artifactUploads, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{",
+    }),
+    app.request(
+      HTTP_PATHS.artifactUploadComplete.replace(":uploadId", UPLOAD_ID),
+      { method: "POST", body: "unexpected" },
+    ),
+    app.request(sharePath, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{",
+    }),
+    app.request(revokePath, { method: "DELETE", body: "unexpected" }),
+  ];
+
+  for (const response of await Promise.all(requests)) {
+    assertEquals(response.status, 400);
+    const envelope = errorEnvelopeSchema.parse(await response.json());
+    assertEquals(envelope.error.code, "invalid_request");
+    assertEquals(envelope.error.details, {
+      field: "idempotency-key",
+      reason: "missing_header",
+    });
+  }
+
+  const invalid = await app.request(
+    HTTP_PATHS.artifactUploadComplete.replace(":uploadId", UPLOAD_ID),
+    {
+      method: "POST",
+      headers: { "idempotency-key": "" },
+      body: "unexpected",
+    },
+  );
+  assertEquals(invalid.status, 400);
+  assertEquals(
+    errorEnvelopeSchema.parse(await invalid.json()).error.details,
+    { field: "idempotency-key", reason: "invalid_header" },
+  );
+  assertEquals(calls, 0);
+});
+
+Deno.test("artifact revoke replays and conflicts without disclosing targets", async () => {
+  const otherArtifactId = `art_${"a".repeat(32)}`;
+  const calls: unknown[] = [];
+  let claimedTarget: string | undefined;
+  const app = createV1Routes({
+    services: createStubServices({
+      artifacts: {
+        revokeShareLink: (context, artifactId, shareLinkId, idempotencyKey) => {
+          calls.push({ context, artifactId, shareLinkId, idempotencyKey });
+          const target = `${artifactId}:${shareLinkId}`;
+          if (claimedTarget === undefined) {
+            claimedTarget = target;
+            return Promise.resolve({ kind: "revoked", replayed: false });
+          }
+          return Promise.resolve(
+            claimedTarget === target
+              ? { kind: "revoked", replayed: true }
+              : { kind: "idempotency_conflict" },
+          );
+        },
+      },
+    }),
+    resolveIdentity: AUTHENTICATED_IDENTITY,
+    createRequestId: () => REQUEST_ID,
+  });
+  const revoke = (artifactId: string) =>
+    app.request(
+      HTTP_PATHS.artifactShareLink
+        .replace(":artifactId", artifactId)
+        .replace(":shareLinkId", SHARE_LINK_ID),
+      {
+        method: "DELETE",
+        headers: { "idempotency-key": "artifact-revoke-same-key" },
+      },
+    );
+
+  const first = await revoke(ARTIFACT_ID);
+  assertEquals(first.status, 200);
+  assertEquals(await first.json(), { kind: "revoked", replayed: false });
+
+  const replay = await revoke(ARTIFACT_ID);
+  assertEquals(replay.status, 200);
+  assertEquals(await replay.json(), { kind: "revoked", replayed: true });
+
+  const conflict = await revoke(otherArtifactId);
+  assertEquals(conflict.status, 409);
+  const conflictBody = await conflict.json();
+  assertEquals(conflictBody, {
+    error: {
+      code: "idempotency_conflict",
+      message: "The idempotency key was already used for a different request.",
+      retryable: false,
+      requestId: REQUEST_ID,
+      details: {},
+    },
+  });
+  assertEquals(JSON.stringify(conflictBody).includes(otherArtifactId), false);
+  assertEquals(calls, [
+    {
+      context: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      artifactId: ARTIFACT_ID,
+      shareLinkId: SHARE_LINK_ID,
+      idempotencyKey: "artifact-revoke-same-key",
+    },
+    {
+      context: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      artifactId: ARTIFACT_ID,
+      shareLinkId: SHARE_LINK_ID,
+      idempotencyKey: "artifact-revoke-same-key",
+    },
+    {
+      context: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      artifactId: otherArtifactId,
+      shareLinkId: SHARE_LINK_ID,
+      idempotencyKey: "artifact-revoke-same-key",
+    },
+  ]);
 });
 
 Deno.test("run capacity rejection uses a retryable canonical envelope", async () => {
@@ -253,6 +415,89 @@ Deno.test("run capacity rejection uses a retryable canonical envelope", async ()
       retryAfterSeconds: 7,
       requestId: REQUEST_ID,
       details: { scope: "workspace_tool" },
+    },
+  });
+});
+
+Deno.test("run metering rejections use safe HTTP statuses and envelopes", async () => {
+  const requestRun = (result: Parameters<typeof createStubServices>[0]) => {
+    const app = createV1Routes({
+      services: createStubServices(result),
+      resolveIdentity: AUTHENTICATED_IDENTITY,
+      createRequestId: () => REQUEST_ID,
+    });
+    return app.request(
+      HTTP_PATHS.runs,
+      jsonRequest(
+        { toolKey: TOOL_KEY, input: {} },
+        { "idempotency-key": "metering-rejection-1" },
+      ),
+    );
+  };
+
+  const notEntitled = await requestRun({
+    runs: { create: () => Promise.resolve({ kind: "not_entitled" }) },
+  });
+  assertEquals(notEntitled.status, 403);
+  assertEquals(await notEntitled.json(), {
+    error: {
+      code: "not_entitled",
+      message: "The workspace is not entitled to use this tool.",
+      retryable: false,
+      requestId: REQUEST_ID,
+      details: {},
+    },
+  });
+
+  const allowance = await requestRun({
+    runs: {
+      create: () =>
+        Promise.resolve({
+          kind: "allowance_exceeded",
+          metric: "images.generated",
+          unit: "image",
+          limitAmount: "10",
+          consumedAmount: "7",
+          reservedAmount: "2",
+          requestedAmount: "2",
+        }),
+    },
+  });
+  assertEquals(allowance.status, 429);
+  assertEquals(await allowance.json(), {
+    error: {
+      code: "allowance_exceeded",
+      message: "The workspace usage allowance has been exceeded.",
+      retryable: false,
+      requestId: REQUEST_ID,
+      details: {
+        metric: "images.generated",
+        unit: "image",
+        limitAmount: "10",
+        consumedAmount: "7",
+        reservedAmount: "2",
+        requestedAmount: "2",
+      },
+    },
+  });
+
+  const unavailable = await requestRun({
+    runs: {
+      create: () =>
+        Promise.resolve({
+          kind: "usage_unavailable",
+          reason: "invalid_configuration",
+        }),
+    },
+  });
+  assertEquals(unavailable.status, 503);
+  assertEquals(await unavailable.json(), {
+    error: {
+      code: "dependency_unavailable",
+      message: "Usage admission is temporarily unavailable.",
+      retryable: true,
+      requestId: REQUEST_ID,
+      details: { dependency: "metering" },
     },
   });
 });
@@ -294,8 +539,8 @@ Deno.test("artifact, usage, and public share routes expose metadata only", async
             },
           });
         },
-        createUpload: () => {
-          calls.push("upload:create");
+        createUpload: (_context, _request, idempotencyKey) => {
+          calls.push(`upload:create:${idempotencyKey}`);
           return Promise.resolve({
             kind: "created",
             upload: {
@@ -311,24 +556,33 @@ Deno.test("artifact, usage, and public share routes expose metadata only", async
                 requiredHeaders: { "content-type": "image/png" },
               },
             },
+            replayed: false,
           });
         },
-        completeUpload: () => {
-          calls.push("upload:complete");
-          return Promise.resolve({ kind: "pending" });
+        completeUpload: (_context, _uploadId, idempotencyKey) => {
+          calls.push(`upload:complete:${idempotencyKey}`);
+          return Promise.resolve({ kind: "pending", replayed: false });
         },
-        createShareLink: (_context, request) => {
-          calls.push(`share:create:${request.artifactId}`);
+        createShareLink: (_context, request, idempotencyKey) => {
+          calls.push(`share:create:${request.artifactId}:${idempotencyKey}`);
           return Promise.resolve({
             kind: "created",
             shareLinkId: SHARE_LINK_ID,
             token: SHARE_TOKEN,
             publicPath: `/s/${SHARE_TOKEN}`,
+            replayed: false,
           });
         },
-        revokeShareLink: (_context, id) => {
-          calls.push(`share:revoke:${id}`);
-          return Promise.resolve({ kind: "already_revoked" });
+        revokeShareLink: (
+          _context,
+          artifactId,
+          shareLinkId,
+          idempotencyKey,
+        ) => {
+          calls.push(
+            `share:revoke:${artifactId}:${shareLinkId}:${idempotencyKey}`,
+          );
+          return Promise.resolve({ kind: "revoked", replayed: false });
         },
         resolveShareLink: (token, actorUserId) => {
           calls.push(`share:resolve:${token}:${actorUserId}`);
@@ -377,13 +631,16 @@ Deno.test("artifact, usage, and public share routes expose metadata only", async
 
   const upload = await app.request(
     HTTP_PATHS.artifactUploads,
-    jsonRequest({
-      target: { kind: "new_artifact", name: "Image", mediaKind: "image" },
-      sizeBytes: 4,
-      mimeType: "image/png",
-      sha256: "a".repeat(64),
-      contentMd5: `${"A".repeat(22)}==`,
-    }),
+    jsonRequest(
+      {
+        target: { kind: "new_artifact", name: "Image", mediaKind: "image" },
+        sizeBytes: 4,
+        mimeType: "image/png",
+        sha256: "a".repeat(64),
+        contentMd5: `${"A".repeat(22)}==`,
+      },
+      { "idempotency-key": "artifact-upload-request-1" },
+    ),
   );
   assertEquals(upload.status, 201);
   const uploadBody = await upload.json();
@@ -392,13 +649,19 @@ Deno.test("artifact, usage, and public share routes expose metadata only", async
 
   const complete = await app.request(
     HTTP_PATHS.artifactUploadComplete.replace(":uploadId", UPLOAD_ID),
-    { method: "POST" },
+    {
+      method: "POST",
+      headers: { "idempotency-key": "artifact-complete-request-1" },
+    },
   );
   assertEquals(complete.status, 202);
 
   const share = await app.request(
     HTTP_PATHS.artifactShareLinks.replace(":artifactId", ARTIFACT_ID),
-    jsonRequest({ followCurrent: true, contentDisposition: "inline" }),
+    jsonRequest(
+      { followCurrent: true, contentDisposition: "inline" },
+      { "idempotency-key": "artifact-share-request-1" },
+    ),
   );
   assertEquals(share.status, 201);
   assertEquals(share.headers.get("location"), `/s/${SHARE_TOKEN}`);
@@ -407,10 +670,13 @@ Deno.test("artifact, usage, and public share routes expose metadata only", async
     HTTP_PATHS.artifactShareLink
       .replace(":artifactId", ARTIFACT_ID)
       .replace(":shareLinkId", SHARE_LINK_ID),
-    { method: "DELETE" },
+    {
+      method: "DELETE",
+      headers: { "idempotency-key": "artifact-revoke-request-1" },
+    },
   );
   assertEquals(revoke.status, 200);
-  assertEquals(await revoke.json(), { kind: "already_revoked" });
+  assertEquals(await revoke.json(), { kind: "revoked", replayed: false });
 
   assertEquals((await app.request(HTTP_PATHS.usage)).status, 200);
 
@@ -428,10 +694,10 @@ Deno.test("artifact, usage, and public share routes expose metadata only", async
     "artifact:list",
     `artifact:get:${ARTIFACT_ID}`,
     `download:${ARTIFACT_ID}`,
-    "upload:create",
-    "upload:complete",
-    `share:create:${ARTIFACT_ID}`,
-    `share:revoke:${SHARE_LINK_ID}`,
+    "upload:create:artifact-upload-request-1",
+    "upload:complete:artifact-complete-request-1",
+    `share:create:${ARTIFACT_ID}:artifact-share-request-1`,
+    `share:revoke:${ARTIFACT_ID}:${SHARE_LINK_ID}:artifact-revoke-request-1`,
     `share:resolve:${SHARE_TOKEN}:${USER_ID}`,
   ]);
 });

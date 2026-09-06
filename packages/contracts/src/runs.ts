@@ -47,6 +47,13 @@ export const RUN_QUEUE_REASONS = [
 ] as const;
 export type RunQueueReason = (typeof RUN_QUEUE_REASONS)[number];
 
+export const RUN_USAGE_UNAVAILABLE_REASONS = [
+  "unavailable",
+  "invalid_configuration",
+] as const;
+export type RunUsageUnavailableReason =
+  (typeof RUN_USAGE_UNAVAILABLE_REASONS)[number];
+
 export interface RunToolReference {
   readonly key: string;
   readonly name: string;
@@ -120,6 +127,20 @@ export type CreateRunResult =
   | { readonly kind: "not_found" }
   | { readonly kind: "tool_unavailable" }
   | { readonly kind: "idempotency_conflict" }
+  | { readonly kind: "not_entitled" }
+  | {
+    readonly kind: "allowance_exceeded";
+    readonly metric: string;
+    readonly unit: string;
+    readonly limitAmount: string;
+    readonly consumedAmount: string;
+    readonly reservedAmount: string;
+    readonly requestedAmount: string;
+  }
+  | {
+    readonly kind: "usage_unavailable";
+    readonly reason: RunUsageUnavailableReason;
+  }
   | {
     readonly kind: "queue_full";
     readonly scope: "global_tool" | "workspace_total" | "workspace_tool";
@@ -696,7 +717,61 @@ export const createRunResultSchema: ContractSchema<CreateRunResult> =
                 "not_found",
                 "tool_unavailable",
                 "idempotency_conflict",
+                "not_entitled",
               ],
+            },
+          },
+        },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["kind", "reason"],
+          properties: {
+            kind: { const: "usage_unavailable" },
+            reason: { enum: RUN_USAGE_UNAVAILABLE_REASONS },
+          },
+        },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "kind",
+            "metric",
+            "unit",
+            "limitAmount",
+            "consumedAmount",
+            "reservedAmount",
+            "requestedAmount",
+          ],
+          properties: {
+            kind: { const: "allowance_exceeded" },
+            metric: {
+              type: "string",
+              minLength: 1,
+              maxLength: 128,
+              pattern: "^[a-z0-9][a-z0-9._:-]{0,127}$",
+            },
+            unit: {
+              type: "string",
+              minLength: 1,
+              maxLength: 128,
+              pattern: "^[a-z0-9][a-z0-9._:-]{0,127}$",
+            },
+            limitAmount: {
+              type: "string",
+              pattern: "^(?:0|[1-9][0-9]{0,28})(?:\\.[0-9]{1,9})?$",
+            },
+            consumedAmount: {
+              type: "string",
+              pattern: "^(?:0|[1-9][0-9]{0,28})(?:\\.[0-9]{1,9})?$",
+            },
+            reservedAmount: {
+              type: "string",
+              pattern: "^(?:0|[1-9][0-9]{0,28})(?:\\.[0-9]{1,9})?$",
+            },
+            requestedAmount: {
+              type: "string",
+              pattern: "^(?:0|[1-9][0-9]{0,28})(?:\\.[0-9]{1,9})?$",
             },
           },
         },
@@ -720,6 +795,13 @@ export const createRunResultSchema: ContractSchema<CreateRunResult> =
         "replayed",
         "queueReason",
         "scope",
+        "reason",
+        "metric",
+        "unit",
+        "limitAmount",
+        "consumedAmount",
+        "reservedAmount",
+        "requestedAmount",
       ]);
       const kind = enumValue(
         required(object, "kind", path),
@@ -729,6 +811,9 @@ export const createRunResultSchema: ContractSchema<CreateRunResult> =
           "not_found",
           "tool_unavailable",
           "idempotency_conflict",
+          "not_entitled",
+          "allowance_exceeded",
+          "usage_unavailable",
           "queue_full",
         ] as const,
       );
@@ -756,6 +841,55 @@ export const createRunResultSchema: ContractSchema<CreateRunResult> =
             required(object, "scope", path),
             `${path}.scope`,
             ["global_tool", "workspace_total", "workspace_tool"] as const,
+          ),
+        };
+      }
+      if (kind === "allowance_exceeded") {
+        strictObject(value, path, [
+          "kind",
+          "metric",
+          "unit",
+          "limitAmount",
+          "consumedAmount",
+          "reservedAmount",
+          "requestedAmount",
+        ]);
+        return {
+          kind,
+          metric: safeCodeParser(
+            required(object, "metric", path),
+            `${path}.metric`,
+          ),
+          unit: safeCodeParser(
+            required(object, "unit", path),
+            `${path}.unit`,
+          ),
+          limitAmount: decimalAmountParser(
+            required(object, "limitAmount", path),
+            `${path}.limitAmount`,
+          ),
+          consumedAmount: decimalAmountParser(
+            required(object, "consumedAmount", path),
+            `${path}.consumedAmount`,
+          ),
+          reservedAmount: decimalAmountParser(
+            required(object, "reservedAmount", path),
+            `${path}.reservedAmount`,
+          ),
+          requestedAmount: decimalAmountParser(
+            required(object, "requestedAmount", path),
+            `${path}.requestedAmount`,
+          ),
+        };
+      }
+      if (kind === "usage_unavailable") {
+        strictObject(value, path, ["kind", "reason"]);
+        return {
+          kind,
+          reason: enumValue(
+            required(object, "reason", path),
+            `${path}.reason`,
+            RUN_USAGE_UNAVAILABLE_REASONS,
           ),
         };
       }

@@ -46,6 +46,14 @@ describe("v3 production source contract", () => {
     expect(landing).not.toContain("design/relay/assets");
   });
 
+  it("allows HTTPS presigned transfers without relaxing executable sources", async () => {
+    const config = await read("nginx.conf");
+    expect(config).toContain("connect-src 'self' https:");
+    expect(config).toContain("script-src 'self'");
+    expect(config).not.toMatch(/script-src[^;]*\*/i);
+    expect(config).not.toMatch(/connect-src[^;]*\*/i);
+  });
+
   it("proxies every backend-owned public path without capturing sign-in", async () => {
     const config = await read("vite.config.ts");
     expect(config).toContain('"/api": proxy');
