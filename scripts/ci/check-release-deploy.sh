@@ -41,7 +41,9 @@ mapfile -d '' shell_scripts < <(
   find deploy scripts/release -type f -name '*.sh' -print0 | sort -z
 )
 ((${#shell_scripts[@]} > 0)) || fail "no release/deploy shell scripts were found"
-bash -n -- "${shell_scripts[@]}"
+for script in "${shell_scripts[@]}"; do
+  bash -n -- "$script"
+done
 
 docker pull "$ACTIONLINT_IMAGE"
 repository_mount=$(host_path "$REPOSITORY_ROOT")

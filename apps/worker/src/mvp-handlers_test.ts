@@ -887,6 +887,82 @@ Deno.test("OCR maps every public option, wraps strict schemas, and stores normal
   }
 });
 
+Deno.test("invalid or missing OCR extraction preserves Markdown and settles partial usage", async () => {
+  const source = await artifactFixture(61, "application/pdf", PDF_BYTES);
+  for (
+    const annotation of [
+      null,
+      "provider-private-invalid-json",
+      '{"invoiceNumber":17}',
+      "{}",
+    ]
+  ) {
+    const harness = createHarness({
+      input: {
+        sourceArtifactVersionId: source.row.artifact_version_id,
+        extractionSchema: {
+          type: "object",
+          required: ["invoiceNumber"],
+          properties: { invoiceNumber: { type: "string" } },
+        },
+      },
+      artifactFixtures: [source],
+      ocr: () =>
+        Promise.resolve({
+          pages: [],
+          documentAnnotation: annotation,
+          usageInfo: {
+            pagesProcessed: 0,
+            documentSizeBytes: PDF_BYTES.byteLength,
+          },
+        }),
+    });
+    const result = await handler(harness.dependencies, MISTRAL_OCR_HANDLER_KEY)
+      .execute(executionContext(MISTRAL_OCR_HANDLER_KEY));
+    assertEquals(result, { kind: "succeeded" });
+    assertEquals(
+      harness.artifactCalls.ingests.map((call) => call.artifactName),
+      ["ocr.md", "ocr.json"],
+    );
+    assertEquals(harness.artifactCalls.ingests[0].bytes.byteLength, 0);
+    assertEquals(
+      harness.artifactCalls.failures[0].errorCode,
+      "provider.invalid_structured_output",
+    );
+    assertEquals(harness.meteringCalls.commits[0].outcome, "partial_output");
+    assertEquals(harness.meteringCalls.releases.length, 0);
+    assertEquals(
+      JSON.stringify(harness.artifactCalls).includes("provider-private"),
+      false,
+    );
+  }
+});
+
+Deno.test("OCR rejects remote extraction schemas before storage reads or provider calls", async () => {
+  const source = await artifactFixture(62, "application/pdf", PDF_BYTES);
+  let providerCalls = 0;
+  const harness = createHarness({
+    input: {
+      sourceArtifactVersionId: source.row.artifact_version_id,
+      extractionSchema: { $ref: "https://example.test/schema" },
+    },
+    artifactFixtures: [source],
+    ocr: () => {
+      providerCalls++;
+      throw new Error("must not submit");
+    },
+  });
+  const result = await handler(harness.dependencies, MISTRAL_OCR_HANDLER_KEY)
+    .execute(executionContext(MISTRAL_OCR_HANDLER_KEY));
+  assertEquals(result.kind, "failed");
+  assertEquals(providerCalls, 0);
+  assertEquals(harness.storageReads.length, 0);
+  assertEquals(
+    harness.meteringCalls.releases[0].outcome,
+    "validation_rejected",
+  );
+});
+
 Deno.test("a stored subset records item failures and commits partial GPT usage", async () => {
   const harness = createHarness({
     input: { prompt: "Two images", n: 2 },

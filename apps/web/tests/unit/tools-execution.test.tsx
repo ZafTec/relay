@@ -319,12 +319,14 @@ describe("production tool run composers", () => {
 
     await user.click(await screen.findByRole("radio", { name: /Quarterly report/i }));
     await user.type(screen.getByLabelText("Pages"), "0-2,5");
+    await user.click(screen.getByText("Embedded images", { selector: "summary" }));
     await user.click(screen.getByRole("checkbox", { name: "Include images" }));
     await user.type(screen.getByLabelText("Image limit"), "8");
     await user.type(screen.getByLabelText("Image minimum size"), "64");
     fireEvent.change(screen.getByLabelText("Image annotation JSON schema"), {
       target: { value: JSON.stringify(imageSchema) },
     });
+    await user.click(screen.getByText("Structured extraction", { selector: "summary" }));
     fireEvent.change(screen.getByLabelText("Document extraction JSON schema"), {
       target: { value: JSON.stringify(extractionSchema) },
     });

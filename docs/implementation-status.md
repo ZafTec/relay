@@ -4,6 +4,45 @@ Status: repository audit\
 Verified: 2026-08-21\
 Design baseline: `1eb7a3d` (`design/v3/` normalized and tracked)
 
+## PR #35 review update — 2026-09-06
+
+This update supersedes earlier implementation-gap claims below. The PR wires
+the fixed Azure image/OCR tools, PostgreSQL metering, durable MinIO artifacts,
+HTTP/MCP adapters, product composers, capacity administration, and release/
+deployment automation into the production composition roots.
+
+The review fixed the failing deployment CI script invocation and shell syntax
+check, removed implicit unlimited workspace grants, and added local OCR schema
+validation. Multi-image requests now use one concurrency slot while retaining
+their full scheduling cost and metered image count. Invalid extraction preserves
+valid OCR artifacts and records a failed extraction item with partial usage
+settlement. See the
+[explicit allowance decision](implementation-handoff/05-domain-storage-metering.md#explicit-mvp-allowances).
+
+The web pass keeps the Ledger v3 design, improves tool headings/form hierarchy,
+collapses optional OCR and contract details, infers upload media kind, and fixes
+tablet overflow in the capacity editor. Browser checks cover all three tool
+composers, uploads, focus, accessibility and desktop/tablet/mobile widths.
+
+`mvp-pipeline_live_test.ts` exercises seeded tools through real PostgreSQL,
+Redis scheduling/capacity, the production worker, MinIO and usage settlement.
+Azure fetch responses are stubbed: this test uses no live provider credentials
+or billable requests. It covers absent/exhausted allowances, image outputs,
+artifact-backed FLUX/OCR inputs, empty OCR text, schema extraction, partial
+output, and idempotent admission replay.
+
+OCR extraction supports bounded structural JSON Schema (draft 7 or explicitly
+declared draft 2020-12) and acyclic local JSON-pointer references. Remote refs,
+recursive refs, regex patterns, async schemas and nested schema identifiers
+are rejected before provider submission. Schema/annotation limits are 256 KiB,
+8,192 structural nodes and 32 levels, with reference expansion bounded too.
+
+Repository validation does not establish a production deployment. GitHub App/
+Docker Hub settings, real OAuth callbacks, approved allowance provisioning,
+prices and production deployment/rollback evidence remain tracked in #10/#28.
+The predeployment baseline must not be substituted into an already retained
+database without explicitly reconciling its existing checksum and grants.
+
 ## Current branch update — 2026-08-24
 
 The implementation branch now includes hardened Google/GitHub-only Better Auth,

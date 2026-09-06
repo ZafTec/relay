@@ -54,7 +54,7 @@ function lifecycleBadge(lifecycle: ToolLifecycle) {
 }
 
 function pageHeading(state: DetailPageState, toolKey: string): string {
-  if (state.kind === "found") return state.tool.key;
+  if (state.kind === "found") return state.tool.name;
   if (state.kind === "not-found") return "Tool not found";
   if (state.kind === "degraded") return "Tool contract unavailable";
   return toolKey.length > 0 ? toolKey : "Tool contract";
@@ -103,6 +103,8 @@ function ToolContract({
           </section>
         )}
 
+      <details className="tool-reference" open={!isProductionToolKey(tool.key)}>
+        <summary>Tool contract <span>Version, limits, and API schemas</span></summary>
       <section
         className="tool-contract-section"
         aria-labelledby="tool-facts-title"
@@ -183,6 +185,7 @@ function ToolContract({
           </pre>
         </section>
       </div>
+      </details>
     </>
   );
 }
@@ -249,7 +252,7 @@ export function ToolDetailPage({
           <div>
             <h1>{heading}</h1>
             {state.kind === "found"
-              ? <p className="tool-detail-header__name">{state.tool.name}</p>
+              ? <p className="tool-detail-header__name"><code>{state.tool.key}</code> · v{state.tool.version}</p>
               : null}
           </div>
           {state.kind === "found" ? lifecycleBadge(state.tool.lifecycle) : null}

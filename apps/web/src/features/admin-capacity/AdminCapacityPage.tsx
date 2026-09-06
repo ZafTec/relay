@@ -467,10 +467,9 @@ export function AdminCapacityPage({
     <article className="admin-capacity-page">
       <header className="admin-page-header capacity-page-header">
         <div>
-          <p className="capacity-eyebrow">Operate / platform</p>
           <h1>Capacity policies</h1>
           <p className="capacity-page-header__summary">
-            Inspect effective policy JSON and create immutable, optimistic revisions.
+            Review tool capacity and update the limits that govern execution.
           </p>
         </div>
         <span className="capacity-mode" aria-label="Current interface mode: Operate">Operate</span>

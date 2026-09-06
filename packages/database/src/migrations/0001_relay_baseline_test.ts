@@ -346,13 +346,6 @@ Deno.test("0001 baseline seeds exact immutable MVP meter policies", () => {
       IMAGE_METER_POLICY_ID,
       OCR_METER_POLICY_ID,
       "relay.compute_meter_policy_immutable_hash(",
-      "INSERT INTO relay.entitlement_grants",
-      "relay:mvp-entitlement:v1:",
-      "'tools.execute'::text, 'capability'::text, true",
-      "'images.generated'::text, 'limit'::text",
-      "'ocr.requests'::text, 'limit'::text",
-      "'system'",
-      MVP_ENTITLEMENT_SOURCE,
     ]
   ) {
     assertStringIncludes(CANONICAL_SQL, invariant);
@@ -990,88 +983,15 @@ Deno.test({
         },
       ]);
 
-      const grants = await client.query<{
-        workspace_id: string;
-        entitlement_key: string;
-        grant_kind: string;
-        capability_enabled: boolean | null;
-        limit_amount: string | null;
-        unit: string | null;
-        period: string | null;
-        source_kind: string;
-        source_reference: string | null;
-        id_valid: boolean;
-      }>(
-        `select grant_row.workspace_id, grant_row.entitlement_key,
-                grant_row.grant_kind, grant_row.capability_enabled,
-                grant_row.limit_amount::text, grant_row.unit, grant_row.period,
-                grant_row.source_kind, grant_row.source_reference,
-                grant_row.id = 'grant_' || pg_catalog.encode(
-                  pg_catalog.sha256(pg_catalog.convert_to(
-                    'relay:mvp-entitlement:v1:' || grant_row.workspace_id || ':' ||
-                      grant_row.entitlement_key || ':' || grant_row.grant_kind,
-                    'UTF8'
-                  )),
-                  'hex'
-                ) as id_valid
-           from relay.entitlement_grants as grant_row
-          where grant_row.source_kind = 'system'
-            and grant_row.source_reference = $1
-          order by grant_row.workspace_id, grant_row.entitlement_key`,
+      const grants = await client.query(
+        "select id from relay.entitlement_grants where source_reference = $1",
         [MVP_ENTITLEMENT_SOURCE],
       );
-      const grantedWorkspaceCount = new Set(
-        grants.rows.map((row: { workspace_id: string }) => row.workspace_id),
-      ).size;
-      assertEquals(grants.rows.length, grantedWorkspaceCount * 3);
       assertEquals(
-        grants.rows.every((row: {
-          id_valid: boolean;
-          source_kind: string;
-          source_reference: string | null;
-        }) =>
-          row.id_valid && row.source_kind === "system" &&
-          row.source_reference === MVP_ENTITLEMENT_SOURCE
-        ),
-        true,
+        grants.rows,
+        [],
+        "the baseline must not grant automatic unlimited usage",
       );
-      assertEquals(
-        grants.rows.every((row: {
-          entitlement_key: string;
-          grant_kind: string;
-          capability_enabled: boolean | null;
-          limit_amount: string | null;
-          unit: string | null;
-          period: string | null;
-        }) =>
-          row.entitlement_key === "tools.execute"
-            ? row.grant_kind === "capability" &&
-              row.capability_enabled === true && row.limit_amount === null &&
-              row.unit === null && row.period === null
-            : row.grant_kind === "limit" &&
-              row.capability_enabled === null && row.limit_amount === null &&
-              row.period === "calendar_month" &&
-              ((row.entitlement_key === "images.generated" &&
-                row.unit === "image") ||
-                (row.entitlement_key === "ocr.requests" &&
-                  row.unit === "request"))
-        ),
-        true,
-      );
-      for (
-        const entitlementKey of [
-          "images.generated",
-          "ocr.requests",
-          "tools.execute",
-        ]
-      ) {
-        assertEquals(
-          grants.rows.filter((row: { entitlement_key: string }) =>
-            row.entitlement_key === entitlementKey
-          ).length,
-          grantedWorkspaceCount,
-        );
-      }
 
       const privileges = await client.query<{
         account_delete: boolean;

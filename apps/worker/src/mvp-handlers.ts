@@ -36,6 +36,11 @@ import {
 import type { ExecutionHandlerResult } from "@relay/queue";
 import type { ObjectRead, ObjectStorage } from "@relay/storage";
 import type { RegisteredExecutionHandler } from "./handlers.ts";
+import {
+  compileOcrSchema,
+  type OcrSchemaValidator,
+  parseOcrAnnotation,
+} from "./ocr-schema.ts";
 
 export const GPT_IMAGE_2_HANDLER_KEY =
   "image.generate.azure-openai.gpt-image-2.v1" as const;
@@ -142,6 +147,8 @@ interface OcrInput {
   readonly sourceArtifactId?: string;
   readonly sourceArtifactVersionId?: string;
   readonly includeImages: boolean;
+  readonly validateExtraction?: OcrSchemaValidator;
+  readonly validateImageAnnotation?: OcrSchemaValidator;
   readonly request: Omit<AzureMistralOcrRequest, "document">;
 }
 
@@ -671,6 +678,19 @@ function parseOcrInput(value: unknown): OcrInput {
   const extractionSchema = input.extractionSchema === undefined
     ? undefined
     : jsonSchema(input.extractionSchema, "extractionSchema");
+  function validator(schema: JsonObject | undefined, field: string) {
+    if (schema === undefined) return undefined;
+    try {
+      return compileOcrSchema(schema);
+    } catch {
+      throw new MvpValidationError(field);
+    }
+  }
+  const validateExtraction = validator(extractionSchema, "extractionSchema");
+  const validateImageAnnotation = validator(
+    imageAnnotationSchema,
+    "imageAnnotationSchema",
+  );
   const extractionPrompt = input.extractionPrompt === undefined
     ? undefined
     : stringValue(input.extractionPrompt, "extractionPrompt", 32_000);
@@ -701,6 +721,8 @@ function parseOcrInput(value: unknown): OcrInput {
       ? {}
       : { sourceArtifactVersionId }),
     includeImages,
+    validateExtraction,
+    validateImageAnnotation,
     request: {
       ...optionalProperty(pages, "pages"),
       include_image_base64: includeImages,
@@ -1501,24 +1523,43 @@ function jsonBytes(value: unknown): Uint8Array {
   return TEXT_ENCODER.encode(`${serialized}\n`);
 }
 
-function extractionValue(annotation: string): unknown {
-  try {
-    return JSON.parse(annotation) as unknown;
-  } catch {
-    return annotation;
-  }
-}
-
 function ocrOutputs(
   result: OcrResult,
   source: AuthorizedArtifact,
-): { readonly outputs: readonly PlannedOutput[]; readonly truncated: boolean } {
+  input: OcrInput,
+): {
+  readonly outputs: readonly PlannedOutput[];
+  readonly warnings: readonly {
+    readonly code: string;
+    readonly maximumItems?: number;
+  }[];
+} {
   if (
     typeof result !== "object" || result === null ||
     !Array.isArray(result.pages) || result.pages.length > 1_000 ||
     typeof result.usageInfo !== "object" || result.usageInfo === null
   ) throw new MvpProviderResponseError("ocr");
-  const pages = result.pages as OcrResult["pages"];
+  const warnings: Array<
+    { readonly code: string; readonly maximumItems?: number }
+  > = [];
+  let invalidImageAnnotation = false;
+  const pages: OcrResult["pages"] = (result.pages as OcrResult["pages"]).map((
+    page,
+  ) => ({
+    ...page,
+    images: page.images.map((image) => {
+      if (input.validateImageAnnotation === undefined) return image;
+      if (
+        parseOcrAnnotation(image.annotation, input.validateImageAnnotation)
+          .valid
+      ) return image;
+      invalidImageAnnotation = true;
+      return { ...image, annotation: null };
+    }),
+  }));
+  if (invalidImageAnnotation) {
+    warnings.push({ code: "image_annotation_invalid" });
+  }
   const metadata = {
     provider: "azure-mistral-ocr",
     sourceArtifactId: source.artifactId,
@@ -1537,20 +1578,34 @@ function ocrOutputs(
   }, {
     kind: "content",
     name: "ocr.json",
-    bytes: jsonBytes(normalizedOcrDocument(result)),
+    bytes: jsonBytes(normalizedOcrDocument({ ...result, pages })),
     mediaKind: "document",
     mimeType: "application/json",
     metadata: { ...metadata, outputType: "normalized_ocr" },
   }];
-  if (result.documentAnnotation !== null) {
-    outputs.push({
-      kind: "content",
-      name: "extraction.json",
-      bytes: jsonBytes(extractionValue(result.documentAnnotation)),
-      mediaKind: "document",
-      mimeType: "application/json",
-      metadata: { ...metadata, outputType: "structured_extraction" },
-    });
+  if (
+    input.validateExtraction !== undefined || result.documentAnnotation !== null
+  ) {
+    const extraction = parseOcrAnnotation(
+      result.documentAnnotation,
+      input.validateExtraction,
+    );
+    outputs.push(
+      extraction.valid
+        ? {
+          kind: "content",
+          name: "extraction.json",
+          bytes: jsonBytes(extraction.value),
+          mediaKind: "document",
+          mimeType: "application/json",
+          metadata: { ...metadata, outputType: "structured_extraction" },
+        }
+        : {
+          kind: "failure",
+          name: "extraction.json",
+          errorCode: "provider.invalid_structured_output",
+        },
+    );
   }
 
   pages.forEach((page, pageOrdinal) => {
@@ -1612,9 +1667,15 @@ function ocrOutputs(
       });
     });
   });
+  if (outputs.length > MAX_OUTPUT_ITEMS) {
+    warnings.push({
+      code: "output_items_truncated",
+      maximumItems: MAX_OUTPUT_ITEMS,
+    });
+  }
   return {
     outputs: outputs.slice(0, MAX_OUTPUT_ITEMS),
-    truncated: outputs.length > MAX_OUTPUT_ITEMS,
+    warnings,
   };
 }
 
@@ -1657,7 +1718,7 @@ async function executeOcr(
     document: dataUrl(source.mimeType, bytes),
     ...input.request,
   }, { signal: context.signal });
-  const plan = ocrOutputs(result, source);
+  const plan = ocrOutputs(result, source, input);
   state.providerCost = {
     actualModelVersion: AZURE_MISTRAL_OCR_MODEL,
     normalizedUsage: ocrProviderUsage(result),
@@ -1667,9 +1728,7 @@ async function executeOcr(
     context.job.workspaceId,
     context.job.runId,
     plan.outputs,
-    plan.truncated
-      ? [{ code: "output_items_truncated", maximumItems: MAX_OUTPUT_ITEMS }]
-      : [],
+    plan.warnings,
   );
   const persisted = await persistOutputs(
     dependencies,
@@ -1682,7 +1741,7 @@ async function executeOcr(
     throw new MvpStorageError("no_output_stored");
   }
   return {
-    outcome: persisted.failed === 0 && !plan.truncated
+    outcome: persisted.failed === 0 && plan.warnings.length === 0
       ? "success"
       : "partial_output",
     actualAmount: "1",

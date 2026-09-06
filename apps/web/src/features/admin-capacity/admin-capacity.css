@@ -217,6 +217,7 @@
 }
 
 .capacity-table-region {
+  position: relative;
   min-width: 0;
   max-width: 100%;
   overflow-x: auto;
@@ -225,7 +226,7 @@
 
 .capacity-table {
   width: 100%;
-  min-width: 940px;
+  min-width: 680px;
   border-collapse: collapse;
   color: var(--surface-copy);
   font-size: 0.78rem;
@@ -477,7 +478,7 @@
 }
 
 .capacity-json-editor {
-  min-height: 360px;
+  min-height: 280px;
   font-family: var(--relay-font-mono);
   font-size: 0.76rem;
   line-height: 1.65;
@@ -593,6 +594,9 @@
       minmax(150px, 0.7fr) auto;
   }
 
+}
+
+@container (min-width: 1360px) {
   .capacity-workspace {
     grid-template-columns: minmax(0, 1.12fr) minmax(380px, 0.88fr);
   }

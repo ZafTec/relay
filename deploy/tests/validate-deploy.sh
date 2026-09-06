@@ -233,19 +233,19 @@ done < "$images_file"
   fail "rendered Compose is missing a pinned release image"
 
 if command -v jq >/dev/null 2>&1; then
-  "$SCRIPT_DIR/preflight-config-test.sh"
+  bash "$SCRIPT_DIR/preflight-config-test.sh"
 else
   echo "jq unavailable; skipped executable preflight-config rejection tests." >&2
 fi
 
 if [[ -n ${NGINX_TEST_IMAGE:-} ]]; then
-  "$SCRIPT_DIR/validate-nginx-bootstrap.sh" "$NGINX_TEST_IMAGE"
+  bash "$SCRIPT_DIR/validate-nginx-bootstrap.sh" "$NGINX_TEST_IMAGE"
 else
   echo "NGINX_TEST_IMAGE unset; skipped containerized bootstrap nginx -t." >&2
 fi
 
 if [[ -n ${NGINX_TEST_IMAGE:-} && -n ${PYTHON_TEST_IMAGE:-} ]]; then
-  "$SCRIPT_DIR/validate-nginx-routing.sh" \
+  bash "$SCRIPT_DIR/validate-nginx-routing.sh" \
     "$NGINX_TEST_IMAGE" "$PYTHON_TEST_IMAGE"
 else
   echo "Pinned NGINX_TEST_IMAGE/PYTHON_TEST_IMAGE not both set; skipped routing integration." >&2

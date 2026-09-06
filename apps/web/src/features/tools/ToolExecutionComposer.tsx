@@ -574,7 +574,13 @@ function describedBy(...ids: Array<string | false | null | undefined>): string |
 
 function focusFirstInvalid(form: HTMLFormElement) {
   window.requestAnimationFrame(() => {
-    form.querySelector<HTMLElement>("[aria-invalid='true']")?.focus();
+    const invalid = form.querySelector<HTMLElement>("[aria-invalid='true']");
+    let ancestor = invalid?.parentElement;
+    while (ancestor && ancestor !== form) {
+      if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
+      ancestor = ancestor.parentElement;
+    }
+    invalid?.focus();
   });
 }
 
@@ -702,6 +708,7 @@ function GptImageComposer({ disabled, submitting, onCreate }: ComposerFormProps)
             className="tool-composer-control tool-composer-control--textarea"
             id={`${id}-prompt`}
             value={prompt}
+            placeholder="Describe the image you want to create…"
             aria-invalid={errors.prompt === undefined ? undefined : true}
             aria-describedby={describedBy(`${id}-prompt-hint`, errors.prompt && `${id}-prompt-error`)}
             onChange={(event) => {
@@ -1354,10 +1361,10 @@ function OcrComposer({
             <FieldError id={`${id}-pages-error`} message={errors.pages} />
           </div>
 
-          <section className="tool-option-group" aria-labelledby={`${id}-images-title`}>
+          <details className="tool-option-group tool-advanced">
+            <summary id={`${id}-images-title`}>Embedded images <span>Optional</span></summary>
             <div className="tool-option-group__heading">
               <div>
-                <h3 id={`${id}-images-title`}>Embedded images</h3>
                 <p>Control image output and optional annotation structure.</p>
               </div>
               <label className="tool-switch-row">
@@ -1441,17 +1448,17 @@ function OcrComposer({
                 }}
               />
               <p className="tool-field__hint" id={`${id}-image-schema-hint`}>
-                Optional JSON object defining strict image annotations.
+                Optional structural JSON schema. Regular expressions and recursive references are unsupported.
               </p>
               <FieldError id={`${id}-image-schema-error`} message={errors.imageAnnotationSchema} />
             </div>
-          </section>
+          </details>
 
-          <section className="tool-option-group" aria-labelledby={`${id}-extraction-title`}>
+          <details className="tool-option-group tool-advanced">
+            <summary id={`${id}-extraction-title`}>Structured extraction <span>Optional</span></summary>
             <div className="tool-option-group__heading">
               <div>
-                <h3 id={`${id}-extraction-title`}>Document extraction</h3>
-                <p>Add a JSON schema, with an optional prompt, for structured output.</p>
+                <p>Add a structural JSON schema with local references and an optional prompt. Regular expressions and recursive references are unsupported.</p>
               </div>
             </div>
             <div className="tool-form-grid tool-form-grid--two">
@@ -1493,7 +1500,7 @@ function OcrComposer({
                 <FieldError id={`${id}-extraction-prompt-error`} message={errors.extractionPrompt} />
               </div>
             </div>
-          </section>
+          </details>
 
           <div className="tool-form-grid tool-form-grid--two">
             <div className="tool-field">
@@ -1808,7 +1815,7 @@ export function ToolExecutionComposer({
       <header className="tool-composer__header">
         <div>
           <h2 id="tool-composer-title">Create run</h2>
-          <p>Configure and submit an asynchronous run. No automatic retry is performed.</p>
+          <p>Choose your inputs. Follow progress and collect the results in Runs.</p>
         </div>
         {composerBadge(submission, pendingOperation !== null)}
       </header>

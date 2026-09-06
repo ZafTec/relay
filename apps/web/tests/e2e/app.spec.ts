@@ -413,6 +413,100 @@ async function waitForFonts(page: Page) {
   });
 }
 
+const productionTools = [
+  { key: "image.generate.gpt-image-2", name: "GPT Image 2", category: "image", summary: "Generate images from a text prompt." },
+  { key: "image.generate.flux-2-pro", name: "FLUX.2 Pro", category: "image", summary: "Generate images with optional reference images." },
+  { key: "document.ocr", name: "Document OCR", category: "document", summary: "Extract text, tables, and structured data from a document." },
+];
+
+async function mockProductionTools(page: Page) {
+  await mockAuthenticatedWorkspace(page, { adminAccess: true });
+  await mockRegistryResources(page);
+  await page.route("**/api/v1/tools**", async (route) => {
+    const key = decodeURIComponent(new URL(route.request().url()).pathname.split("/").at(-1) ?? "");
+    const tools = productionTools.map((tool) => ({ ...browserTool, ...tool }));
+    const selected = tools.find((tool) => tool.key === key);
+    await route.fulfill({
+      json: selected
+        ? { kind: "found", tool: { ...selected, executionMode: "async", maxDurationSeconds: 300, inputSchema: { type: "object" }, outputSchema: { type: "object" } } }
+        : { kind: "ok", items: tools, nextCursor: null },
+    });
+  });
+}
+
+async function captureReview(page: Page, name: string) {
+  if (!process.env.RELAY_UI_REVIEW_PHASE) return;
+  await waitForFonts(page);
+  await page.screenshot({
+    path: path.join("artifacts", `pr35-${process.env.RELAY_UI_REVIEW_PHASE}`, `${name}.png`),
+    fullPage: true,
+  });
+}
+
+test("MVP tool composers remain accessible and usable on desktop and mobile", async ({ page }) => {
+  test.setTimeout(120_000);
+  await mockProductionTools(page);
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const tool of productionTools) {
+      await page.goto(`/dashboard/tools/${tool.key}`);
+      await expect(page.getByRole("heading", { name: "Create run", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Create run", exact: true })).toBeEnabled();
+      await captureReview(page, `${tool.key}-${width}`);
+      await expectNoPageOverflow(page);
+      await expectNoSeriousAxeViolations(page);
+    }
+  }
+});
+
+test("MVP upload and sign-out dialogs retain focus and fit small screens", async ({ page }) => {
+  await mockProductionTools(page);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/dashboard/artifacts");
+    await page.getByRole("button", { name: "Upload artifact", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Upload artifact", exact: true });
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("File", { exact: true }).setInputFiles({ name: "quarterly-report.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7\nReview fixture") });
+    await expect(dialog.getByLabel("Artifact name", { exact: true })).toHaveValue("quarterly-report.pdf");
+    await expect(dialog.getByLabel("Media kind", { exact: true })).toHaveValue("document");
+    await captureReview(page, `upload-${width}`);
+    await expectNoPageOverflow(page);
+    await expectNoSeriousAxeViolations(page);
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    const signOut = page.getByRole("button", { name: "Sign out", exact: true }).filter({ visible: true });
+    await signOut.click();
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("alertdialog").getByRole("button", { name: "Sign out", exact: true })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(signOut).toBeFocused();
+  }
+});
+
+test("MVP capacity policies remain readable across desktop and mobile", async ({ page }) => {
+  test.setTimeout(90_000);
+  await mockProductionTools(page);
+  const configuration = { leaseDefaults: { maxRunning: 50 }, submissionRateDefaults: { providerPerMinute: 12, workspacePerProviderPerMinute: 4 } };
+  const policy = { policyId: "42", scopeType: "tool", scopeId: toolId, revision: 1, configuration, canonicalJson: JSON.stringify(configuration), immutableHash: "a".repeat(64), effectiveAt: "2026-08-26T10:00:00.000Z", expiresAt: null };
+  await page.route("**/api/v1/admin/capacity-policies**", async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    await route.fulfill({ json: pathname === "/api/v1/admin/capacity-policies" ? { policies: [policy] } : { policy } });
+  });
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto("/admin/capacity");
+    await expect(page.getByRole("heading", { name: "Capacity policies", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Policy detail", exact: true })).toBeVisible();
+    await captureReview(page, `capacity-${width}`);
+    await expectNoPageOverflow(page);
+    await expectNoSeriousAxeViolations(page);
+  }
+});
+
 test("landing explains the product honestly across required widths", async ({ page }) => {
   await mockSession(page, false);
   for (const width of [320, 390, 768, 1024, 1440]) {
@@ -512,7 +606,7 @@ test("product resource routes expose real contract data across required widths",
     await expectNoPageOverflow(page);
 
     await page.goto(`/dashboard/tools/${browserTool.key}`);
-    await expect(page.getByRole("heading", { level: 1, name: browserTool.key })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: browserTool.name })).toBeVisible();
     await expect(page.getByText(/Execution is unavailable until a real provider/i)).toBeVisible();
     await expectNoPageOverflow(page);
 

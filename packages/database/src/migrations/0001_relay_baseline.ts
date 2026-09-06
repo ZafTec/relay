@@ -7676,49 +7676,7 @@ SELECT
   timestamp with time zone '2026-08-25 00:00:00+00'
 FROM seeded_meter_policies;
 
-INSERT INTO relay.entitlement_grants (
-  id, workspace_id, entitlement_key, grant_kind, capability_enabled,
-  limit_amount, unit, period, source_kind, source_reference,
-  subscription_snapshot_id, effective_at, expires_at, revoked_at, metadata,
-  created_at
-)
-SELECT
-  'grant_' || pg_catalog.encode(
-    pg_catalog.sha256(
-      pg_catalog.convert_to(
-        'relay:mvp-entitlement:v1:' || organization.id || ':' ||
-          grant_definition.entitlement_key || ':' || grant_definition.grant_kind,
-        'UTF8'
-      )
-    ),
-    'hex'
-  ),
-  organization.id,
-  grant_definition.entitlement_key,
-  grant_definition.grant_kind,
-  grant_definition.capability_enabled,
-  grant_definition.limit_amount,
-  grant_definition.unit,
-  grant_definition.period,
-  'system',
-  'relay.mvp.defaults.v1',
-  null,
-  timestamp with time zone '2026-08-25 00:00:00+00',
-  null,
-  null,
-  $json$ {"seed":"relay.mvp.defaults.v1"}$json$::jsonb,
-  timestamp with time zone '2026-08-25 00:00:00+00'
-FROM auth.organization AS organization
-CROSS JOIN (
-  VALUES
-    ('tools.execute'::text, 'capability'::text, true, null::numeric, null::text, null::text),
-    ('images.generated'::text, 'limit'::text, null::boolean, null::numeric, 'image'::text, 'calendar_month'::text),
-    ('ocr.requests'::text, 'limit'::text, null::boolean, null::numeric, 'request'::text, 'calendar_month'::text)
-) AS grant_definition(
-  entitlement_key, grant_kind, capability_enabled, limit_amount, unit, period
-)
-ORDER BY organization.id, grant_definition.entitlement_key,
-         grant_definition.grant_kind;
+-- Workspaces require explicit operator-assigned execution and usage grants.
 
 WITH seeded_versions (
   id, tool_id, version, input_schema, output_schema, handler_key,
@@ -8081,7 +8039,7 @@ export { CANONICAL_SQL };
 export const migration: Migration = {
   id: "0001_relay_baseline",
   checksumSha256:
-    "2e4e429c7dc182511fe76c1d4f0ee43dc2e92a33bb6f4bdbd12a1e6030fa51f5",
+    "fddd062a6aa828571a2c12493bf98ddf74aea81ff0a474f7abb17127925624ba",
   transactional: true,
   up: async (db) => {
     await sql.raw(CANONICAL_SQL).execute(db);

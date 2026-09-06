@@ -412,6 +412,30 @@ runs.max_queued
 Scheduling class is separate from entitlement. A paid workspace may have a
 higher scheduler weight, but weight does not itself authorize a tool.
 
+### Explicit MVP allowances
+
+Owner decision, 2026-09-06: require explicit usage allowances before execution.
+Automatic unlimited grants on sign-in or during migration are rejected.
+
+- Creating or revisiting a personal workspace establishes membership only.
+- A workspace must have an active `tools.execute` capability grant and an
+  explicit limit for the tool's metric: `images.generated` in `image` units or
+  `ocr.requests` in `request` units, both using `calendar_month` periods.
+- Missing or exhausted allowances deny admission before a job/provider call.
+  An unlimited grant is valid only when deliberately assigned by an operator.
+- Seeded meter policies count output images and OCR requests. They do not
+  establish customer prices, subscription quotas, or provider-cost rates.
+- The current MVP has no allowance-management UI or provisioning command.
+  Provisioning is tracked in [#36](https://github.com/ZafTec/relay/issues/36)
+  with #10/#28 before onboarding;
+  the capacity editor controls scheduling limits, not usage grants.
+
+The predeployment baseline no longer seeds `relay.mvp.defaults.v1` grants.
+Databases created from the earlier branch may still contain those grants and
+have a different migration checksum. Do not overwrite their ledger or reset
+them implicitly: use a fresh disposable database for tests, and review any
+retained database and revoke legacy automatic grants before enabling execution.
+
 ## Metering model
 
 Separate:

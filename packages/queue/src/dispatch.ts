@@ -379,7 +379,9 @@ export async function claimJobForDispatch(
           providerModelId: String(row.provider_model_id),
           capacityPoolId: String(row.capacity_pool_id),
           capacityPoolKey: row.capacity_pool_key,
-          capacityUnits: positiveLimit(row.estimated_cost_units, 1),
+          // Scheduler cost measures work/usage; concurrency counts active jobs.
+          // A multi-image request still occupies one provider execution slot.
+          capacityUnits: 1,
           policyVersion: row.scheduling_policy_version,
           capacityPolicyRevision: policy.revision,
           capacityLimits: policy.limits,

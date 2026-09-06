@@ -23,6 +23,12 @@ import { formatBytes } from "./artifact-display";
 import "./artifacts.css";
 
 const MEDIA_KIND_PATTERN = /^[a-z][a-z0-9._-]{0,63}$/;
+function mediaKindForFile(file: File): string {
+  const category = file.type.split("/")[0] ?? "";
+  if (["image", "audio", "video"].includes(category)) return category;
+  if (file.type === "application/pdf" || category === "text") return "document";
+  return "file";
+}
 const MIME_TYPE_PATTERN =
   /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+(?:\s*;\s*[a-z0-9!#$&^_.+-]+=(?:[a-z0-9!#$&^_.+-]+|"[^"\r\n]*"))*$/;
 
@@ -502,7 +508,6 @@ export function ArtifactUploadDialog({
       >
         <div className="share-dialog__header">
           <div>
-            <p className="mono-label">Browser upload</p>
             <h2
               id={`${id}-title`}
               ref={outcomeHeadingRef}
@@ -555,8 +560,8 @@ export function ArtifactUploadDialog({
           <form className="artifact-upload-form" onSubmit={(event) => void submit(event)} noValidate>
             <p id={descriptionId} className="artifact-upload-form__intro">
               {artifact === undefined
-                ? "Choose a file and define the artifact record. Relay hashes the file locally before reserving the upload."
-                : "Choose the file for the next immutable version. Relay hashes it locally before reserving the upload."}
+                ? "Choose a file to add to your workspace. Give it a name so it is easy to find and use in a tool."
+                : "Choose a file for the next version. Previous versions remain available."}
             </p>
 
             {stage !== "ready" ? (
@@ -606,6 +611,9 @@ export function ArtifactUploadDialog({
                     setFile(nextFile);
                     if (nextFile !== null) {
                       setMimeType(nextFile.type);
+                      if (artifact === undefined && (mediaKind === "" || (file !== null && mediaKind === mediaKindForFile(file)))) {
+                        setMediaKind(mediaKindForFile(nextFile));
+                      }
                       if (artifact === undefined && (name.trim().length === 0 || name === previousFileName)) {
                         setName(nextFile.name);
                       }
