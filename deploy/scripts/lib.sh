@@ -453,6 +453,70 @@ validate_service_environment_files() {
     "$API_ENV_FILE" "$WORKER_ENV_FILE" "${shared_runtime_config[@]}"
 }
 
+# Validate Compose's actual per-service values while keeping the operator's
+# configuration in one .env. Temporary validation inputs never leave this
+# private subshell and are removed on success and failure.
+validate_rendered_service_environments() (
+  umask 077
+  local temp_dir service
+  temp_dir=$(mktemp -d)
+  trap 'rm -rf -- "$temp_dir"' EXIT
+  API_ENV_FILE="$temp_dir/api.env"
+  WORKER_ENV_FILE="$temp_dir/worker.env"
+  MIGRATE_ENV_FILE="$temp_dir/migrate.env"
+  SERVICE_ENVIRONMENTS_JSON=$1
+
+  jq -e --arg version "$RELEASE_VERSION" --arg revision "$RELEASE_GIT_SHA" \
+    --arg endpoint "$OTEL_EXPORTER_OTLP_ENDPOINT" \
+    --arg interval "$OTEL_METRIC_EXPORT_INTERVAL" \
+    --arg sampler "$OTEL_TRACES_SAMPLER" \
+    --arg environment "$DEPLOYMENT_ENVIRONMENT_NAME" '
+    .services as $services |
+    all(["api", "worker", "migrate"][];
+      $services[.].environment as $env |
+      ($env | type) == "object" and
+      all($env[]; type == "string" and (test("[\\r\\n]") | not)) and
+      $env.APP_VERSION == $version and $env.GIT_SHA == $revision) and
+    $services.api.environment.PORT == "8000" and
+    $services.api.environment.RELAY_PROCESS_ROLE == "api" and
+    $services.api.environment.OTEL_SERVICE_NAME == "relay-api" and
+    $services.worker.environment.RELAY_PROCESS_ROLE == "worker" and
+    $services.worker.environment.OTEL_SERVICE_NAME == "relay-worker" and
+    $services.migrate.environment.OTEL_DENO == "false" and
+    ($services.api.environment.DATABASE_URL | test("^postgres(?:ql)?://relay_app:")) and
+    $services.api.environment.DATABASE_URL == $services.worker.environment.DATABASE_URL and
+    ($services.migrate.environment.DATABASE_URL | test("^postgres(?:ql)?://relay_migrator:")) and
+    all(["api", "worker"][];
+      $services[.].environment as $env |
+      $env.OTEL_DENO == "true" and
+      $env.OTEL_EXPORTER_OTLP_PROTOCOL == "http/protobuf" and
+      $env.OTEL_EXPORTER_OTLP_ENDPOINT == $endpoint and
+      $env.OTEL_METRIC_EXPORT_INTERVAL == $interval and
+      $env.OTEL_TRACES_SAMPLER == $sampler and
+      $env.DEPLOYMENT_ENVIRONMENT_NAME == $environment and
+      $env.OTEL_PROPAGATORS == "tracecontext" and
+      $env.OTEL_DENO_CONSOLE == "capture")
+  ' <<<"$SERVICE_ENVIRONMENTS_JSON" >/dev/null ||
+    fail "rendered Compose has invalid role, build, or telemetry settings"
+
+  for service in api worker migrate; do
+    jq -r --arg service "$service" '
+      .services[$service].environment |
+      del(.APP_VERSION, .GIT_SHA, .OTEL_DENO) |
+      if $service != "migrate" then
+        del(.RELAY_PROCESS_ROLE, .OTEL_SERVICE_NAME,
+          .DEPLOYMENT_ENVIRONMENT_NAME, .OTEL_EXPORTER_OTLP_PROTOCOL,
+          .OTEL_EXPORTER_OTLP_ENDPOINT, .OTEL_PROPAGATORS, .OTEL_DENO_CONSOLE,
+          .OTEL_METRIC_EXPORT_INTERVAL, .OTEL_TRACES_SAMPLER)
+      else . end |
+      if $service == "api" then del(.PORT) else . end |
+      to_entries[] | "\(.key)=\(.value)"
+    ' <<<"$SERVICE_ENVIRONMENTS_JSON" > "$temp_dir/$service.env"
+  done
+  validate_service_environment_files
+  validate_trusted_proxy_cidrs "$API_ENV_FILE" "$2" "$RELAY_PROXY_NETWORK"
+)
+
 validate_trusted_proxy_cidrs() {
   local file=$1
   local nginx_networks=$2
@@ -513,19 +577,23 @@ require_private_file() {
 load_release_env() {
   local file=$1
   [[ -f $file ]] || fail "release file does not exist: $file"
+  RELAY_ENV_FILE=${RELAY_ENV_FILE:-$file}
+  [[ -f $RELAY_ENV_FILE ]] || fail "Compose .env does not exist: $RELAY_ENV_FILE"
 
   local key
   for key in \
     RELEASE_VERSION RELEASE_TAG RELEASE_GIT_SHA \
     DOCKERHUB_NAMESPACE DOCKERHUB_BACKEND_REPOSITORY DOCKERHUB_WEB_REPOSITORY \
-    BACKEND_DIGEST WEB_DIGEST \
-    API_ENV_FILE WORKER_ENV_FILE MIGRATE_ENV_FILE \
+    BACKEND_DIGEST WEB_DIGEST; do
+    read_required_env "$file" "$key"
+  done
+  for key in \
     NGINX_COMPOSE_FILE NGINX_SERVICE RELAY_PUBLIC_URL \
-    RELAY_EDGE_NETWORK RELAY_DATA_NETWORK RELAY_TELEMETRY_NETWORK \
+    RELAY_PROXY_NETWORK RELAY_DATABASE_NETWORK \
     DEPLOYMENT_ENVIRONMENT_NAME OTEL_DENO OTEL_EXPORTER_OTLP_ENDPOINT \
     OTEL_METRIC_EXPORT_INTERVAL OTEL_TRACES_SAMPLER \
     BACKUP_VERIFIED_AT_FILE BACKUP_MAX_AGE_SECONDS MIN_FREE_DISK_MB; do
-    read_required_env "$file" "$key"
+    read_required_env "$RELAY_ENV_FILE" "$key"
   done
 
   [[ $RELEASE_VERSION =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] ||
@@ -551,25 +619,19 @@ load_release_env() {
     fail "backend and web repositories must be distinct"
 
   local network
-  for network in "$RELAY_EDGE_NETWORK" "$RELAY_DATA_NETWORK" "$RELAY_TELEMETRY_NETWORK"; do
+  for network in "$RELAY_PROXY_NETWORK" "$RELAY_DATABASE_NETWORK"; do
     [[ $network =~ ^[A-Za-z0-9][A-Za-z0-9_.-]+$ ]] ||
       fail "invalid external Docker network name"
   done
-  [[ $RELAY_EDGE_NETWORK != "$RELAY_DATA_NETWORK" &&
-    $RELAY_EDGE_NETWORK != "$RELAY_TELEMETRY_NETWORK" &&
-    $RELAY_DATA_NETWORK != "$RELAY_TELEMETRY_NETWORK" ]] ||
-    fail "edge, data, and telemetry networks must be distinct"
+  [[ $RELAY_PROXY_NETWORK != "$RELAY_DATABASE_NETWORK" ]] ||
+    fail "proxy and PostgreSQL networks must be distinct"
 
   local path
   for path in \
-    "$API_ENV_FILE" "$WORKER_ENV_FILE" "$MIGRATE_ENV_FILE" \
+    "$RELAY_ENV_FILE" \
     "$NGINX_COMPOSE_FILE" "$BACKUP_VERIFIED_AT_FILE"; do
     [[ $path == /* ]] || fail "deployment paths must be absolute: $path"
   done
-  [[ $API_ENV_FILE != "$WORKER_ENV_FILE" &&
-    $API_ENV_FILE != "$MIGRATE_ENV_FILE" &&
-    $WORKER_ENV_FILE != "$MIGRATE_ENV_FILE" ]] ||
-    fail "api, worker, and migrate must use separate environment files"
   [[ $NGINX_SERVICE =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] ||
     fail "NGINX_SERVICE must be a valid Compose service name"
   validate_https_origin_value RELAY_PUBLIC_URL "$RELAY_PUBLIC_URL"
@@ -587,9 +649,9 @@ load_release_env() {
   export RELEASE_VERSION RELEASE_TAG RELEASE_GIT_SHA
   export DOCKERHUB_NAMESPACE DOCKERHUB_BACKEND_REPOSITORY DOCKERHUB_WEB_REPOSITORY
   export BACKEND_DIGEST WEB_DIGEST
-  export API_ENV_FILE WORKER_ENV_FILE MIGRATE_ENV_FILE
+  export RELAY_ENV_FILE
   export NGINX_COMPOSE_FILE NGINX_SERVICE RELAY_PUBLIC_URL
-  export RELAY_EDGE_NETWORK RELAY_DATA_NETWORK RELAY_TELEMETRY_NETWORK
+  export RELAY_PROXY_NETWORK RELAY_DATABASE_NETWORK
   export DEPLOYMENT_ENVIRONMENT_NAME OTEL_DENO OTEL_EXPORTER_OTLP_ENDPOINT
   export OTEL_METRIC_EXPORT_INTERVAL OTEL_TRACES_SAMPLER
 }
@@ -704,6 +766,7 @@ run_preflight() {
 
   require_command awk
   require_command curl
+  require_command cmp
   require_command date
   require_command df
   require_command docker
@@ -715,22 +778,20 @@ run_preflight() {
   require_command tr
   require_command uname
 
+  RELAY_ENV_FILE=${RELAY_ENV_FILE:-$(dirname -- "$compose_file")/.env}
   load_release_env "$release_file"
   [[ -f $compose_file ]] || fail "production Compose file does not exist: $compose_file"
   [[ -f $NGINX_COMPOSE_FILE ]] || fail "Nginx Compose file does not exist: $NGINX_COMPOSE_FILE"
 
-  require_private_file "$API_ENV_FILE"
-  require_private_file "$WORKER_ENV_FILE"
-  require_private_file "$MIGRATE_ENV_FILE"
+  require_private_file "$RELAY_ENV_FILE"
 
   check_compose_version
   if ! SERVICE_ENVIRONMENTS_JSON=$(
-    docker compose --project-name relay --env-file "$release_file" \
-      -f "$compose_file" --profile tools config --format json
+    docker compose --project-name relay --env-file "$RELAY_ENV_FILE" --env-file "$release_file" \
+      -f "$compose_file" config --format json
   ); then
     fail "production Compose configuration is invalid"
   fi
-  validate_service_environment_files
   docker compose -f "$NGINX_COMPOSE_FILE" config --quiet
   docker buildx version >/dev/null 2>&1 || fail "Docker Buildx is required for remote digest verification"
 
@@ -743,7 +804,7 @@ run_preflight() {
     fail "production host must be linux/amd64; Docker reports $architecture"
 
   local network
-  for network in "$RELAY_EDGE_NETWORK" "$RELAY_DATA_NETWORK" "$RELAY_TELEMETRY_NETWORK"; do
+  for network in "$RELAY_PROXY_NETWORK" "$RELAY_DATABASE_NETWORK"; do
     docker network inspect "$network" >/dev/null 2>&1 ||
       fail "required external network does not exist: $network"
   done
@@ -752,11 +813,10 @@ run_preflight() {
   nginx_id=$(docker compose -f "$NGINX_COMPOSE_FILE" ps -q "$NGINX_SERVICE")
   [[ -n $nginx_id ]] || fail "Nginx service is not running: $NGINX_SERVICE"
   nginx_networks=$(docker inspect --format '{{json .NetworkSettings.Networks}}' "$nginx_id")
-  jq -e --arg network "$RELAY_EDGE_NETWORK" 'has($network)' \
+  jq -e --arg network "$RELAY_PROXY_NETWORK" 'has($network)' \
     <<<"$nginx_networks" >/dev/null ||
-    fail "Nginx is not attached to edge network $RELAY_EDGE_NETWORK"
-  validate_trusted_proxy_cidrs \
-    "$API_ENV_FILE" "$nginx_networks" "$RELAY_EDGE_NETWORK"
+    fail "Nginx is not attached to proxy network $RELAY_PROXY_NETWORK"
+  validate_rendered_service_environments "$SERVICE_ENVIRONMENTS_JSON" "$nginx_networks"
   SERVICE_ENVIRONMENTS_JSON=
   docker compose -f "$NGINX_COMPOSE_FILE" exec -T \
     "$NGINX_SERVICE" nginx -t
@@ -816,7 +876,7 @@ verify_running_release() {
 
   local service container_id health
   for service in api worker web; do
-    container_id=$(docker compose --project-name relay --env-file "$release_file" \
+    container_id=$(docker compose --project-name relay --env-file "$RELAY_ENV_FILE" --env-file "$release_file" \
       -f "$compose_file" ps -q "$service")
     [[ -n $container_id ]] || fail "$service container is not running"
     health=$(docker inspect --format '{{.State.Health.Status}}' "$container_id")
@@ -827,6 +887,31 @@ verify_running_release() {
 
 select_current_release() {
   local release_file=$1
+  # When deploying directly from .env, retain only immutable image selectors
+  # for rollback. Never copy the shared secrets into release history.
+  if [[ $release_file == "$RELAY_ENV_FILE" ]]; then
+    local release_directory selector pending_selector
+    release_directory="$(dirname -- "$RELAY_ENV_FILE")/releases"
+    mkdir -p -- "$release_directory"
+    selector="$release_directory/$RELEASE_TAG.env"
+    pending_selector=$(mktemp "$release_directory/.selector.XXXXXX")
+    local key
+    for key in RELEASE_VERSION RELEASE_TAG RELEASE_GIT_SHA \
+      DOCKERHUB_NAMESPACE DOCKERHUB_BACKEND_REPOSITORY DOCKERHUB_WEB_REPOSITORY \
+      BACKEND_DIGEST WEB_DIGEST; do
+      printf '%s=%s\n' "$key" "${!key}" >> "$pending_selector"
+    done
+    if [[ -e $selector || -L $selector ]]; then
+      if [[ -L $selector ]] || ! cmp -s -- "$selector" "$pending_selector"; then
+        rm -f -- "$pending_selector"
+        fail "existing release selector differs: $selector"
+      fi
+      rm -f -- "$pending_selector"
+    else
+      mv -- "$pending_selector" "$selector"
+    fi
+    release_file=$selector
+  fi
   local current_link=${RELAY_CURRENT_RELEASE_LINK:-/opt/relay/current-release.env}
   local link_directory pending_link
   link_directory=$(dirname -- "$current_link")

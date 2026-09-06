@@ -44,6 +44,7 @@ trap cleanup EXIT
 cat > "$temp_dir/server.py" <<'PY'
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 role = os.environ["ROLE"]
 port = int(os.environ["PORT"])
@@ -61,16 +62,26 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_args):
         pass
 
+if role == "api":
+    Thread(target=ThreadingHTTPServer(("0.0.0.0", 9000), Handler).serve_forever, daemon=True).start()
 ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
 PY
 
 cat > "$temp_dir/client.py" <<'PY'
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 cases = {
     "/version": "api /version referer=",
     "/api/v1/probe?check=1": "api /api/v1/probe?check=1 referer=",
     "/s/test-share-token": "api /s/test-share-token referer=",
+    "/mcp": "api /mcp referer=",
+    "/mcp/": "api /mcp/ referer=",
+    "/api/v1/events": "api /api/v1/events referer=",
+    "/.well-known/oauth-protected-resource/mcp": "api /.well-known/oauth-protected-resource/mcp referer=",
+    "/.well-known/oauth-authorization-server/api/auth": "api /.well-known/oauth-authorization-server/api/auth referer=",
+    "/health/ready": "api /health/ready referer=",
+    "/relay-artifacts/artifacts/probe?X-Amz-Signature=test": "api /relay-artifacts/artifacts/probe?X-Amz-Signature=test referer=",
     "/": "web / referer=",
 }
 for path, expected in cases.items():
@@ -84,18 +95,41 @@ for path, expected in cases.items():
             raise SystemExit(f"unexpected response for {path}: {actual!r}")
         if path.startswith("/s/") and response.headers.get("Referrer-Policy") != "no-referrer":
             raise SystemExit("share response did not enforce Referrer-Policy: no-referrer")
+
+for path in ["/health/live", "/.well-known/unapproved"]:
+    try:
+        urlopen("http://relay-proxy:8080" + path, timeout=5)
+        raise SystemExit("private/unknown route should return 404")
+    except HTTPError as error:
+        assert error.code == 404
+
+headers = "content-type,content-md5,if-none-match,x-amz-checksum-sha256,x-amz-meta-relay-upload-id,x-amz-meta-relay-sha256"
+for origin, requested, expected in [
+    ("https://relay.zaftech.co", headers, 204),
+    ("https://untrusted.example", headers, 403),
+    ("https://relay.zaftech.co", "authorization", 403),
+]:
+    request = Request("http://relay-proxy:8080/relay-artifacts/probe", method="OPTIONS", headers={
+        "Origin": origin, "Access-Control-Request-Method": "PUT", "Access-Control-Request-Headers": requested,
+    })
+    try:
+        with urlopen(request, timeout=5) as response:
+            assert response.status == expected
+            assert response.headers['Access-Control-Allow-Origin'] == origin
+            allowed = {value.strip() for value in response.headers['Access-Control-Allow-Headers'].split(',')}
+            assert set(headers.split(',')) == allowed
+    except HTTPError as error:
+        assert error.code == expected
 PY
 
 server_script=$(host_path "$temp_dir/server.py")
 client_script=$(host_path "$temp_dir/client.py")
-bootstrap_config=$(host_path "$SCRIPT_DIR/nginx-bootstrap.conf")
-log_format=$(host_path "$DEPLOY_DIR/nginx/relay-log-format.conf")
-proxy_headers=$(host_path "$DEPLOY_DIR/nginx/relay-proxy-headers.conf")
-routes=$(host_path "$DEPLOY_DIR/nginx/relay-routes.conf")
+python3 "$SCRIPT_DIR/render-nginx-test.py" "$temp_dir/nginx-bootstrap.conf"
+bootstrap_config=$(host_path "$temp_dir/nginx-bootstrap.conf")
 
 MSYS_NO_PATHCONV=1 docker network create "$network" >/dev/null
 MSYS_NO_PATHCONV=1 docker run -d --pull never --name "$api_container" \
-  --network "$network" --network-alias relay-api \
+  --network "$network" --network-alias relay-api --network-alias minio \
   -e ROLE=api -e PORT=8000 -v "$server_script:/srv/server.py:ro" \
   "$python_image" python /srv/server.py >/dev/null
 MSYS_NO_PATHCONV=1 docker run -d --pull never --name "$web_container" \
@@ -105,9 +139,6 @@ MSYS_NO_PATHCONV=1 docker run -d --pull never --name "$web_container" \
 MSYS_NO_PATHCONV=1 docker run -d --pull never --name "$nginx_container" \
   --network "$network" --network-alias relay-proxy \
   -v "$bootstrap_config:/etc/nginx/nginx-bootstrap.conf:ro" \
-  -v "$log_format:/etc/nginx/relay-log-format.conf:ro" \
-  -v "$proxy_headers:/etc/nginx/snippets/relay-proxy-headers.conf:ro" \
-  -v "$routes:/etc/nginx/relay-routes.conf:ro" \
   "$nginx_image" nginx -g 'daemon off;' -c /etc/nginx/nginx-bootstrap.conf \
   >/dev/null
 
@@ -128,12 +159,16 @@ done
 }
 
 nginx_logs=$(MSYS_NO_PATHCONV=1 docker logs "$nginx_container" 2>&1)
-[[ $nginx_logs == *'GET /version '* ]] || {
+[[ $nginx_logs == *'"GET /version"'* ]] || {
   echo "Nginx routing test did not observe ordinary access logging" >&2
   exit 1
 }
 [[ $nginx_logs != *test-share-token* ]] || {
   echo "Nginx access logs exposed a share token" >&2
+  exit 1
+}
+[[ $nginx_logs != *X-Amz-Signature* ]] || {
+  echo "Nginx access logs exposed a signed artifact URL" >&2
   exit 1
 }
 

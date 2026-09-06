@@ -44,54 +44,6 @@ bash -n \
   "$SCRIPT_DIR/validate-nginx-routing.sh" \
   "$SCRIPT_DIR/validate-deploy.sh"
 
-api_env="$DEPLOY_DIR/env/api.env.example"
-worker_env="$DEPLOY_DIR/env/worker.env.example"
-migrate_env="$DEPLOY_DIR/env/migrate.env.example"
-
-common_runtime_keys=(
-  APP_ENV DATABASE_URL REDIS_URL DATABASE_POOL_MAX
-  DATABASE_CONNECT_TIMEOUT_MS DATABASE_STATEMENT_TIMEOUT_MS
-  REDIS_CONNECT_TIMEOUT_MS S3_ENDPOINT S3_REGION S3_BUCKET
-  S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY S3_FORCE_PATH_STYLE
-  S3_BUCKET_VERSIONING S3_REQUEST_TIMEOUT_MS
-  ARTIFACT_WORKSPACE_MAX_BYTES ARTIFACT_MAX_UPLOAD_BYTES
-  ARTIFACT_UPLOAD_TTL_SECONDS ARTIFACT_DOWNLOAD_TTL_SECONDS
-  ARTIFACT_PURGE_DELAY_SECONDS ARTIFACT_CLEANUP_LEASE_SECONDS
-  ARTIFACT_MAINTENANCE_INTERVAL_MS ARTIFACT_MAINTENANCE_BATCH_SIZE
-)
-api_only_keys=(
-  BETTER_AUTH_URL BETTER_AUTH_SECRET AUTH_TRUSTED_ORIGINS
-  AUTH_TRUSTED_PROXY_CIDRS GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
-  GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET S3_PUBLIC_ENDPOINT
-  SHARE_TOKEN_ACTIVE_VERSION SHARE_TOKEN_KEYS
-)
-worker_only_keys=(AZURE_API_KEY)
-migrate_keys=(
-  DATABASE_URL DATABASE_POOL_MAX DATABASE_CONNECT_TIMEOUT_MS
-  DATABASE_STATEMENT_TIMEOUT_MS
-)
-
-for key in "${common_runtime_keys[@]}" "${api_only_keys[@]}"; do
-  assert_single_env_entry "$api_env" "$key"
-done
-for key in "${common_runtime_keys[@]}" "${worker_only_keys[@]}"; do
-  assert_single_env_entry "$worker_env" "$key"
-done
-for key in "${migrate_keys[@]}"; do
-  assert_single_env_entry "$migrate_env" "$key"
-done
-
-assert_no_env_prefix "$api_env" AZURE_
-for prefix in BETTER_AUTH_ AUTH_ GOOGLE_ GITHUB_ SHARE_TOKEN_; do
-  assert_no_env_prefix "$worker_env" "$prefix"
-done
-for prefix in AZURE_ SHARE_TOKEN_ GOOGLE_ GITHUB_ BETTER_AUTH_ AUTH_; do
-  assert_no_env_prefix "$migrate_env" "$prefix"
-done
-if grep -Eq '^S3_PUBLIC_ENDPOINT=' -- "$worker_env"; then
-  fail "$worker_env must not contain S3_PUBLIC_ENDPOINT"
-fi
-
 cors_policy="$DEPLOY_DIR/minio/relay-browser-cors.xml.example"
 [[ -f $cors_policy ]] || fail "MinIO browser CORS policy example is missing"
 grep -Fq '<CORSConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">' \
@@ -127,21 +79,11 @@ if grep -Eqi '<Allowed(Header|Origin)>\*|<AllowedHeader>(authorization|content-l
   fail "MinIO CORS policy must not use wildcards, Authorization, Content-Length, or OPTIONS"
 fi
 
-grep -Fxq 'APP_ENV=production' "$api_env" || fail "api example must set APP_ENV=production"
-grep -Fxq 'APP_ENV=production' "$worker_env" || fail "worker example must set APP_ENV=production"
 grep -Fq 'APP_ENV: "production"' "$DEPLOY_DIR/compose.prod.yaml" ||
   fail "Compose must force APP_ENV=production"
-api_role_entries=$(grep -Fc 'RELAY_PROCESS_ROLE: api' "$DEPLOY_DIR/compose.prod.yaml" || true)
-worker_role_entries=$(grep -Fc 'RELAY_PROCESS_ROLE: worker' "$DEPLOY_DIR/compose.prod.yaml" || true)
-[[ $api_role_entries == 1 ]] ||
-  fail "Compose must set exactly one API RELAY_PROCESS_ROLE"
-[[ $worker_role_entries == 1 ]] ||
-  fail "Compose must set exactly one worker RELAY_PROCESS_ROLE"
-for env_file in "$api_env" "$worker_env" "$migrate_env"; do
-  if grep -Eq '^RELAY_PROCESS_ROLE=' -- "$env_file"; then
-    fail "$env_file must leave RELAY_PROCESS_ROLE under Compose control"
-  fi
-done
+if grep -Eq '^[[:space:]]*env_file:' "$DEPLOY_DIR/compose.prod.yaml"; then
+  fail "Compose must explicitly map settings instead of injecting the shared .env"
+fi
 grep -Fq 'CMD ["/app/relay-entrypoint", "healthcheck"]' \
   "$DEPLOY_DIR/../Dockerfile" ||
   fail "backend image must run the compiled role-aware healthcheck"
@@ -176,21 +118,22 @@ grep -Fq "relay-web}@\${WEB_DIGEST:" "$DEPLOY_DIR/compose.prod.yaml" ||
 temp_dir=$(mktemp -d)
 trap 'rm -rf -- "$temp_dir"' EXIT
 release_file="$temp_dir/release.env"
-cat > "$release_file" <<'EOF'
-RELEASE_VERSION=1.2.3
-RELEASE_GIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-DOCKERHUB_NAMESPACE=zaftec
-DOCKERHUB_BACKEND_REPOSITORY=relay-backend
-DOCKERHUB_WEB_REPOSITORY=relay-web
-BACKEND_DIGEST=sha256:1111111111111111111111111111111111111111111111111111111111111111
-WEB_DIGEST=sha256:2222222222222222222222222222222222222222222222222222222222222222
-API_ENV_FILE=./env/api.env.example
-WORKER_ENV_FILE=./env/worker.env.example
-MIGRATE_ENV_FILE=./env/migrate.env.example
-RELAY_EDGE_NETWORK=relay-edge-validation
-RELAY_DATA_NETWORK=relay-data-validation
-RELAY_TELEMETRY_NETWORK=relay-telemetry-validation
-EOF
+while IFS= read -r line || [[ -n $line ]]; do
+  case $line in
+    RELEASE_VERSION=) line=RELEASE_VERSION=1.2.3 ;;
+    RELEASE_TAG=) line=RELEASE_TAG=v1.2.3 ;;
+    RELEASE_GIT_SHA=) line=RELEASE_GIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ;;
+    BACKEND_DIGEST=) line=BACKEND_DIGEST=sha256:1111111111111111111111111111111111111111111111111111111111111111 ;;
+    WEB_DIGEST=) line=WEB_DIGEST=sha256:2222222222222222222222222222222222222222222222222222222222222222 ;;
+    DATABASE_URL=) line=DATABASE_URL=postgres://relay_app:test-only@postgresql:5432/relay ;;
+    MIGRATOR_DATABASE_URL=) line=MIGRATOR_DATABASE_URL=postgres://relay_migrator:test-only@postgresql:5432/relay ;;
+    REDIS_URL=) line=REDIS_URL=redis://relay:test-only@redis:6379 ;;
+    SHARE_TOKEN_KEYS=) line='SHARE_TOKEN_KEYS={"1":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}' ;;
+    *=) line="${line}test-only-configuration-value-000000000000" ;;
+  esac
+  printf '%s\n' "$line"
+done < "$DEPLOY_DIR/.env.example" > "$release_file"
+chmod 600 "$release_file"
 
 compose=(
   docker compose
@@ -198,23 +141,65 @@ compose=(
   --project-name relay-deploy-validation
   --env-file "$release_file"
   -f "$DEPLOY_DIR/compose.prod.yaml"
-  --profile tools
 )
 rendered_compose="$temp_dir/compose.json"
 "${compose[@]}" config --format json > "$rendered_compose"
 grep -Fq '"services"' "$rendered_compose" ||
   fail "synthetic Compose JSON did not render services"
-if command -v jq >/dev/null 2>&1; then
-  jq -e '
-    .services.api.environment.RELAY_PROCESS_ROLE == "api" and
-    .services.worker.environment.RELAY_PROCESS_ROLE == "worker" and
-    (.services.migrate.environment.RELAY_PROCESS_ROLE == null) and
-    (.services.migrate.healthcheck.disable == true)
-  ' "$rendered_compose" >/dev/null ||
-    fail "rendered Compose must scope healthcheck roles to API/worker and disable migrate healthchecking"
-else
-  echo "jq unavailable; skipped rendered healthcheck role assertions." >&2
-fi
+require_command jq
+jq -e '
+  (.networks | keys) == ["database", "proxy"] and
+  .networks.database.name == "postgresql-db-n8n" and
+  .networks.proxy.name == "proxy-net" and
+  all(.networks[]; .external == true) and
+  (.services.api.networks | keys) == ["database", "proxy"] and
+  (.services.worker.networks | keys) == ["database", "proxy"] and
+  (.services.migrate.networks | keys) == ["database"] and
+  (.services.web.networks | keys) == ["proxy"] and
+  all(.services[]; (.ports // [] | length) == 0) and
+  .services.api.environment.RELAY_PROCESS_ROLE == "api" and
+  .services.worker.environment.RELAY_PROCESS_ROLE == "worker" and
+  (.services.migrate.environment.RELAY_PROCESS_ROLE == null) and
+  (.services.migrate.healthcheck.disable == true) and
+  (.services.migrate.profiles == null) and
+  .services.api.depends_on.migrate.condition == "service_completed_successfully" and
+  .services.worker.depends_on.migrate.condition == "service_completed_successfully" and
+  .services.web.depends_on.api.condition == "service_healthy"
+' "$rendered_compose" >/dev/null ||
+  fail "Compose must use the existing networks and scope each process correctly"
+
+(
+  source "$DEPLOY_DIR/scripts/lib.sh"
+  RELAY_ENV_FILE=$release_file
+  load_release_env "$release_file"
+  nginx_networks='{"proxy-net":{"IPAddress":"172.18.0.2","GlobalIPv6Address":""}}'
+  validate_rendered_service_environments "$(cat "$rendered_compose")" "$nginx_networks"
+  for mutation in \
+    '.services.api.environment.AZURE_API_KEY="test-only-misplaced"' \
+    '.services.worker.environment.BETTER_AUTH_SECRET="test-only-misplaced"' \
+    '.services.migrate.environment.GOOGLE_CLIENT_SECRET="test-only-misplaced"' \
+    '.services.api.environment.DATABASE_URL="postgres://relay_migrator:test-only@postgresql:5432/relay"' \
+    '.services.worker.environment.OTEL_DENO="false"' \
+    '.services.api.environment.AUTH_TRUSTED_PROXY_CIDRS="172.18.0.0/16"' \
+    '.services.worker.environment.UNDOCUMENTED_SECRET="test-only-misplaced"'; do
+    changed=$(jq "$mutation" "$rendered_compose")
+    if validate_rendered_service_environments "$changed" "$nginx_networks" >/dev/null 2>&1; then
+      fail "rendered configuration accepted a misplaced secret or broad proxy trust"
+    fi
+  done
+  RELAY_CURRENT_RELEASE_LINK="$temp_dir/current-release.env"
+  select_current_release "$release_file"
+  selector=$(readlink "$RELAY_CURRENT_RELEASE_LINK")
+  [[ $selector != "$release_file" && $(wc -l < "$selector") == 8 ]] ||
+    fail "deploying from .env must archive only release selectors"
+  if grep -Eq 'SECRET|DATABASE_URL|AZURE_API_KEY|GOOGLE_CLIENT|GITHUB_CLIENT|SHARE_TOKEN' "$selector"; then
+    fail "release history must not contain shared secrets"
+  fi
+  BACKEND_DIGEST=sha256:3333333333333333333333333333333333333333333333333333333333333333
+  if (select_current_release "$release_file") >/dev/null 2>&1; then
+    fail "an existing release selector must remain immutable"
+  fi
+)
 images_file="$temp_dir/images"
 "${compose[@]}" config --images > "$images_file"
 

@@ -1,107 +1,75 @@
-# Manual production deployment
+# Deploy with the existing alias
 
-GitHub Actions does not SSH to production. Run this procedure from an authorized
-operator session on the host during a change window.
+GitHub Actions publishes release images. Deploy from the VPS using
+`/opt/relay/docker-compose.yml` and `/opt/relay/.env`.
 
-## Before the window
+## Select the release
 
-1. Confirm the GitHub release is published, not draft.
-2. Download `release-manifest.json`, `SHA256SUMS`, both SPDX SBOMs, both
-   provenance bundles, and both Trivy reports from that release.
-3. Verify `sha256sum --check SHA256SUMS` in the asset directory.
-4. Verify the manifest's `tag`, `revision`, `platform`, repositories, and both
-   digests against the intended release. The platform must be `linux/amd64`.
-   Preflight permits linked `unknown/unknown` attestation descriptors but no
-   additional runnable platform descriptors.
-5. Copy `deploy/releases/release.env.example` to an immutable file named for the
-   tag under `/opt/relay/releases/`. Fill both digests from the same manifest;
-   never combine backend and web from different releases.
-6. Copy all three `deploy/env/*.env.example` templates to
-   `/opt/relay/env/`, populate every mandatory blank through the host secret
-   process, retain the fail-closed role key sets documented in
-   `deploy/README.md`, set ownership to the deployment account, and set mode
-   `0600`. Confirm `BETTER_AUTH_URL` equals `RELAY_PUBLIC_URL` and every trusted
-   origin is a path-free HTTPS origin.
-7. Confirm the S3/MinIO bucket exists, versioning is enabled, the internal
-   endpoint is reachable from the data network, and API/worker credentials have
-   only their required bucket access. Confirm `S3_PUBLIC_ENDPOINT` is the HTTPS
-   S3 API endpoint (not the MinIO Console), resolves with a browser-trusted
-   certificate from outside the host network, and reaches the same bucket.
-   Apply `deploy/minio/relay-browser-cors.xml.example` with the exact Relay web
-   origin and verify the PUT preflight accepts all six documented signed headers;
-   retain its GET/HEAD rule only when browser-direct reads are enabled.
-8. Give Nginx a stable edge-network address and set
-   `AUTH_TRUSTED_PROXY_CIDRS` to only that exact address (bare, `/32`, or
-   `/128`). Do not enter a Docker subnet, private-address range, Cloudflare
-   range, or catch-all CIDR.
-9. Authenticate Docker with a separate read-only production pull token. Pass the
-   token through standard input; do not place it in a release file or shell
-   history.
-10. Confirm the backup system has recently completed a restore verification and
-    updated `BACKUP_VERIFIED_AT_FILE`. Do not edit the marker merely to satisfy
-    preflight.
-11. Confirm the Nginx, data, and telemetry services are healthy on the three
-    external networks. Relay containers do not need to exist yet: fixed
-    upstream variables defer their Docker DNS lookup until a request. Reconcile
-    the existing observability deployment per `deploy/observability/README.md`
-    before enabling OTLP.
-
-## Preflight
-
-Run the non-mutating gate first:
-
-```sh
-/opt/relay/scripts/preflight.sh \
-  /opt/relay/releases/v0.1.0.env \
-  /opt/relay/docker-compose.yml
-```
-
-Do not continue after any failure. Fix the underlying credential, backup,
-network, disk, image, label, architecture, permission, or configuration issue.
-The script intentionally does not create or repair infrastructure. It validates
-Compose-interpreted values, rejects keys outside each role's documented
-allowlist, and runs bootstrap-safe `nginx -t`. In particular, do not run
-`migrate` directly to bypass a missing API/worker value: the deployment script
-always completes this gate before invoking migration.
+1. Confirm the GitHub release is published and its image/security checks passed.
+2. Download `release-manifest.json` and `SHA256SUMS` from that release and
+   verify the downloaded assets with `sha256sum --check SHA256SUMS`.
+3. Update `RELEASE_VERSION`, `RELEASE_TAG`, `RELEASE_GIT_SHA`, `BACKEND_DIGEST`,
+   and `WEB_DIGEST` in `.env` from that same manifest. Keep both digests paired.
+   Record the previous nonsecret selectors for rollback.
+4. Confirm a recent database backup can be restored before a schema change.
+   Check free disk space and the health of the shared dependencies.
 
 ## Deploy
 
+The existing alias should use the installed Compose plugin:
+
 ```sh
-/opt/relay/scripts/deploy-release.sh \
-  /opt/relay/releases/v0.1.0.env \
-  /opt/relay/docker-compose.yml
+alias deploy='docker compose down && docker compose pull && docker compose up -d'
+cd /opt/relay
+docker compose config --quiet
+deploy
+docker compose ps -a
+curl --fail https://relay.zaftech.co/health/ready
+curl --fail https://relay.zaftech.co/version
 ```
 
-The script, under one non-blocking host lock:
+Migration runs automatically and gates API/worker startup. A failed migration
+prevents startup; inspect `docker compose logs migrate` and resolve the failure.
+Do not bypass the migration dependency to force the app up. The web container
+waits for API health. Public readiness and version checks must succeed through
+Cloudflare, not just from inside Docker.
 
-1. repeats preflight;
-2. pulls the exact backend and web digests;
-3. runs the one-shot `migrate up` service with the dedicated migrator env;
-4. recreates API, worker, and web and waits for image health checks;
-5. validates and gracefully reloads the independently managed Nginx service;
-6. verifies public version, readiness, web health, OAuth metadata, and each
-   container health state; and
-7. updates `current-release.env` only after successful verification.
+If only the images or `.env` changed, no Nginx reload is needed: Docker DNS
+resolves the fixed Relay aliases at request time. After editing `relay.conf`:
 
-A failure does not run an automatic rollback or a down-migration. Inspect the
-still-running services and logs, preserve evidence, then choose a forward fix or
-the reviewed rollback procedure.
+```sh
+docker exec nginx nginx -t && docker exec nginx nginx -s reload
+```
 
-## Post-deployment checks
+Check worker heartbeats, backend logs/traces, and browser Faro events in the
+imported dashboard. Test sign-in and a small artifact upload/download. Do not
+run paid tools without an explicit allowance.
 
-- Confirm `/version` returns the selected version and full revision.
-- Confirm `/health/ready`, sign-in metadata, API, MCP, SSE, and a non-billable
-  staging job where one is approved.
-- Confirm the worker is processing heartbeats/jobs as expected.
-- Complete one disposable browser upload through the presigned
-  `S3_PUBLIC_ENDPOINT`; confirm OPTIONS and PUT succeed without cookies or an
-  Authorization header, and that the uploaded size/checksums verify.
-- Confirm one canary trace, metric, and log reaches the reconciled telemetry
-  backends without duplicate log ingestion or sensitive fields.
-- Exercise a disposable share link and confirm its `/s/:token` request is absent
-  from Nginx access logs and no token-bearing Referer reaches downstream logs.
-- Keep the prior release env file and both prior digests available for rollback.
-- Import customer changelog content only as a draft; publication remains a
-  separate audited superadmin action.
+## Roll back application images
 
-Never run `docker compose down -v` in production.
+Confirm the previous binaries support the current database schema. Restore the
+previous paired version/SHA/digests in `.env`, then:
+
+```sh
+docker compose pull api worker web
+docker compose up -d --no-deps --wait api worker web
+```
+
+`--no-deps` deliberately avoids running an older migration image against the
+newer schema. Never run automatic down-migrations. If schema compatibility is
+uncertain, stop and use the database recovery procedure.
+
+## Optional stricter release scripts
+
+The repository also includes `scripts/preflight.sh`, `deploy-release.sh`, and
+`rollback-release.sh`. They validate release labels/platform/digests, service
+credential separation, proxy trust, dependency configuration, disk space and
+restore-verification evidence. Their additional host requirements are Bash,
+Buildx, jq, curl, GNU date and flock. These are optional tools for operators who
+want that workflow; the normal `deploy` alias does not require them.
+
+If using them, keep `/opt/relay/.deploy.lock` owned by the deployment account
+and pass `.env` (or an optional immutable release selector) plus the Compose
+path. The scripts write only nonsecret selectors to release history. A missing
+backup marker must be fixed by completing a restore test, never by fabricating
+evidence.

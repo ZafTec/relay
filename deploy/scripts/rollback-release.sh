@@ -32,12 +32,12 @@ trap 'echo "Rollback stopped; inspect the running services before taking another
 
 run_preflight "$RELEASE_FILE" "$COMPOSE_FILE"
 load_release_env "$RELEASE_FILE"
-COMPOSE=(docker compose --project-name relay --env-file "$RELEASE_FILE" -f "$COMPOSE_FILE")
+COMPOSE=(docker compose --project-name relay --env-file "$RELAY_ENV_FILE" --env-file "$RELEASE_FILE" -f "$COMPOSE_FILE")
 
 # Rollback never runs a down-migration. The explicit confirmation flag records
 # the operator's decision that the prior binaries support the current schema.
 "${COMPOSE[@]}" pull api worker web
-"${COMPOSE[@]}" up -d --pull never --wait --wait-timeout 180 --remove-orphans api worker web
+"${COMPOSE[@]}" up -d --no-deps --pull never --wait --wait-timeout 180 --remove-orphans api worker web
 reload_nginx
 verify_running_release "$RELEASE_FILE" "$COMPOSE_FILE"
 

@@ -23,16 +23,13 @@ host_path() {
   fi
 }
 
-bootstrap_config=$(host_path "$SCRIPT_DIR/nginx-bootstrap.conf")
-log_format=$(host_path "$DEPLOY_DIR/nginx/relay-log-format.conf")
-proxy_headers=$(host_path "$DEPLOY_DIR/nginx/relay-proxy-headers.conf")
-routes=$(host_path "$DEPLOY_DIR/nginx/relay-routes.conf")
+temp_dir=$(mktemp -d)
+trap 'rm -rf -- "$temp_dir"' EXIT
+python3 "$SCRIPT_DIR/render-nginx-test.py" "$temp_dir/nginx-bootstrap.conf"
+bootstrap_config=$(host_path "$temp_dir/nginx-bootstrap.conf")
 
 # Deliberately do not create relay-api or relay-web DNS records. Passing proves
 # configuration validation is safe before the first application deployment.
 MSYS_NO_PATHCONV=1 docker run --rm --pull never \
   -v "$bootstrap_config:/etc/nginx/nginx-bootstrap.conf:ro" \
-  -v "$log_format:/etc/nginx/relay-log-format.conf:ro" \
-  -v "$proxy_headers:/etc/nginx/snippets/relay-proxy-headers.conf:ro" \
-  -v "$routes:/etc/nginx/relay-routes.conf:ro" \
   "$image" nginx -t -c /etc/nginx/nginx-bootstrap.conf
