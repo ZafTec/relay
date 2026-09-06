@@ -425,10 +425,12 @@ Automatic unlimited grants on sign-in or during migration are rejected.
   An unlimited grant is valid only when deliberately assigned by an operator.
 - Seeded meter policies count output images and OCR requests. They do not
   establish customer prices, subscription quotas, or provider-cost rates.
-- The current MVP has no allowance-management UI or provisioning command.
-  Provisioning is tracked in [#36](https://github.com/ZafTec/relay/issues/36)
-  with #10/#28 before onboarding;
-  the capacity editor controls scheduling limits, not usage grants.
+- Superadmins manage explicit grants at `/admin/allowances`, with fresh-session
+  authorization, effective windows, revocation, audit history, and idempotent
+  retries. See [the operator guide](../allowance-management.md) and
+  [#36](https://github.com/ZafTec/relay/issues/36). Capacity settings remain
+  separate from usage grants. Production allowance values must still be chosen
+  and assigned explicitly by an authorized operator.
 
 The predeployment baseline no longer seeds `relay.mvp.defaults.v1` grants.
 Databases created from the earlier branch may still contain those grants and

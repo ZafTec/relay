@@ -387,6 +387,24 @@ export async function startApi(
             requestId,
           }),
       },
+      adminAllowances: {
+        auth,
+        service: createPostgresAdminAllowanceService(databasePool),
+        allowedOrigins: [
+          authConfig.baseUrl.origin,
+          ...authConfig.trustedOrigins,
+        ],
+        onUnexpectedError: (error, requestId, httpRoute) =>
+          logger.error({
+            eventName: "admin.allowances.request_failed",
+            message: "Admin allowance request failed",
+            operation: "admin.allowances",
+            outcome: "failure",
+            error,
+            requestId,
+            httpRoute,
+          }),
+      },
       adminCapacity: {
         auth,
         service: createPostgresAdminCapacityService(databasePool),
@@ -461,3 +479,4 @@ export async function startApi(
     throw error;
   }
 }
+import { createPostgresAdminAllowanceService } from "./routes/admin_allowances.ts";

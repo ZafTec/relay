@@ -910,3 +910,66 @@ test("reduced motion, forced colors, and 200 percent zoom remain usable", async 
     .toBeVisible();
   await expectNoPageOverflow(page);
 });
+test("superadmin allowances support explicit grants, revocation and responsive history", async ({ page }) => {
+  test.setTimeout(60_000);
+  await mockAuthenticatedWorkspace(page, { adminAccess: true });
+  const selected = { id: "ws_allowances_browser", name: "Relay studio", slug: "relay-studio" };
+  const asOf = "2026-09-06T10:00:00.000Z";
+  const grants = [
+    { id: "grant-execution", key: "tools.execute", amount: null, sourceKind: "manual", effectiveAt: "2026-09-01T00:00:00.000Z", expiresAt: null, revokedAt: null as string | null, createdAt: "2026-09-01T00:00:00.000Z", operatorUserId: "operator-browser", reason: "Approved studio pilot" },
+    { id: "grant-images", key: "images.generated", amount: "100.000000000", sourceKind: "manual", effectiveAt: "2026-09-01T00:00:00.000Z", expiresAt: null, revokedAt: null as string | null, createdAt: "2026-09-01T00:00:00.000Z", operatorUserId: "operator-browser", reason: "September image allowance" },
+  ];
+  const audit = [{ id: "2", at: asOf, action: "allowance.grant", grantId: "grant-images", operatorUserId: "operator-browser", reason: "September image allowance" }];
+  let ocrAmount: string | null = null;
+  await page.route("**/api/v1/admin/allowances/**", async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() === "POST") {
+      expect(request.headers()["idempotency-key"]).toBeTruthy();
+      const input = request.postDataJSON();
+      if (pathname.endsWith("/grant")) {
+        expect(input).toEqual({ key: "ocr.requests", mode: "finite", amount: "25", effectiveAt: null, expiresAt: null, reason: "Approved OCR pilot" });
+        ocrAmount = input.amount;
+        await route.fulfill({ json: { grantId: "grant-ocr", operation: "grant", replayed: false } }); return;
+      }
+      expect(input).toEqual({ grantId: "grant-images", reason: "Image pilot ended" });
+      grants[1]!.revokedAt = asOf;
+      audit.unshift({ id: "3", at: asOf, action: "allowance.revoke", grantId: "grant-images", operatorUserId: "operator-browser", reason: input.reason });
+      await route.fulfill({ json: { grantId: "grant-images", operation: "revoke", replayed: false } }); return;
+    }
+    if (pathname.endsWith("/workspaces")) { await route.fulfill({ json: { items: [selected], nextCursor: null } }); return; }
+    if (pathname.endsWith("/grants")) { await route.fulfill({ json: { items: grants, nextCursor: null } }); return; }
+    if (pathname.endsWith("/audit")) { await route.fulfill({ json: { items: audit, nextCursor: null } }); return; }
+    await route.fulfill({ json: { workspace: selected, asOf, executionAllowed: true,
+      periodStartsAt: "2026-09-01T00:00:00.000Z", periodEndsAt: "2026-10-01T00:00:00.000Z", limits: [
+        { key: "images.generated", state: grants[1]!.revokedAt ? "none" : "limited", amount: grants[1]!.revokedAt ? null : "100", consumed: "12", reserved: "2", remaining: grants[1]!.revokedAt ? null : "86" },
+        { key: "ocr.requests", state: ocrAmount === null ? "none" : "limited", amount: ocrAmount, consumed: "0", reserved: "0", remaining: ocrAmount },
+      ] } });
+  });
+  for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 900, 1100], ["mobile", 390, 844]] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto(`/admin/allowances?workspace=${selected.id}`);
+    await expect(page.getByRole("heading", { name: "Allowances", exact: true })).toBeVisible();
+    await expect(page.getByText("Execution enabled", { exact: true })).toBeVisible();
+    await page.getByRole("combobox", { name: "Allowance", exact: true }).selectOption("ocr.requests");
+    await page.getByRole("combobox", { name: "Limit", exact: true }).selectOption("finite");
+    await page.getByLabel("Number of OCR requests", { exact: true }).fill("25");
+    await page.getByLabel("Reason for this change", { exact: true }).fill("Approved OCR pilot");
+    await waitForFonts(page);
+    await expectNoPageOverflow(page);
+    expect(await page.locator(".allowance-table-scroll").evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await expectNoSeriousAxeViolations(page);
+    await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo({ top: 0, behavior: "instant" }); });
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+    await page.screenshot({ path: path.join(process.cwd(), "artifacts", "allowances", `${name}.png`), fullPage: true });
+  }
+  await page.getByRole("button", { name: "Add grant", exact: true }).click();
+  await expect(page.getByText("Grant added. Recorded usage is preserved.")).toBeVisible();
+  await expect(page.getByRole("row", { name: "OCR requests 25 0 0 25" })).toBeVisible();
+  await page.getByRole("button", { name: "Revoke images", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Revoke images", exact: true })).toBeFocused();
+  await page.getByLabel("Reason for this change", { exact: true }).fill("Image pilot ended");
+  await page.getByRole("button", { name: "Revoke grant", exact: true }).click();
+  await expect(page.getByText("Grant revoked. Recorded usage is preserved.")).toBeVisible();
+  await expect(page.getByRole("row", { name: "Images Not granted 12 2 —" })).toBeVisible();
+});

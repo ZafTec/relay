@@ -66,6 +66,9 @@ const AdminChangelogPreviewPage = lazy(() => import("../features/admin-changelog
 const AdminCapacityPage = lazy(() => import("../features/admin-capacity").then((module) => ({
   default: module.AdminCapacityPage,
 })));
+const AdminAllowancesPage = lazy(() => import("../features/admin-allowances/AdminAllowancesPage").then((module) => ({
+  default: module.AdminAllowancesPage,
+})));
 
 function productRoute(content: ReactNode, loadingLabel: string) {
   return (
@@ -199,6 +202,10 @@ export const relayRoutes = [
                   <AdminCapacityPage />,
                   "Loading capacity policies",
                 ),
+              },
+              {
+                path: "allowances",
+                element: productRoute(<AdminAllowancesPage />, "Loading allowances"),
               },
             ],
           },

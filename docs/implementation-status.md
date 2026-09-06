@@ -6,6 +6,19 @@ Design baseline: `1eb7a3d` (`design/v3/` normalized and tracked)
 
 ## PR #35 review update — 2026-09-06
 
+Allowance management now has a superadmin dashboard at `/admin/allowances`:
+workspace search, explicit execution/image/OCR grants, current monthly usage,
+effective windows, revocation, paginated grant/audit history, and recoverable
+idempotent requests. Additive migration `0002_allowance_management` restricts
+grant writes to the session-authorized audited function. Tests cover audit
+rollback and admission waiting behind revocation. See
+[allowance management](allowance-management.md). No production grants are
+assigned by this implementation.
+
+Release automation already uses Google's official Release Please action. The
+[first-release setup guide](release-please-setup.md) documents the GitHub App,
+release environment, registry configuration, and release PR sequence.
+
 This update supersedes earlier implementation-gap claims below. The PR wires
 the fixed Azure image/OCR tools, PostgreSQL metering, durable MinIO artifacts,
 HTTP/MCP adapters, product composers, capacity administration, and release/

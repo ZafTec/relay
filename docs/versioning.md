@@ -42,6 +42,9 @@ require a major release when the rollout remains backward-compatible.
 
 ## Release automation
 
+For first-time repository configuration, follow the
+[Google Release Please setup guide](release-please-setup.md).
+
 `release-please-config.json` configures one repository-level `simple` release.
 `.release-please-manifest.json` and `version.txt` are bookkeeping files managed
 by the Release Please PR; they are not deployment selectors. The manifest is

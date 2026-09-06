@@ -100,11 +100,11 @@ function propertiesOf(
   return properties as Record<string, Record<string, unknown>>;
 }
 
-Deno.test("0001 baseline is the only manifest migration", () => {
+Deno.test("migration manifest preserves the baseline before additive changes", () => {
   assertEquals(migration.transactional, true);
   assertEquals(
     MIGRATIONS.map((entry) => entry.id),
-    ["0001_relay_baseline"],
+    ["0001_relay_baseline", "0002_allowance_management"],
   );
   assertEquals(
     MIGRATIONS.filter((entry) => entry.id === migration.id).length,
@@ -564,7 +564,7 @@ Deno.test({
         changelog_select: false,
         run_insert: true,
         entitlement_select: true,
-        entitlement_insert: true,
+        entitlement_insert: false,
         entitlement_update: false,
         entitlement_delete: false,
         governance_select: true,

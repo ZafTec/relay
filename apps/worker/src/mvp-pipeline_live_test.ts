@@ -3,6 +3,7 @@ import { createPostgresAdmissionUsagePort } from "@relay/application";
 import { ArtifactService, PostgresArtifactQuota } from "@relay/artifacts";
 import type { RuntimeConfig } from "@relay/config";
 import { createDatabasePool } from "@relay/database";
+import { manageWorkspaceAllowance } from "@relay/metering";
 import {
   createAzureFlux2ProClient,
   createAzureGptImage2Client,
@@ -192,32 +193,56 @@ Deno.test({
       await owner.query("begin");
       await owner.query("set local role relay_owner");
       await owner.query(
-        `insert into relay.entitlement_grants
-           (id, workspace_id, entitlement_key, grant_kind, capability_enabled, source_kind, source_reference, effective_at)
-         values ($1, $2, 'tools.execute', 'capability', true, 'manual', 'mvp-pipeline-test', now() - interval '1 second')`,
-        [`grant-cap-${suffix}`, workspaceId],
+        `insert into relay.system_role_assignments (user_id, role, granted_by) values ($1, 'superadmin', $1)`,
+        [userId],
       );
       await owner.query("commit");
+      const operatorSession = `mvp-session-${suffix}`;
+      await pool.query(
+        `insert into auth.session (id, "expiresAt", token, "createdAt", "updatedAt", "userId")
+         values ($1, now() + interval '1 hour', $1, now(), now(), $2)`,
+        [operatorSession, userId],
+      );
+      await manageWorkspaceAllowance(
+        pool,
+        operatorSession,
+        workspaceId,
+        "grant",
+        {
+          key: "tools.execute",
+          mode: "enabled",
+          amount: null,
+          effectiveAt: null,
+          expiresAt: null,
+          reason: "MVP pipeline test",
+        },
+        crypto.randomUUID(),
+        `req-${suffix}`,
+      );
       assertEquals(
         (await admit("image.generate.gpt-image-2", imageInput)).kind,
         "not_entitled",
       );
-      await owner.query("begin");
-      await owner.query("set local role relay_owner");
       for (
-        const [metric, unit] of [["images.generated", "image"], [
-          "ocr.requests",
-          "request",
-        ]]
+        const metric of ["images.generated", "ocr.requests"] as const
       ) {
-        await owner.query(
-          `insert into relay.entitlement_grants
-             (id, workspace_id, entitlement_key, grant_kind, limit_amount, unit, period, source_kind, source_reference, effective_at)
-           values ($1, $2, $3, 'limit', 3, $4, 'calendar_month', 'manual', 'mvp-pipeline-test', now() - interval '1 second')`,
-          [`grant-${metric}-${suffix}`, workspaceId, metric, unit],
+        await manageWorkspaceAllowance(
+          pool,
+          operatorSession,
+          workspaceId,
+          "grant",
+          {
+            key: metric,
+            mode: "finite",
+            amount: "3",
+            effectiveAt: null,
+            expiresAt: null,
+            reason: "MVP pipeline test",
+          },
+          crypto.randomUUID(),
+          `req-${suffix}`,
         );
       }
-      await owner.query("commit");
       worker = startWorker(config, {
         pool,
         handlerRegistry: registry,

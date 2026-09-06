@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { AuthAdapterError } from "../../auth/types";
 import { RelayBrand } from "../../components/brand/RelayBrand";
@@ -30,12 +30,19 @@ function AdminNavigation({ mobile = false }: { readonly mobile?: boolean }) {
       >
         Capacity
       </NavLink>
+      <NavLink
+        className={({ isActive }) => `admin-nav__item${isActive ? " is-active" : ""}`}
+        to="/admin/allowances"
+      >
+        Allowances
+      </NavLink>
     </nav>
   );
 }
 
 export function AdminLayout() {
   const navigate = useNavigate();
+  const allowanceRoute = useLocation().pathname.startsWith("/admin/allowances");
   const { session, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
@@ -95,7 +102,7 @@ export function AdminLayout() {
         <div className="admin-scope">
           <span>Scope</span>
           <strong>Platform</strong>
-          <p>Superadmin context. No workspace is selected.</p>
+          <p>{allowanceRoute ? "Superadmin controls for workspace access and usage." : "Superadmin context. No workspace is selected."}</p>
         </div>
         <AdminNavigation />
         <Link className="admin-back-link" to="/dashboard">Back to workspace</Link>
@@ -141,7 +148,7 @@ export function AdminLayout() {
         </header>
         <div className="admin-mobile-scope">
           <span>Platform scope</span>
-          <strong>No workspace selected</strong>
+          <strong>{allowanceRoute ? "Workspace allowances" : "No workspace selected"}</strong>
         </div>
         <AdminNavigation mobile />
         {signOutError ? (

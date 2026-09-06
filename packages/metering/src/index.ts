@@ -15,6 +15,7 @@ export type {
 } from "./admission.ts";
 
 export { can, limit } from "./entitlements.ts";
+export * from "./allowances.ts";
 export type {
   EntitlementGrantSnapshot,
   ResolvedCapability,

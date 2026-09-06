@@ -39,3 +39,11 @@ export type {
   WorkspaceEventWaitRequest,
   WorkspaceMembershipRole,
 } from "./v1.ts";
+export {
+  createAdminAllowanceRoutes,
+  createPostgresAdminAllowanceService,
+} from "./admin_allowances.ts";
+export type {
+  AdminAllowanceRouteDependencies,
+  AdminAllowanceService,
+} from "./admin_allowances.ts";
