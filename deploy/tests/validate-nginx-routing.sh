@@ -95,6 +95,10 @@ for path, expected in cases.items():
             raise SystemExit(f"unexpected response for {path}: {actual!r}")
         if path.startswith("/s/") and response.headers.get("Referrer-Policy") != "no-referrer":
             raise SystemExit("share response did not enforce Referrer-Policy: no-referrer")
+        if path.startswith("/relay-artifacts/"):
+            assert response.headers.get('Content-Security-Policy') == "sandbox; default-src 'none'; frame-ancestors 'none'"
+            assert response.headers.get('X-Content-Type-Options') == 'nosniff'
+            assert response.headers.get('Referrer-Policy') == 'no-referrer'
 
 for path in ["/health/live", "/.well-known/unapproved"]:
     try:

@@ -80,8 +80,10 @@ limits.
 The Nginx file includes the bucket's browser CORS fallback because the installed
 MinIO does not implement `PutBucketCors`. It preserves signed methods, paths,
 queries and upload headers, and does not modify the shared MinIO server block.
-The older route/header/CORS examples remain references for other installations;
-do not install them alongside this complete file.
+Artifact responses use a sandbox CSP so inline HTML/SVG cannot execute scripts
+or inherit the application's origin. The older route/header/CORS examples remain
+references for other installations; do not install them alongside this complete
+file.
 
 Use the existing host Certbot installation, webroot, timer, and renewal hook.
 Nginx trusts Cloudflare's published IP ranges; the API's
