@@ -97,6 +97,11 @@ patch version, including during `0.x`. A failed setup run can be rerun from
 [Actions](https://github.com/ZafTec/relay/actions) after correcting configuration;
 do not create a manual version tag to work around it.
 
+A rerun uses the original tagged commit and workflow. If the failure requires a
+code or workflow fix, merge that fix through a PR and let Release Please prepare
+the next version. Keep the failed release as an unpublished draft and preserve
+its tag. Changing `main` does not repair a rerun of an older tag.
+
 ## Production deployment is a separate step
 
 Release Please prepares versions and release notes. The image workflow publishes
