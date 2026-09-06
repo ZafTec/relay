@@ -13,6 +13,15 @@ site = "\n".join(
 )
 config = (
     "pid /tmp/nginx.pid;\nerror_log stderr notice;\nevents {}\nhttp {\n"
-    "include /etc/nginx/mime.types;\n" + sections[0] + "\n" + site + "\n}\n"
+    "include /etc/nginx/mime.types;\n" + sections[0] + "\n" + site + "\n"
+)
+# Exercise the bucket location within the existing storage host separately.
+# Its upstream uses Docker DNS at request time so bootstrap needs no MinIO.
+storage = source.with_name("storage-relay-location.conf.example").read_text()
+storage = storage.replace("proxy_pass http://minio:9000;", "proxy_pass http://$storage_upstream;")
+config += (
+    "server { listen 8081; server_name storage.zaftech.co;\n"
+    "resolver 127.0.0.11 valid=10s ipv6=off;\n"
+    "set $storage_upstream minio:9000;\n" + storage + "\n}\n}\n"
 )
 Path(sys.argv[1]).write_text(config)

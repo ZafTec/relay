@@ -6,6 +6,8 @@ import {
 import type { FetchLike } from "./types.ts";
 
 export const TEST_API_KEY = "test-api-key-secret-canary";
+export const TEST_AZURE_BASE_URL =
+  "https://test-resource.services.ai.azure.com";
 
 export function asFetch(
   handler: (

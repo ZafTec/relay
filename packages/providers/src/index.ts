@@ -1,10 +1,10 @@
 export {
-  AZURE_GPT_IMAGE_2_ENDPOINT,
   AZURE_GPT_IMAGE_2_MAX_EDGE,
   AZURE_GPT_IMAGE_2_MAX_PIXELS,
   AZURE_GPT_IMAGE_2_MAX_PROMPT_CODE_POINTS,
   AZURE_GPT_IMAGE_2_MIN_PIXELS,
   AZURE_GPT_IMAGE_2_MODEL,
+  AZURE_GPT_IMAGE_2_PATH,
   AzureGptImage2Client,
   createAzureGptImage2Client,
 } from "./azure-gpt-image-2.ts";
@@ -18,11 +18,11 @@ export type {
 } from "./azure-gpt-image-2.ts";
 
 export {
-  AZURE_FLUX_2_PRO_ENDPOINT,
   AZURE_FLUX_2_PRO_MAX_INPUT_IMAGES,
   AZURE_FLUX_2_PRO_MAX_PIXELS,
   AZURE_FLUX_2_PRO_MIN_EDGE,
   AZURE_FLUX_2_PRO_MODEL,
+  AZURE_FLUX_2_PRO_PATH,
   AzureFlux2ProClient,
   createAzureFlux2ProClient,
 } from "./azure-flux-2-pro.ts";
@@ -32,8 +32,8 @@ export type {
 } from "./azure-flux-2-pro.ts";
 
 export {
-  AZURE_MISTRAL_OCR_ENDPOINT,
   AZURE_MISTRAL_OCR_MODEL,
+  AZURE_MISTRAL_OCR_PATH,
   AzureMistralOcrClient,
   createAzureMistralOcrClient,
 } from "./azure-mistral-ocr.ts";
@@ -63,7 +63,7 @@ export type {
   NormalizedImage,
   NormalizedImageMediaType,
 } from "./image.ts";
-export { AZURE_AI_BASE_URL, AZURE_PROVIDER_LIMITS } from "./types.ts";
+export { AZURE_PROVIDER_LIMITS } from "./types.ts";
 export type {
   AzureProviderClientOptions,
   AzureProviderId,

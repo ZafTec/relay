@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  AZURE_GPT_IMAGE_2_ENDPOINT,
+  AZURE_GPT_IMAGE_2_PATH,
   AzureGptImage2Client,
   type AzureGptImage2Request,
 } from "./index.ts";
@@ -13,14 +13,16 @@ import {
   jsonResponse,
   requestBody,
   TEST_API_KEY,
+  TEST_AZURE_BASE_URL,
 } from "./test_helpers.ts";
 
 Deno.test("GPT Image 2 sends the exact Azure request and normalizes images", async () => {
   const encoded = base64(jpegBytes(1024, 1024));
   const client = new AzureGptImage2Client({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch((input, init) => {
-      assert.equal(input, AZURE_GPT_IMAGE_2_ENDPOINT);
+      assert.equal(input, TEST_AZURE_BASE_URL + AZURE_GPT_IMAGE_2_PATH);
       assertJsonRequest(init);
       assert.deepEqual(requestBody(init), {
         model: "gpt-image-2",
@@ -89,6 +91,7 @@ Deno.test("GPT Image 2 sends the exact Azure request and normalizes images", asy
 
 Deno.test("GPT Image 2 accepts its documented generation boundaries", async () => {
   const client = new AzureGptImage2Client({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch((_input, init) => {
       assert.deepEqual(requestBody(init), {
@@ -125,6 +128,7 @@ Deno.test("GPT Image 2 accepts its documented generation boundaries", async () =
 Deno.test("GPT Image 2 rejects unsupported or out-of-range request fields", async () => {
   let fetchCalls = 0;
   const client = new AzureGptImage2Client({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch(() => {
       fetchCalls += 1;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  AZURE_MISTRAL_OCR_ENDPOINT,
+  AZURE_MISTRAL_OCR_PATH,
   AzureMistralOcrClient,
   type AzureMistralOcrRequest,
 } from "./index.ts";
@@ -14,6 +14,7 @@ import {
   pngBytes,
   requestBody,
   TEST_API_KEY,
+  TEST_AZURE_BASE_URL,
 } from "./test_helpers.ts";
 
 const PDF_DATA_URL = "data:application/pdf;base64,JVBERi0xLjQ=";
@@ -34,9 +35,10 @@ const ANNOTATION_FORMAT = {
 Deno.test("Mistral OCR sends the exact Azure request and preserves normalized output", async () => {
   const embeddedImage = imageDataUrl("image/png", pngBytes(32, 16));
   const client = new AzureMistralOcrClient({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch((input, init) => {
-      assert.equal(input, AZURE_MISTRAL_OCR_ENDPOINT);
+      assert.equal(input, TEST_AZURE_BASE_URL + AZURE_MISTRAL_OCR_PATH);
       assertJsonRequest(init);
       assert.deepEqual(requestBody(init), {
         model: "mistral-ocr-4-0",
@@ -173,6 +175,7 @@ Deno.test("Mistral OCR sends the exact Azure request and preserves normalized ou
 Deno.test("Mistral OCR maps image data URLs to image_url documents", async () => {
   const document = imageDataUrl("image/jpeg", new Uint8Array([1, 2, 3]));
   const client = new AzureMistralOcrClient({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch((_input, init) => {
       assert.deepEqual(requestBody(init), {
@@ -204,6 +207,7 @@ Deno.test("Mistral OCR maps image data URLs to image_url documents", async () =>
 Deno.test("Mistral OCR rejects invalid and unbounded request DTOs", async () => {
   let fetchCalls = 0;
   const client = new AzureMistralOcrClient({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch(() => {
       fetchCalls += 1;
@@ -293,6 +297,7 @@ Deno.test("Mistral OCR strictly rejects malformed response DTOs", async () => {
 
   for (const response of malformedResponses) {
     const client = new AzureMistralOcrClient({
+      baseUrl: TEST_AZURE_BASE_URL,
       apiKey: TEST_API_KEY,
       fetch: asFetch(() => jsonResponse(response)),
     });
@@ -306,6 +311,7 @@ Deno.test("Mistral OCR strictly rejects malformed response DTOs", async () => {
 Deno.test("Mistral OCR bounds and validates embedded image base64", async () => {
   const invalidImage = base64(new Uint8Array([1, 2, 3, 4]));
   const client = new AzureMistralOcrClient({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch(() =>
       jsonResponse({

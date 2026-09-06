@@ -49,7 +49,8 @@ jq -e '
     $env.OTEL_DENO == "true" and
     $env.OTEL_EXPORTER_OTLP_ENDPOINT == "http://alloy:4318" and
     $env.BETTER_AUTH_URL == "https://relay.zaftech.co" and
-    $env.AUTH_TRUSTED_PROXY_CIDRS == "172.18.0.2/32" and
+    $env.AUTH_TRUSTED_PROXY_CIDRS == "172.18.0.0/16" and
+    $env.S3_PUBLIC_ENDPOINT == "https://storage.zaftech.co" and
     $env.S3_BUCKET_VERSIONING == "enabled") and
   $s["relay-api"].environment.RELAY_PROCESS_ROLE == "api" and
   $s["relay-worker"].environment.RELAY_PROCESS_ROLE == "worker" and

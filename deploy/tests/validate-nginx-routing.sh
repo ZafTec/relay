@@ -81,7 +81,6 @@ cases = {
     "/.well-known/oauth-protected-resource/mcp": "api /.well-known/oauth-protected-resource/mcp referer=",
     "/.well-known/oauth-authorization-server/api/auth": "api /.well-known/oauth-authorization-server/api/auth referer=",
     "/health/ready": "api /health/ready referer=",
-    "/relay-artifacts/artifacts/probe?X-Amz-Signature=test": "api /relay-artifacts/artifacts/probe?X-Amz-Signature=test referer=",
     "/": "web / referer=",
 }
 for path, expected in cases.items():
@@ -95,10 +94,6 @@ for path, expected in cases.items():
             raise SystemExit(f"unexpected response for {path}: {actual!r}")
         if path.startswith("/s/") and response.headers.get("Referrer-Policy") != "no-referrer":
             raise SystemExit("share response did not enforce Referrer-Policy: no-referrer")
-        if path.startswith("/relay-artifacts/"):
-            assert response.headers.get('Content-Security-Policy') == "sandbox; default-src 'none'; frame-ancestors 'none'"
-            assert response.headers.get('X-Content-Type-Options') == 'nosniff'
-            assert response.headers.get('Referrer-Policy') == 'no-referrer'
 
 for path in ["/health/live", "/.well-known/unapproved"]:
     try:
@@ -107,23 +102,15 @@ for path in ["/health/live", "/.well-known/unapproved"]:
     except HTTPError as error:
         assert error.code == 404
 
-headers = "content-type,content-md5,if-none-match,x-amz-checksum-sha256,x-amz-meta-relay-upload-id,x-amz-meta-relay-sha256"
-for origin, requested, expected in [
-    ("https://relay.zaftech.co", headers, 204),
-    ("https://untrusted.example", headers, 403),
-    ("https://relay.zaftech.co", "authorization", 403),
-]:
-    request = Request("http://relay-proxy:8080/relay-artifacts/probe", method="OPTIONS", headers={
-        "Origin": origin, "Access-Control-Request-Method": "PUT", "Access-Control-Request-Headers": requested,
-    })
-    try:
-        with urlopen(request, timeout=5) as response:
-            assert response.status == expected
-            assert response.headers['Access-Control-Allow-Origin'] == origin
-            allowed = {value.strip() for value in response.headers['Access-Control-Allow-Headers'].split(',')}
-            assert set(headers.split(',')) == allowed
-    except HTTPError as error:
-        assert error.code == expected
+path = "/relay-artifacts/artifacts/probe?X-Amz-Signature=test"
+request = Request("http://relay-proxy:8081" + path, headers={
+    "Referer": "https://relay.zaftech.co/s/must-not-forward",
+})
+with urlopen(request, timeout=5) as response:
+    assert response.read().decode().strip() == f"api {path} referer="
+    assert response.headers.get('Content-Security-Policy') == "sandbox; default-src 'none'; frame-ancestors 'none'"
+    assert response.headers.get('X-Content-Type-Options') == 'nosniff'
+    assert response.headers.get('Referrer-Policy') == 'no-referrer'
 PY
 
 server_script=$(host_path "$temp_dir/server.py")

@@ -13,6 +13,7 @@ import {
 import { strictRecord, withInputValidation } from "./validation.ts";
 
 export interface ResolvedClientOptions {
+  readonly baseUrl: string;
   readonly apiKey: string;
   readonly fetch: FetchLike;
   readonly timeoutMs: number;
@@ -46,6 +47,7 @@ export function resolveClientOptions(
     const options = strictRecord(
       value,
       [
+        "baseUrl",
         "apiKey",
         "fetch",
         "timeoutMs",
@@ -65,7 +67,26 @@ export function resolveClientOptions(
     if (typeof options.fetch !== "function") {
       throw invalidInput(provider, "options.fetch");
     }
+    let endpoint: URL;
+    try {
+      if (typeof options.baseUrl !== "string") throw new Error();
+      endpoint = new URL(options.baseUrl);
+    } catch {
+      throw invalidInput(provider, "options.baseUrl");
+    }
+    if (
+      endpoint.protocol !== "https:" || endpoint.username ||
+      endpoint.password ||
+      endpoint.port || endpoint.pathname !== "/" || endpoint.search ||
+      endpoint.hash ||
+      !/^[a-z0-9-]+\.(services\.ai|openai)\.azure\.com$/u.test(
+        endpoint.hostname,
+      )
+    ) {
+      throw invalidInput(provider, "options.baseUrl");
+    }
     return {
+      baseUrl: endpoint.origin,
       apiKey: options.apiKey,
       fetch: options.fetch as FetchLike,
       timeoutMs: boundedOption(

@@ -7,10 +7,9 @@ import {
   resolveClientOptions,
   type ResolvedClientOptions,
 } from "./http.ts";
-import {
-  AZURE_AI_BASE_URL,
-  type AzureProviderClientOptions,
-  type ProviderCallOptions,
+import type {
+  AzureProviderClientOptions,
+  ProviderCallOptions,
 } from "./types.ts";
 import {
   booleanValue,
@@ -38,8 +37,8 @@ const INPUT_IMAGE_FIELDS = [
 ] as const;
 
 export const AZURE_FLUX_2_PRO_MODEL = "FLUX.2-pro" as const;
-export const AZURE_FLUX_2_PRO_ENDPOINT =
-  `${AZURE_AI_BASE_URL}/providers/blackforestlabs/v1/flux-2-pro?api-version=preview` as const;
+export const AZURE_FLUX_2_PRO_PATH =
+  "/providers/blackforestlabs/v1/flux-2-pro?api-version=preview" as const;
 export const AZURE_FLUX_2_PRO_MAX_INPUT_IMAGES = 8;
 export const AZURE_FLUX_2_PRO_MAX_PIXELS = 4 * 1024 * 1024;
 export const AZURE_FLUX_2_PRO_MIN_EDGE = 64;
@@ -193,7 +192,7 @@ export class AzureFlux2ProClient {
     const response = await postJson(
       this.#config,
       PROVIDER,
-      AZURE_FLUX_2_PRO_ENDPOINT,
+      this.#config.baseUrl + AZURE_FLUX_2_PRO_PATH,
       prepared.body,
       prepared.signal,
     );

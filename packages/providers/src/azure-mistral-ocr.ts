@@ -5,11 +5,10 @@ import {
   resolveClientOptions,
   type ResolvedClientOptions,
 } from "./http.ts";
-import {
-  AZURE_AI_BASE_URL,
-  type AzureProviderClientOptions,
-  type JsonObject,
-  type ProviderCallOptions,
+import type {
+  AzureProviderClientOptions,
+  JsonObject,
+  ProviderCallOptions,
 } from "./types.ts";
 import {
   booleanValue,
@@ -37,8 +36,8 @@ const MAX_PAGE_ITEMS = 2_048;
 const MAX_IMAGE_PIXELS = 64 * 1024 * 1024;
 
 export const AZURE_MISTRAL_OCR_MODEL = "mistral-ocr-4-0" as const;
-export const AZURE_MISTRAL_OCR_ENDPOINT =
-  `${AZURE_AI_BASE_URL}/providers/mistral/azure/ocr?api-version=2024-05-01-preview` as const;
+export const AZURE_MISTRAL_OCR_PATH =
+  "/providers/mistral/azure/ocr?api-version=2024-05-01-preview" as const;
 
 export type AzureMistralOcrTableFormat = "markdown" | "html";
 export type AzureMistralOcrConfidenceGranularity = "word" | "page";
@@ -651,7 +650,7 @@ export class AzureMistralOcrClient {
     const response = await postJson(
       this.#config,
       PROVIDER,
-      AZURE_MISTRAL_OCR_ENDPOINT,
+      this.#config.baseUrl + AZURE_MISTRAL_OCR_PATH,
       prepared.body,
       prepared.signal,
     );

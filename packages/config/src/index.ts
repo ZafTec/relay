@@ -365,8 +365,15 @@ export interface ShareTokenKeyringConfig {
   readonly keys: readonly ShareTokenSigningKeyConfig[];
 }
 
-export interface AzureProviderConfig {
+export interface AzureResourceConfig {
+  readonly baseUrl: string;
   readonly apiKey: string;
+}
+
+export interface AzureProviderConfig {
+  readonly gptImage2: AzureResourceConfig;
+  readonly flux2Pro: AzureResourceConfig;
+  readonly mistralOcr: AzureResourceConfig;
   readonly timeoutMs: number;
   readonly maxResponseBytes: number;
   readonly maxBase64Bytes: number;
@@ -428,7 +435,16 @@ const SHARE_TOKEN_ENVIRONMENT_VARIABLES = [
   "SHARE_TOKEN_KEYS",
 ] as const;
 const AZURE_ENVIRONMENT_VARIABLES = [
-  "AZURE_API_KEY",
+  "AZURE_IMAGE_ENDPOINT",
+  "AZURE_IMAGE_API_KEY",
+  "AZURE_OCR_ENDPOINT",
+  "AZURE_OCR_API_KEY",
+  "AZURE_GPT_IMAGE_2_ENDPOINT",
+  "AZURE_GPT_IMAGE_2_API_KEY",
+  "AZURE_FLUX_2_PRO_ENDPOINT",
+  "AZURE_FLUX_2_PRO_API_KEY",
+  "AZURE_MISTRAL_OCR_ENDPOINT",
+  "AZURE_MISTRAL_OCR_API_KEY",
   "AZURE_REQUEST_TIMEOUT_MS",
   "AZURE_MAX_RESPONSE_BYTES",
   "AZURE_MAX_OUTPUT_BYTES",
@@ -843,17 +859,48 @@ export function loadShareTokenKeyringConfig(
 
 export const loadApiShareTokenKeyringConfig = loadShareTokenKeyringConfig;
 
-/** Loads worker-only Azure credentials and limits; provider URLs stay fixed. */
+function loadAzureResource(
+  env: ConfigEnv,
+  group: "IMAGE" | "OCR",
+  model: "GPT_IMAGE_2" | "FLUX_2_PRO" | "MISTRAL_OCR",
+): AzureResourceConfig {
+  // A model override must supply a complete pair; never send a group's key
+  // to a different resource just because only an endpoint was overridden.
+  const override = env[`AZURE_${model}_ENDPOINT`] !== undefined ||
+    env[`AZURE_${model}_API_KEY`] !== undefined;
+  const prefix = `AZURE_${override ? model : group}`;
+  const endpointName = `${prefix}_ENDPOINT`;
+  const rawEndpoint = readNonEmpty(endpointName, env[endpointName]);
+  let endpoint: URL;
+  try {
+    endpoint = new URL(rawEndpoint);
+  } catch {
+    throw new Error(`${endpointName} must be an HTTPS Azure resource URL`);
+  }
+  if (
+    endpoint.protocol !== "https:" || endpoint.username || endpoint.password ||
+    endpoint.port || endpoint.pathname !== "/" || endpoint.search ||
+    endpoint.hash ||
+    !/^[a-z0-9-]+\.(services\.ai|openai)\.azure\.com$/u.test(endpoint.hostname)
+  ) {
+    throw new Error(`${endpointName} must be an HTTPS Azure resource URL`);
+  }
+  const keyName = `${prefix}_API_KEY`;
+  const apiKey = readNonEmpty(keyName, env[keyName]);
+  if (apiKey.length > 4_096 || /[\r\n]/u.test(apiKey)) {
+    throw new Error(`${keyName} has an invalid format`);
+  }
+  return Object.freeze({ baseUrl: endpoint.origin, apiKey });
+}
+
+/** Loads worker resource pairs and optional model-specific overrides. */
 export function loadAzureProviderConfig(
   env: ConfigEnv = readProcessEnvironment(AZURE_ENVIRONMENT_VARIABLES),
 ): AzureProviderConfig {
-  const apiKey = readNonEmpty("AZURE_API_KEY", env.AZURE_API_KEY);
-  if (apiKey.length > 4_096 || /[\r\n]/u.test(apiKey)) {
-    throw new Error("AZURE_API_KEY has an invalid format");
-  }
-
   return Object.freeze({
-    apiKey,
+    gptImage2: loadAzureResource(env, "IMAGE", "GPT_IMAGE_2"),
+    flux2Pro: loadAzureResource(env, "IMAGE", "FLUX_2_PRO"),
+    mistralOcr: loadAzureResource(env, "OCR", "MISTRAL_OCR"),
     timeoutMs: readConfigInteger(
       "AZURE_REQUEST_TIMEOUT_MS",
       env.AZURE_REQUEST_TIMEOUT_MS,
