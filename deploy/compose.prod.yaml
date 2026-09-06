@@ -1,151 +1,70 @@
-name: relay
+version: "3.8"
 
-x-backend-image: &backend-image
-  image: "${DOCKERHUB_NAMESPACE:-zaftec}/${DOCKERHUB_BACKEND_REPOSITORY:-relay-backend}@${BACKEND_DIGEST:?set BACKEND_DIGEST in the selected release file}"
-  read_only: true
-  init: true
-  cap_drop:
-    - ALL
-  security_opt:
-    - no-new-privileges:true
-  tmpfs:
-    - /tmp:size=64m,mode=1777
-
-x-runtime-environment: &runtime-environment
-  APP_ENV: "production"
-  APP_VERSION: "${RELEASE_VERSION:?set RELEASE_VERSION in the selected release file}"
-  GIT_SHA: "${RELEASE_GIT_SHA:?set RELEASE_GIT_SHA in the selected release file}"
-  DEPLOYMENT_ENVIRONMENT_NAME: "${DEPLOYMENT_ENVIRONMENT_NAME:-production}"
-  OTEL_DENO: "${OTEL_DENO:-true}"
-  OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
-  OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://alloy:4318}"
-  OTEL_PROPAGATORS: "tracecontext"
-  OTEL_DENO_CONSOLE: "capture"
-  OTEL_METRIC_EXPORT_INTERVAL: "${OTEL_METRIC_EXPORT_INTERVAL:-15000}"
-  OTEL_TRACES_SAMPLER: "${OTEL_TRACES_SAMPLER:-always_on}"
-
-# .env is a Compose interpolation source, never an env_file injected wholesale.
-# API, worker, and migrator receive only their explicitly mapped settings.
-x-application-environment: &application-environment
-  DATABASE_URL: "${DATABASE_URL:?set the runtime database URL}"
-  REDIS_URL: "${REDIS_URL:?set the Relay Redis URL}"
-  DATABASE_POOL_MAX: "${DATABASE_POOL_MAX:-10}"
-  DATABASE_CONNECT_TIMEOUT_MS: "${DATABASE_CONNECT_TIMEOUT_MS:-5000}"
-  DATABASE_STATEMENT_TIMEOUT_MS: "${DATABASE_STATEMENT_TIMEOUT_MS:-30000}"
-  REDIS_CONNECT_TIMEOUT_MS: "${REDIS_CONNECT_TIMEOUT_MS:-5000}"
-  S3_ENDPOINT: "${S3_ENDPOINT:?set the internal S3 endpoint}"
-  S3_REGION: "${S3_REGION:-us-east-1}"
-  S3_BUCKET: "${S3_BUCKET:-relay-artifacts}"
-  S3_FORCE_PATH_STYLE: "true"
-  S3_BUCKET_VERSIONING: "enabled"
-  S3_REQUEST_TIMEOUT_MS: "${S3_REQUEST_TIMEOUT_MS:-30000}"
-  ARTIFACT_WORKSPACE_MAX_BYTES: "${ARTIFACT_WORKSPACE_MAX_BYTES:?set the workspace storage quota}"
-  ARTIFACT_MAX_UPLOAD_BYTES: "${ARTIFACT_MAX_UPLOAD_BYTES:?set the upload limit}"
-  ARTIFACT_UPLOAD_TTL_SECONDS: "${ARTIFACT_UPLOAD_TTL_SECONDS:-900}"
-  ARTIFACT_DOWNLOAD_TTL_SECONDS: "${ARTIFACT_DOWNLOAD_TTL_SECONDS:-300}"
-  ARTIFACT_PURGE_DELAY_SECONDS: "${ARTIFACT_PURGE_DELAY_SECONDS:-604800}"
-  ARTIFACT_CLEANUP_LEASE_SECONDS: "${ARTIFACT_CLEANUP_LEASE_SECONDS:-60}"
-  ARTIFACT_MAINTENANCE_INTERVAL_MS: "${ARTIFACT_MAINTENANCE_INTERVAL_MS:-30000}"
-  ARTIFACT_MAINTENANCE_BATCH_SIZE: "${ARTIFACT_MAINTENANCE_BATCH_SIZE:-100}"
-
+# Install as /opt/relay/docker-compose.yml alongside the production .env.
+# Run deploy after the matching backend and web release has finished publishing.
 services:
-  api:
-    <<: *backend-image
-    command: ["api"]
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
+  relay-migrate:
+    image: &backend-image zaftec/relay-backend:latest
+    container_name: relay-migrate
+    restart: "no"
+    env_file: .env
     environment:
-      <<: [*runtime-environment, *application-environment]
-      PORT: "8000"
-      RELAY_PROCESS_ROLE: api
-      OTEL_SERVICE_NAME: relay-api
-      BETTER_AUTH_URL: "${RELAY_PUBLIC_URL:?set the public HTTPS origin}"
-      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?set the authentication secret}"
-      AUTH_TRUSTED_ORIGINS: "${RELAY_PUBLIC_URL:?set the public HTTPS origin}"
-      AUTH_TRUSTED_PROXY_CIDRS: "${AUTH_TRUSTED_PROXY_CIDRS:?set only Nginx's exact proxy-net IP}"
-      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:?set the Google OAuth client ID}"
-      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:?set the Google OAuth secret}"
-      GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID:?set the GitHub OAuth client ID}"
-      GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET:?set the GitHub OAuth secret}"
-      S3_PUBLIC_ENDPOINT: "${S3_PUBLIC_ENDPOINT:?set the public HTTPS S3 endpoint}"
-      S3_ACCESS_KEY_ID: "${S3_API_ACCESS_KEY_ID:?set the API storage user}"
-      S3_SECRET_ACCESS_KEY: "${S3_API_SECRET_ACCESS_KEY:?set the API storage secret}"
-      SHARE_TOKEN_ACTIVE_VERSION: "${SHARE_TOKEN_ACTIVE_VERSION:-1}"
-      SHARE_TOKEN_KEYS: "${SHARE_TOKEN_KEYS:?set the share token keyring}"
-    expose:
-      - "8000"
-    networks:
-      proxy:
-        aliases:
-          - relay-api
-      database:
-    restart: unless-stopped
-    stop_grace_period: 30s
-
-  worker:
-    <<: *backend-image
-    command: ["worker"]
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    environment:
-      <<: [*runtime-environment, *application-environment]
-      RELAY_PROCESS_ROLE: worker
-      OTEL_SERVICE_NAME: relay-worker
-      S3_ACCESS_KEY_ID: "${S3_WORKER_ACCESS_KEY_ID:?set the worker storage user}"
-      S3_SECRET_ACCESS_KEY: "${S3_WORKER_SECRET_ACCESS_KEY:?set the worker storage secret}"
-      AZURE_API_KEY: "${AZURE_API_KEY:?set the worker provider credential}"
-    networks:
-      database:
-      proxy:
-    restart: unless-stopped
-    stop_grace_period: 2m
-
-  migrate:
-    <<: *backend-image
-    command: ["migrate", "up"]
-    environment:
-      DATABASE_URL: "${MIGRATOR_DATABASE_URL:?set the dedicated migrator database URL}"
-      DATABASE_POOL_MAX: "2"
-      DATABASE_CONNECT_TIMEOUT_MS: "${DATABASE_CONNECT_TIMEOUT_MS:-5000}"
+      DATABASE_URL: ${MIGRATOR_DATABASE_URL:?set MIGRATOR_DATABASE_URL in .env}
       DATABASE_STATEMENT_TIMEOUT_MS: "600000"
-      APP_VERSION: "${RELEASE_VERSION:?set RELEASE_VERSION in the selected release file}"
-      GIT_SHA: "${RELEASE_GIT_SHA:?set RELEASE_GIT_SHA in the selected release file}"
       OTEL_DENO: "false"
+    command: ["migrate", "up"]
     healthcheck:
       disable: true
     networks:
-      database:
-    restart: "no"
+      - postgresql-db-n8n
 
-  web:
-    image: "${DOCKERHUB_NAMESPACE:-zaftec}/${DOCKERHUB_WEB_REPOSITORY:-relay-web}@${WEB_DIGEST:?set WEB_DIGEST in the selected release file}"
-    read_only: true
-    init: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp:size=16m,mode=1777
-      - /var/cache/nginx:size=16m,mode=0755
-    expose:
-      - "8080"
-    networks:
-      proxy:
-        aliases:
-          - relay-web
+  relay-api:
+    image: *backend-image
+    container_name: relay-api
     restart: unless-stopped
-    stop_grace_period: 30s
+    env_file: .env
+    environment:
+      RELAY_PROCESS_ROLE: api
+      OTEL_SERVICE_NAME: relay-api
+    command: ["api"]
     depends_on:
-      api:
+      relay-migrate:
+        condition: service_completed_successfully
+    networks:
+      - proxy-net
+      - postgresql-db-n8n
+
+  relay-worker:
+    image: *backend-image
+    container_name: relay-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RELAY_PROCESS_ROLE: worker
+      OTEL_SERVICE_NAME: relay-worker
+      S3_ACCESS_KEY_ID: ${S3_WORKER_ACCESS_KEY_ID:?set S3_WORKER_ACCESS_KEY_ID in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_WORKER_SECRET_ACCESS_KEY:?set S3_WORKER_SECRET_ACCESS_KEY in .env}
+    command: ["worker"]
+    depends_on:
+      relay-migrate:
+        condition: service_completed_successfully
+    stop_grace_period: 2m
+    networks:
+      - proxy-net
+      - postgresql-db-n8n
+
+  relay-web:
+    image: zaftec/relay-web:latest
+    container_name: relay-web
+    restart: unless-stopped
+    depends_on:
+      relay-api:
         condition: service_healthy
+    networks:
+      - proxy-net
 
 networks:
-  proxy:
+  proxy-net:
     external: true
-    name: "${RELAY_PROXY_NETWORK:-proxy-net}"
-  database:
+  postgresql-db-n8n:
     external: true
-    name: "${RELAY_DATABASE_NETWORK:-postgresql-db-n8n}"
