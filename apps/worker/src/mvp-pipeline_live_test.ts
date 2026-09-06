@@ -20,6 +20,7 @@ import {
   pngBytes,
   requestBody,
   TEST_API_KEY,
+  TEST_AZURE_BASE_URL,
 } from "../../../packages/providers/src/test_helpers.ts";
 import { createMvpExecutionHandlers } from "./mvp-handlers.ts";
 import { createExecutionHandlerRegistry, startWorker } from "./worker.ts";
@@ -81,7 +82,7 @@ Deno.test({
     const imageBytes = pngBytes(1024, 1024);
     let providerCalls = 0;
     let annotation: string | null = null;
-    const options = { apiKey: TEST_API_KEY };
+    const options = { baseUrl: TEST_AZURE_BASE_URL, apiKey: TEST_API_KEY };
     const registry = createExecutionHandlerRegistry(createMvpExecutionHandlers({
       pool,
       storage,
