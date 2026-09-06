@@ -11,19 +11,30 @@ product release is `0.1.0`.
 An organization owner can create the App from
 [ZafTec's GitHub App settings](https://github.com/organizations/ZafTec/settings/apps).
 
-- Use a recognizable name such as **Relay Release Automation** and the repository
-  URL as its homepage. Webhooks and user authorization callbacks are unnecessary.
+- Select **New GitHub App**, use a recognizable name such as **ZafTec Relay
+  Releases**, and set `https://github.com/ZafTec/relay` as its homepage.
+- Uncheck **Active** under **Webhook**. Leave user authorization callbacks empty;
+  this App authenticates the release workflow rather than interactive sign-in.
 - Give it repository **Contents**, **Pull requests**, and **Issues** permissions,
   all **Read and write**. Metadata read access is implicit. No organization
   permissions are needed.
-- Install it on **Only select repositories → ZafTec/relay**.
-- Generate its private key. Record the **App ID**, not the client ID or
-  installation ID.
+- Choose **Only on this account** for where the App can be installed, then create
+  it. Open **Install App**, select ZafTec, and install it on **Only select
+  repositories → relay**.
+- On the App's **General** page, copy the numeric **App ID**. This is the value for
+  `RELEASE_APP_ID`.
+- On the same page, find **Private keys → Generate a private key**. GitHub downloads
+  a `.pem` file. Its complete contents, including the BEGIN/END lines and actual
+  line breaks, are the value for `RELEASE_APP_PRIVATE_KEY`.
 
 In [Relay's Actions secrets](https://github.com/ZafTec/relay/settings/secrets/actions),
 add `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY` (the complete PEM). Organization
 secrets are also supported when their repository access includes Relay. Never
 commit the private key or put it into a workflow file.
+
+Use **New repository secret** for each value. These must be repository or
+organization Actions secrets because the Release Please job does not use the
+`release` environment. A local `.env` file is not read by GitHub Actions.
 
 The workflow creates a short-lived installation token scoped only to Relay. This
 is needed because a tag created using the default `GITHUB_TOKEN` would not trigger
@@ -53,6 +64,12 @@ Configure immutable SemVer, `git-<full-sha>`, and `candidate-<run-id>` tags, lea
 `latest` mutable. Confirm registry support for OCI attestations/referrers and
 GitHub artifact-attestation availability for this private repository's plan.
 
+The GitHub build-provenance action requires **GitHub Enterprise Cloud** for
+private-repository attestations. Public repositories are supported on current
+GitHub plans. Saving an environment and its tag policy does not establish access
+to the attestation service. Resolve this requirement before merging the generated
+release PR.
+
 In [repository rulesets](https://github.com/ZafTec/relay/settings/rules), protect
 `main` with the required CI aggregate. Protect `v*` release tags from deletion and
 force updates, and permit the release App to create them. Keep tag-creation
@@ -65,6 +82,8 @@ and apply Release Please labels under organization policy.
 1. Finish and review [PR #35](https://github.com/ZafTec/relay/pull/35), then merge it
    when its CI is green and the release credentials are configured. Use its
    Conventional Commit title if squash merging.
+   CI runs only on pull requests. The merge updates `main`, which triggers Release
+   Please without rerunning CI; this also works when direct pushes are prohibited.
 2. The **Release Please** workflow runs on `main` and opens a release PR updating
    `CHANGELOG.md`, `version.txt`, and `.release-please-manifest.json` to `0.1.0`.
 3. Review the release PR and CI. Merging that PR authorizes release creation:

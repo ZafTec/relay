@@ -74,8 +74,9 @@ approved. Recommended researched choices:
 
 ## PR CI
 
-Add `.github/workflows/ci.yml` with `pull_request`, `push` to main, and
-`merge_group` when merge queue is enabled. Use read-only default permissions and
+Run `.github/workflows/ci.yml` only on `pull_request`, with no duplicate CI run
+after merging to `main`. Release Please separately handles pushes to `main`
+(including PR merges). Use read-only default permissions and
 no production/Docker Hub secrets in pull-request jobs.
 
 Parallel jobs:
