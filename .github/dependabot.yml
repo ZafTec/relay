@@ -4,10 +4,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    # Version updates are reported by dependency-updates.yml as an issue.
+    open-pull-requests-limit: 0
 
   - package-ecosystem: npm
     directory: /apps/web
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0

@@ -191,7 +191,7 @@ export function ProductLayout() {
             <InlineNotice title="Sign-out failed" tone="error"><p>{signOutError}</p></InlineNotice>
           </div>
         ) : null}
-        <main className="product-content" id="main-content">
+        <main className="product-content" id="main-content" tabIndex={0}>
           <Outlet />
         </main>
       </div>

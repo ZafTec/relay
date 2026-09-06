@@ -151,8 +151,9 @@ network. Prefer no host-published ports; run test containers on that network.
 - SARIF upload where supported
 
 Expose one stable required aggregate job that depends on all applicable jobs.
-Pin third-party Actions to reviewed full commit SHAs and use Dependabot to
-update pins.
+Pin third-party Actions to reviewed full commit SHAs. Dependency updates are
+reported in a recurring issue for review; automatic dependency PRs are disabled.
+See [dependency update reporting](../dependency-updates.md).
 
 ## Release Please
 

@@ -19,6 +19,13 @@ Release automation already uses Google's official Release Please action. The
 [first-release setup guide](release-please-setup.md) documents the GitHub App,
 release environment, registry configuration, and release PR sequence.
 
+Dependency maintenance now uses a weekly issue report for direct web packages and
+pinned GitHub Actions. Automatic Dependabot version PRs are disabled when this
+configuration reaches the default branch. The five pending dependency PRs are
+incorporated here: Better Auth/OAuth provider 1.7.2 (with matching backend packages),
+React Router 7.18.3, Testing Library React 16.3.3, and Vite React plugin 6.1.1.
+See [dependency update reporting](dependency-updates.md).
+
 This update supersedes earlier implementation-gap claims below. The PR wires
 the fixed Azure image/OCR tools, PostgreSQL metering, durable MinIO artifacts,
 HTTP/MCP adapters, product composers, capacity administration, and release/

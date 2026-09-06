@@ -8,9 +8,9 @@ import { jwt } from "better-auth/plugins/jwt";
 // Better Auth exposes these tree-shakeable entry points only as npm package
 // subpaths; keep them pinned to the same version as the root import map.
 // deno-lint-ignore no-import-prefix
-import { organization } from "npm:better-auth@1.7.1/plugins/organization";
+import { organization } from "npm:better-auth@1.7.2/plugins/organization";
 // deno-lint-ignore no-import-prefix
-import { github, google } from "npm:better-auth@1.7.1/social-providers";
+import { github, google } from "npm:better-auth@1.7.2/social-providers";
 import type { AuthConfig } from "@relay/config";
 import type { DatabasePool } from "@relay/database";
 import {

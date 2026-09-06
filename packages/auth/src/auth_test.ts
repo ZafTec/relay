@@ -43,7 +43,7 @@ function activeOrganizationId(session: unknown): string | null | undefined {
 }
 
 // Initialize the test-only Better Auth context before any short-lived auth
-// instance is closed. Better Auth 1.7.1's optional OpenTelemetry integration
+// instance is closed. Better Auth's optional OpenTelemetry integration
 // can otherwise retain the first adapter context observed by the test process.
 const sharedTestPool = hasDatabase ? testPool() : undefined;
 const sharedTestAuth = sharedTestPool === undefined

@@ -565,9 +565,9 @@ test("dashboard uses session, workspace, and API responses without fake counts",
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: width <= 390 ? 844 : 900 });
     await page.goto("/dashboard");
-    await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
     await expect(page.locator(".workspace-label:visible").getByText("Browser workspace")).toBeVisible();
     await expect(page.getByText("No overview data is exposed yet")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Overview", exact: true })).toBeVisible();
     await expect(page.getByText("Not requested")).toBeVisible();
     if (width <= 900) {
       const mobileSoonLabels = page.locator(".product-tabs .product-nav__soon");
@@ -650,6 +650,17 @@ test("product resource routes expose real contract data across required widths",
   for (const route of ["tools", "runs", "artifacts", "usage", "settings"] as const) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/dashboard/${route}`);
+    if (route === "settings") {
+      await expect(page.getByRole("heading", { level: 1, name: "Workspace settings" })).toBeVisible();
+      await page.keyboard.press("Tab");
+      await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("main")).toBeFocused();
+      await page.keyboard.press("PageDown");
+      await expect.poll(() => page.locator(".product-main").evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(0);
+      await page.locator(".product-main").evaluate((element) => element.scrollTo({ top: 0, behavior: "instant" }));
+    }
     await waitForFonts(page);
     await expectNoSeriousAxeViolations(page);
     await page.screenshot({
