@@ -4,6 +4,7 @@ import {
   assertMatch,
   assertStringIncludes,
 } from "@std/assert";
+import { validateVersion } from "./validation.ts";
 
 const repositoryRoot = new URL("../../", import.meta.url);
 
@@ -219,12 +220,15 @@ Deno.test("candidate inspection separates runnable and attestation metadata", as
   assertEquals(workflow.includes('keys == ["linux/amd64"]'), false);
 });
 
-Deno.test("release-please v5 config bootstraps an exact 0.1.0 release", async () => {
+Deno.test("release-please config supports bootstrap and recorded releases", async () => {
   const config = JSON.parse(
     await readRepositoryFile("release-please-config.json"),
   );
   const manifest = JSON.parse(
     await readRepositoryFile(".release-please-manifest.json"),
+  );
+  const version = validateVersion(
+    (await readRepositoryFile("version.txt")).trim(),
   );
 
   assertEquals(
@@ -236,7 +240,20 @@ Deno.test("release-please v5 config bootstraps an exact 0.1.0 release", async ()
   assertEquals(config.packages["."]["version-file"], "version.txt");
   assertEquals(config.draft, true);
   assertEquals(config["force-tag-creation"], true);
-  assertEquals(manifest, {});
+  assert(
+    manifest !== null && typeof manifest === "object" &&
+      !Array.isArray(manifest),
+    "release-please manifest must be an object",
+  );
+  if (Object.keys(manifest).length === 0) {
+    assertEquals(
+      version,
+      config["initial-version"],
+      "an empty manifest is only valid while bootstrapping the initial release",
+    );
+  } else {
+    assertEquals(manifest, { ".": version });
+  }
 });
 
 Deno.test("promotion keeps semver and full-SHA tags and classifies failures", async () => {
