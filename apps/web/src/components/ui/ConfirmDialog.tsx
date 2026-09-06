@@ -1,4 +1,10 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef } from "react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useId,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { Button } from "./Button";
 
 interface ConfirmDialogProps {
@@ -33,16 +39,15 @@ export function ConfirmDialog({
   const id = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const timer = window.setTimeout(() => dialogRef.current?.focus(), 0);
+    dialogRef.current?.focus();
 
     return () => {
-      window.clearTimeout(timer);
       document.body.style.overflow = previousOverflow;
       previousFocus?.focus();
     };
