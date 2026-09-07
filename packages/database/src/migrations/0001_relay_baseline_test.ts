@@ -111,6 +111,8 @@ Deno.test("migration manifest preserves the baseline before additive changes", (
       "0004_image_generation_and_editing",
       "0005_superadmin_invitations",
       "0006_notifications",
+      "0007_workspace_names",
+      "0008_superadmin_invitation_listing",
     ],
   );
   assertEquals(

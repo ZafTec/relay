@@ -204,7 +204,7 @@ export function AdminAllowancesPage({ adapter = httpAdminAllowanceAdapter }: { a
     <section className="allowance-workspace-picker" aria-labelledby="allowance-workspace-heading">
       <h2 id="allowance-workspace-heading">Choose a workspace</h2>
       <form className="allowance-search" onSubmit={(event) => { event.preventDefault(); setSearchQuery(search.trim()); }}>
-        <label className="form-field"><span className="form-field__label">Workspace name, slug or ID</span>
+        <label className="form-field"><span className="form-field__label">Workspace name, handle, or owner email</span>
           <input className="input" value={search} maxLength={128} onChange={(event) => setSearch(event.target.value)} disabled={!!pending || paging} type="search" placeholder="Find a workspace" /></label>
         <Button type="submit" variant="outline" pending={searching} disabled={!!pending || paging}>Search</Button>
       </form>
@@ -212,7 +212,7 @@ export function AdminAllowancesPage({ adapter = httpAdminAllowanceAdapter }: { a
       {searching ? <p role="status">Loading workspaces…</p> : workspaces?.items.length === 0 ? <p>No workspaces match this search.</p> : workspaces ? <>
         <div className="allowance-workspace-results" aria-label="Workspace results">
           {workspaces.items.map((workspace) => <button key={workspace.id} type="button" className="allowance-workspace-option" aria-pressed={workspaceId === workspace.id} disabled={!!pending || sending || paging}
-            onClick={() => { setParams({ workspace: workspace.id }); setSuccess(null); }}><strong>{workspace.name}</strong><span>{workspace.slug}</span><code>{workspace.id}</code></button>)}
+            onClick={() => { setParams({ workspace: workspace.id }); setSuccess(null); }}><strong>{workspace.name}</strong><span className="allowance-workspace-handle">@{workspace.slug}</span>{workspace.owner ? <span className="allowance-workspace-owner"><span>{workspace.owner.name}</span><span>{workspace.owner.email}</span></span> : null}{workspaceId === workspace.id ? <span className="allowance-workspace-selected">Selected workspace</span> : null}</button>)}
         </div>
         {workspaces.nextCursor ? <Button variant="quiet" pending={paging} disabled={!!pending} onClick={() => void more("workspaces")}>More workspaces</Button> : null}
       </> : null}
@@ -222,7 +222,7 @@ export function AdminAllowancesPage({ adapter = httpAdminAllowanceAdapter }: { a
     {readError ? notice(readError) : null}
     {loaded && !readError ? <>
       <section className="allowance-overview" aria-labelledby="allowance-overview-heading">
-        <div className="allowance-section-heading"><div><h2 id="allowance-overview-heading">{loaded.summary.workspace.name}</h2><p className="allowance-id">{loaded.summary.workspace.id}</p></div>
+        <div className="allowance-section-heading"><div><h2 id="allowance-overview-heading">{loaded.summary.workspace.name}</h2><p className="allowance-id">@{loaded.summary.workspace.slug}</p>{loaded.summary.workspace.owner ? <p className="allowance-workspace-owner-summary">Owner: {loaded.summary.workspace.owner.email}</p> : null}<details className="allowance-workspace-reference"><summary>Workspace ID</summary><code>{loaded.summary.workspace.id}</code></details></div>
           <span className={`allowance-status${loaded.summary.executionAllowed ? " is-active" : ""}`}>{loaded.summary.executionAllowed ? "Execution enabled" : "Execution blocked"}</span></div>
         <p>{loaded.summary.executionAllowed ? "New runs also need an available allowance for their usage type." : "Grant execution access and a usage allowance to enable new runs."}</p>
         <div className="allowance-table-scroll" tabIndex={0} role="region" aria-label="Monthly usage"><table className="allowance-table"><caption>Monthly usage · resets {date(loaded.summary.periodEndsAt, true)} UTC</caption>

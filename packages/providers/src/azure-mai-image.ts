@@ -33,6 +33,10 @@ export interface AzureMaiImageEditRequest {
   readonly image: string;
 }
 export const AZURE_MAI_IMAGE_MAX_PIXELS = 1_048_576;
+// Azure can round automatic edit dimensions to its image tile grid. A live
+// 1200x1500 source returns a valid 912x1152 PNG (1,050,624 pixels). Keep the
+// documented request budget strict and permit at most 5% overhead in responses.
+const MAX_RESPONSE_PIXELS = Math.ceil(AZURE_MAI_IMAGE_MAX_PIXELS * 1.05);
 
 export class AzureMaiImageClient {
   readonly #config: ResolvedClientOptions;
@@ -95,7 +99,7 @@ export class AzureMaiImageClient {
       provider: this.#provider,
       maxBase64Bytes: this.#config.maxBase64Bytes,
       maxImages: 1,
-      maximumPixels: AZURE_MAI_IMAGE_MAX_PIXELS,
+      maximumPixels: MAX_RESPONSE_PIXELS,
       expectedFormat: "png",
     });
   }

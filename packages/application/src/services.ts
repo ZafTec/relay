@@ -11,6 +11,7 @@ import type {
   CreateShareLinkResult,
   GetArtifactResult,
   GetRunResult,
+  GetStorageUsageResult,
   GetToolResult,
   GetUsageSummaryResult,
   ListArtifactsRequest,
@@ -117,6 +118,9 @@ export interface ArtifactCommandApplicationService {
 }
 
 export interface UsageApplicationService {
+  getStorageSummary(
+    context: WorkspaceActorContext,
+  ): Promise<GetStorageUsageResult>;
   getSummary(
     context: WorkspaceActorContext,
     request: UsageSummaryRequest,

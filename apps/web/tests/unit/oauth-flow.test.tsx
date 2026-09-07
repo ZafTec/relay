@@ -27,6 +27,32 @@ const identity: RelayIdentity = {
 };
 
 describe("MCP OAuth screens", () => {
+  it("keeps platform permissions off until selected and submits only checked scopes", async () => {
+    const user = userEvent.setup();
+    const adapter = createTestAuthAdapter({ identity, activeWorkspace: workspace, oauthClient: { id: "client", name: "Admin agent", uri: null } });
+    adapter.submitOAuthConsent = vi.fn().mockResolvedValue(undefined);
+    render(<App adapter={adapter} router={createRelayMemoryRouter(["/oauth/consent?client_id=client&scope=tools%3Aread%20tools%3Aexecute%20admin%3Aallowances%3Awrite"])} />);
+    const execute = await screen.findByRole("checkbox", { name: /Run workspace tools/ });
+    const admin = screen.getByRole("checkbox", { name: /Manage usage allowance grants and revocations/ });
+    expect(admin).not.toBeChecked();
+    await user.click(execute);
+    await user.click(screen.getByRole("button", { name: "Authorize client" }));
+    expect(adapter.submitOAuthConsent).toHaveBeenCalledWith({ accept: true, scope: "tools:read" });
+    await user.click(admin);
+    await user.click(screen.getByRole("button", { name: "Authorize client" }));
+    expect(adapter.submitOAuthConsent).toHaveBeenLastCalledWith({ accept: true, scope: "tools:read admin:allowances:write" });
+  });
+
+  it("requires a nonempty permission selection while allowing denial", async () => {
+    const user = userEvent.setup();
+    const adapter = createTestAuthAdapter({ identity, activeWorkspace: workspace, oauthClient: { id: "client", name: "Agent", uri: null } });
+    adapter.submitOAuthConsent = vi.fn().mockResolvedValue(undefined);
+    render(<App adapter={adapter} router={createRelayMemoryRouter(["/oauth/consent?client_id=client&scope=tools%3Aread"])} />);
+    await user.click(await screen.findByRole("checkbox", { name: /Browse workspace tools/ }));
+    expect(screen.getByRole("button", { name: "Authorize client" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Deny" }));
+    expect(adapter.submitOAuthConsent).toHaveBeenCalledWith({ accept: false });
+  });
   it("submits consent through the Better Auth adapter with requested scopes", async () => {
     const user = userEvent.setup();
     const adapter = createTestAuthAdapter({

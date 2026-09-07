@@ -211,6 +211,15 @@ export {
   usageSummaryRequestSchema,
   usageSummarySchema,
 } from "./usage.ts";
+export {
+  getStorageUsageResultSchema,
+  storageByteCount,
+  storageUsageSummarySchema,
+} from "./storage-usage.ts";
+export type {
+  GetStorageUsageResult,
+  StorageUsageSummary,
+} from "./storage-usage.ts";
 export type {
   GetUsageSummaryResult,
   UsagePeriod,
@@ -233,7 +242,11 @@ export type {
   WorkspaceEventType,
 } from "./events.ts";
 
-export { RELAY_MCP_RESOURCE_SCOPES } from "./mcp.ts";
+export {
+  RELAY_MCP_ADMIN_SCOPES,
+  RELAY_MCP_RESOURCE_SCOPES,
+  RELAY_MCP_WORKSPACE_SCOPES,
+} from "./mcp.ts";
 export type { RelayMcpResourceScope } from "./mcp.ts";
 
 export interface BuildInfo {

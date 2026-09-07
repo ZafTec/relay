@@ -22,7 +22,10 @@ import {
   PostgresRunReadService,
 } from "./postgres/runs.ts";
 import { PostgresToolService } from "./postgres/tools.ts";
-import { PostgresUsageService } from "./postgres/usage.ts";
+import {
+  PostgresUsageService,
+  type StorageUsageLimitResolver,
+} from "./postgres/usage.ts";
 import type { ApplicationServices, RunApplicationService } from "./services.ts";
 
 export interface PostgresReadServices {
@@ -39,17 +42,20 @@ export interface CreateApplicationServicesOptions extends RunAdmissionPolicy {
   readonly admissionUsage: AdmissionUsagePort;
   /** Existing domain service; this factory never creates object storage. */
   readonly artifactCommands: ArtifactCommandPort;
+  /** Resolve through the same provider that admits artifact storage. */
+  readonly storageLimit?: StorageUsageLimitResolver;
 }
 
 export function createPostgresReadServices(
   pool: DatabasePool,
   handlers: HandlerRegistry,
+  storageLimit?: StorageUsageLimitResolver,
 ): PostgresReadServices {
   return {
     tools: new PostgresToolService(pool, handlers),
     runs: new PostgresRunReadService(pool),
     artifacts: new PostgresArtifactReadService(pool),
-    usage: new PostgresUsageService(pool),
+    usage: new PostgresUsageService(pool, undefined, storageLimit),
     events: new PostgresWorkspaceEventService(pool),
   };
 }
@@ -104,7 +110,11 @@ export function createPostgresRunService(
 export function createPostgresApplicationServices(
   options: CreateApplicationServicesOptions,
 ): ApplicationServices {
-  const reads = createPostgresReadServices(options.pool, options.handlers);
+  const reads = createPostgresReadServices(
+    options.pool,
+    options.handlers,
+    options.storageLimit,
+  );
   const commands = new ArtifactCommandAdapter(options.artifactCommands);
   return {
     tools: reads.tools,

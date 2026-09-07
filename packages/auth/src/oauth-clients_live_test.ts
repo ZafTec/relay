@@ -1,9 +1,15 @@
-import { assert, assertEquals, assertNotEquals } from "@std/assert";
+import {
+  assert,
+  assertEquals,
+  assertNotEquals,
+  assertRejects,
+} from "@std/assert";
 import { createDatabasePool } from "@relay/database";
 import pg from "pg";
 import { createTestAuth, withTestAuthContext } from "./test-utils.ts";
 import { requireMcpAuth } from "@better-auth/mcp";
 import { authorizeMcpAccessTokenClaims } from "./oauth.ts";
+import { createMcpOAuthClientManager } from "./oauth-management.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
 const ownerUrl = Deno.env.get("AUTH_SECURITY_TEST_DATABASE_URL");
@@ -14,7 +20,7 @@ Deno.test({
   fn: async () => {
     const pool = createDatabasePool({
       url: new URL(databaseUrl!),
-      poolMax: 4,
+      poolMax: 2,
       connectTimeoutMs: 5000,
       statementTimeoutMs: 30000,
     }, "relay-api");
@@ -61,6 +67,122 @@ Deno.test({
         response_types: ["code"],
         token_endpoint_auth_method: "client_secret_post",
       };
+      const management = createMcpOAuthClientManager(pool, auth);
+      const operator = await auth.api.getSession({ headers: admin.headers });
+      assert(operator);
+      const operatorSession = operator.session.id;
+      // More simultaneous writes than pool slots must not deadlock while the
+      // authorization lock and native Better Auth transaction use the pool.
+      const concurrent = await Promise.all([1, 2, 3].map((number) =>
+        management(
+          operatorSession,
+          admin.id,
+          "create",
+          { ...payload, client_name: `Concurrent fixture ${number}` },
+        )
+      )) as Array<{ client_id: string }>;
+      assertEquals(
+        new Set(concurrent.map((client) => client.client_id)).size,
+        3,
+      );
+      await Promise.all(
+        concurrent.map((client) =>
+          management(operatorSession, admin.id, "delete", {
+            client_id: client.client_id,
+          })
+        ),
+      );
+      const managed = await management(
+        operatorSession,
+        admin.id,
+        "create",
+        payload,
+      ) as { client_id: string; client_secret: string };
+      assert(typeof managed.client_secret === "string");
+      const ownClients = await management(
+        operatorSession,
+        admin.id,
+        "list",
+        {},
+      ) as Array<Record<string, unknown>>;
+      assert(ownClients.some((item) => item.client_id === managed.client_id));
+      assert(
+        ownClients.every((item) =>
+          !("client_secret" in item) && !("user_id" in item)
+        ),
+      );
+      const got = await management(operatorSession, admin.id, "get", {
+        client_id: managed.client_id,
+      }) as Record<string, unknown>;
+      assertEquals(got.client_id, managed.client_id);
+      assertEquals("client_secret" in got, false);
+      await management(operatorSession, admin.id, "update", {
+        client_id: managed.client_id,
+        client_name: "Renamed MCP client",
+      });
+      assertEquals(
+        (await management(operatorSession, admin.id, "get", {
+          client_id: managed.client_id,
+        }) as Record<string, unknown>).client_name,
+        "Renamed MCP client",
+      );
+      await assertRejects(() =>
+        management(operatorSession, admin.id, "update", {
+          client_id: managed.client_id,
+          redirect_uris: ["https://*.example.test/callback"],
+        })
+      );
+      const changedSecret = await management(
+        operatorSession,
+        admin.id,
+        "rotate",
+        { client_id: managed.client_id },
+      ) as { client_secret: string };
+      assert(typeof changedSecret.client_secret === "string");
+      assertNotEquals(changedSecret.client_secret, managed.client_secret);
+      await assertRejects(() =>
+        management(operatorSession, other.id, "get", {
+          client_id: managed.client_id,
+        })
+      );
+      const otherSession = await auth.api.getSession({
+        headers: other.headers,
+      });
+      assert(otherSession);
+      await assertRejects(() =>
+        management(otherSession.session.id, other.id, "delete", {
+          client_id: managed.client_id,
+        })
+      );
+      const memberSession = await auth.api.getSession({
+        headers: member.headers,
+      });
+      assert(memberSession);
+      await assertRejects(() =>
+        management(memberSession.session.id, member.id, "list", {})
+      );
+      await management(operatorSession, admin.id, "delete", {
+        client_id: managed.client_id,
+      });
+      assertEquals(
+        (await pool.query(
+          'select 1 from auth."oauthClient" where "clientId"=$1',
+          [managed.client_id],
+        )).rows.length,
+        0,
+      );
+      assertEquals(
+        (await pool.query<{ action: string }>(
+          "select action from relay.audit_events where target_type='oauth_client' and target_id=$1 order by id",
+          [managed.client_id],
+        )).rows.map((row: { action: string }) => row.action),
+        [
+          "oauth_client.create",
+          "oauth_client.update",
+          "oauth_client.rotate_secret",
+          "oauth_client.delete",
+        ],
+      );
       const call = async (path: string, headers: Headers, body?: unknown) => {
         const requestHeaders = new Headers(headers);
         requestHeaders.set("origin", "http://localhost:8000");

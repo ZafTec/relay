@@ -854,10 +854,27 @@ Deno.test({
       assertEquals(expiredByCommit.kind, "expired");
       assertEquals(expiredCommitReplay.kind, "replayed");
 
-      const sweepResults = await Promise.all([
-        inTransaction(poolA, (tx) => expireUsageReservations(tx, 2)),
-        inTransaction(poolB, (tx) => expireUsageReservations(tx, 2)),
-      ]);
+      // The local database may retain older fixture reservations. Hold those
+      // rows briefly so the real SKIP LOCKED sweepers exercise this test's four
+      // interleaved reservations without expiring unrelated workspaces.
+      const isolation = await poolA.connect();
+      let sweepResults;
+      try {
+        await isolation.query("begin");
+        await isolation.query(
+          `select id from relay.usage_reservations
+            where status = 'active' and not (id = any($1::text[]))
+            order by id for update`,
+          [sweepReservationIds],
+        );
+        sweepResults = await Promise.all([
+          inTransaction(poolA, (tx) => expireUsageReservations(tx, 2)),
+          inTransaction(poolB, (tx) => expireUsageReservations(tx, 2)),
+        ]);
+      } finally {
+        await isolation.query("rollback");
+        isolation.release();
+      }
       assertEquals(
         sweepResults.reduce((total, result) => total + result.expired, 0),
         4,

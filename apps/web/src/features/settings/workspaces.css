@@ -1,0 +1,15 @@
+.workspace-management { scroll-margin-top: 24px; }
+.workspace-management .settings-panel__body { display: grid; gap: 18px; }
+.workspace-management__identity { display: grid; gap: 10px; min-width: 0; }
+.workspace-management__handle { font-family: var(--relay-font-mono); font-size: 0.83rem; overflow-wrap: anywhere; color: var(--surface-ink); }
+.workspace-management__badges, .workspace-management__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.workspace-management__badges { color: var(--surface-muted); font-size: 0.73rem; gap: 14px; }
+.workspace-management__reference { color: var(--surface-muted); font-size: 0.74rem; }
+.workspace-management__reference summary { min-height: 32px; cursor: pointer; padding-block: 8px; }
+.workspace-management__reference code { display: block; padding-top: 5px; font-size: 0.7rem; overflow-wrap: anywhere; }
+.workspace-management__form { display: grid; gap: 16px; border-top: 1px solid var(--surface-border); padding-top: 18px; }
+.workspace-management__form h3 { margin: 0; font-size: 1rem; line-height: 1.4; }
+.workspace-management__form p, .workspace-management__hint { margin: 0; color: var(--surface-muted); font-size: 0.82rem; line-height: 1.6; }
+.workspace-management__form fieldset { min-width: 0; border: 0; padding: 0; margin: 0; display: grid; gap: 16px; }
+.workspace-management__success { margin: 0; color: var(--surface-accent); font-size: 0.82rem; line-height: 1.5; }
+.workspace-management .input { min-width: 0; width: 100%; }

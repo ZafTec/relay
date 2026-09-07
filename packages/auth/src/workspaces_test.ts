@@ -60,14 +60,14 @@ async function cleanup(pool: DatabasePool, userId: string): Promise<void> {
   }
 }
 
-Deno.test("personal workspace slugs are stable and opaque", async () => {
+Deno.test("personal workspace slugs are memorable, stable and independent of profile data", async () => {
   const userId = "user-with-sensitive@example.com";
   const first = await personalWorkspaceSlug(userId);
   const second = await personalWorkspaceSlug(userId);
 
   assertEquals(first, second);
   assertEquals(first.includes(userId), false);
-  assertEquals(/^personal-[0-9a-f]{32}$/.test(first), true);
+  assertEquals(/^[a-z]+-[a-z]+-[0-9]{4}$/.test(first), true);
 });
 
 Deno.test({

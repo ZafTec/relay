@@ -9,6 +9,7 @@ import { ProtectedRoute } from "../../src/auth/ProtectedRoute";
 import { createTestAuthAdapter } from "../../src/auth/test-adapter";
 import type { AuthAdapter, RelayIdentity, RelayWorkspace } from "../../src/auth/types";
 import { UsagePage } from "../../src/features/usage/UsagePage";
+import { type StorageUsageAdapter, type StorageUsageSummary } from "../../src/lib/api/storage-usage";
 import {
   httpUsageAdapter,
   parseUsageSummaryResponse,
@@ -74,6 +75,15 @@ const TEST_ONLY_USAGE_SUMMARY_FIXTURE: UsageSummary = {
   truncated: false,
 };
 
+const STORAGE_FIXTURE: StorageUsageSummary = {
+  generatedAt: "2030-04-12T15:30:00.000Z",
+  storedBytes: "1073741824", reservedBytes: "314572800", cleanupPendingBytes: "104857600",
+  limitBytes: "2147483648", availableBytes: "759169024",
+};
+const STORAGE_ADAPTER: StorageUsageAdapter = {
+  getStorageSummary: () => Promise.resolve({ kind: "ok", storage: STORAGE_FIXTURE }),
+};
+
 function testOnlyUsageAdapter(result: UsageAdapterResult): UsageAdapter {
   return { getSummary: vi.fn().mockResolvedValue(result) };
 }
@@ -123,8 +133,9 @@ function protectedUsageTree(
 function renderUsage(
   adapter: UsageAdapter,
   authAdapter?: AuthAdapter,
+  storageAdapter: StorageUsageAdapter = STORAGE_ADAPTER,
 ) {
-  return render(protectedUsageTree(<UsagePage adapter={adapter} />, authAdapter));
+  return render(protectedUsageTree(<UsagePage adapter={adapter} storageAdapter={storageAdapter} />, authAdapter));
 }
 
 function UsageUnmountHarness({ adapter }: { readonly adapter: UsageAdapter }) {
@@ -132,7 +143,7 @@ function UsageUnmountHarness({ adapter }: { readonly adapter: UsageAdapter }) {
   return (
     <>
       <button type="button" onClick={() => setVisible(false)}>Remove usage page</button>
-      {visible ? <UsagePage adapter={adapter} /> : <p>Usage page removed</p>}
+      {visible ? <UsagePage adapter={adapter} storageAdapter={STORAGE_ADAPTER} /> : <p>Usage page removed</p>}
     </>
   );
 }
@@ -144,7 +155,7 @@ function SessionRefreshHarness({ adapter }: { readonly adapter: UsageAdapter }) 
       <button type="button" onClick={() => void refreshSession()}>
         Replace test session
       </button>
-      <UsagePage adapter={adapter} />
+      <UsagePage adapter={adapter} storageAdapter={STORAGE_ADAPTER} />
     </>
   );
 }
@@ -273,7 +284,7 @@ describe("usage page", () => {
     }));
 
     const table = await screen.findByRole("table", {
-      name: "Current consumed and reserved usage, 2 active buckets",
+      name: "Current consumed and reserved usage, 2 entries",
     });
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1, name: "Usage" })).toBeVisible();
@@ -285,9 +296,8 @@ describe("usage page", () => {
     expect(container.querySelector(
       'time[datetime="2030-04-01T00:00:00.000Z"]',
     )).toBeInTheDocument();
-    expect(screen.getByText(
-      "Receipt and breakdown data is not exposed by the current contract.",
-    )).toBeVisible();
+    expect(screen.getByText("Usage already recorded for this period.")).toBeVisible();
+    expect(screen.getByText("Usage set aside for queued or running work.")).toBeVisible();
     expect(container).not.toHaveTextContent(
       /balance|price|quota|provider cost|billing plan|chart|grand total/i,
     );
@@ -309,7 +319,7 @@ describe("usage page", () => {
     renderUsage({ getSummary });
 
     await screen.findByRole("table", {
-      name: "Current consumed and reserved usage, 2 active buckets",
+      name: "Current consumed and reserved usage, 2 entries",
     });
     await user.type(screen.getByLabelText("Metric"), "fixture.missing");
     await user.selectOptions(screen.getByLabelText("Period"), "calendar_day");
@@ -338,7 +348,7 @@ describe("usage page", () => {
         truncated: false,
       },
     }));
-    expect(await screen.findByRole("heading", { name: "No current usage" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "No current tool usage" })).toBeVisible();
     loadingRender.unmount();
 
     const notFoundRender = renderUsage(testOnlyUsageAdapter({ kind: "not-found" }));
@@ -358,8 +368,8 @@ describe("usage page", () => {
       kind: "ok",
       usage: { ...TEST_ONLY_USAGE_SUMMARY_FIXTURE, truncated: true },
     }));
-    expect(await screen.findByText("Usage response truncated")).toBeVisible();
-    expect(screen.getByText(/omitted additional metric dimensions/i)).toBeVisible();
+    expect(await screen.findByText("More usage is available")).toBeVisible();
+    expect(screen.getByText("Filter by metric or period to see the remaining usage entries.")).toBeVisible();
   });
 
   it("expires the owning session when a late 401 arrives after page removal", async () => {
@@ -405,7 +415,7 @@ describe("usage page", () => {
     await user.click(screen.getByRole("button", { name: "Replace test session" }));
     await waitFor(() => expect(getSummary).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole("table", {
-      name: "Current consumed and reserved usage, 2 active buckets",
+      name: "Current consumed and reserved usage, 2 entries",
     })).toBeVisible();
 
     await act(async () => pending.resolve({ kind: "auth-expired" }));

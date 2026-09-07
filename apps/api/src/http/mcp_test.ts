@@ -36,6 +36,7 @@ class FakeInsufficientScopeError extends Error {
 }
 
 interface FakeAuthOptions {
+  readonly adminSessionId?: string;
   readonly scopes?: readonly string[];
   readonly current?: boolean;
   readonly onProtect?: () => void;
@@ -84,6 +85,7 @@ function fakeAuth(options: FakeAuthOptions = {}): McpHttpAuth {
           workspaceId: WORKSPACE_ID,
           clientId: "client_test",
           scopes,
+          adminSessionId: options.adminSessionId,
         },
       );
     },
@@ -132,6 +134,104 @@ function jsonRequest(
     body: JSON.stringify(body),
   });
 }
+
+Deno.test("HTTP MCP propagates the signed admin session and challenges only missing admin scopes", async () => {
+  const calls: unknown[] = [];
+  const state = {
+    scopes: ["tools:read", "admin:allowances:read"],
+    adminSessionId: "signed-admin-session",
+    current: true,
+  };
+  const handler = createRelayMcpHttpHandler({
+    auth: fakeAuth(state),
+    services: createStubServices(),
+    adminServices: {
+      authorize: (context) => {
+        assertEquals(context.sessionId, state.adminSessionId);
+        assertEquals(context.actorUserId, USER_ID);
+        return Promise.resolve(true);
+      },
+      invoke: (operation, context, input) => {
+        calls.push({ operation, session: context.sessionId, input });
+        return Promise.resolve({ summary: "test" });
+      },
+    },
+  });
+  const transport = new StreamableHTTPClientTransport(new URL(MCP_RESOURCE), {
+    fetch: (input, init) => {
+      const request = new Request(input, init);
+      request.headers.set("host", "relay.test");
+      return handler.fetch(request);
+    },
+    authProvider: { token: () => Promise.resolve("valid-token") },
+    onInsufficientScope: "throw",
+  });
+  const client = new Client({
+    name: "admin-http-regression",
+    version: "1.0.0",
+  });
+  try {
+    await client.connect(transport);
+    const tools = await client.listTools();
+    assert(
+      tools.tools.some((tool) => tool.name === "relay.admin.allowances.get"),
+    );
+    assert(
+      !tools.tools.some((tool) => tool.name === "relay.admin.allowances.grant"),
+    );
+    const called = await client.callTool({
+      name: "relay.admin.allowances.get",
+      arguments: { workspaceId: WORKSPACE_ID },
+    });
+    assertEquals(called.isError, undefined);
+    assertEquals(calls, [{
+      operation: "allowances.get",
+      session: "signed-admin-session",
+      input: { workspaceId: WORKSPACE_ID },
+    }]);
+    const insufficient = await handler.fetch(
+      jsonRequest({
+        jsonrpc: "2.0",
+        id: 9,
+        method: "tools/call",
+        params: { name: "relay.admin.allowances.grant", arguments: {} },
+      }),
+    );
+    assertEquals(insufficient.status, 403);
+    assertStringIncludes(
+      insufficient.headers.get("www-authenticate") ?? "",
+      'scope="admin:allowances:write"',
+    );
+    const anonymous = await handler.fetch(
+      jsonRequest(
+        { jsonrpc: "2.0", id: 10, method: "tools/list", params: {} },
+        { authorization: "" },
+      ),
+    );
+    assertEquals(anonymous.status, 401);
+    assertEquals(
+      anonymous.headers.get("www-authenticate")?.includes("admin:"),
+      false,
+    );
+    state.current = false;
+    const revoked = await handler.fetch(
+      jsonRequest({
+        jsonrpc: "2.0",
+        id: 11,
+        method: "tools/call",
+        params: {
+          name: "relay.admin.allowances.get",
+          arguments: { workspaceId: WORKSPACE_ID },
+        },
+      }),
+    );
+    assertEquals(revoked.status, 403);
+    assertEquals(calls.length, 1);
+  } finally {
+    await client.close();
+    await handler.close();
+  }
+});
 
 for (
   const mode of [

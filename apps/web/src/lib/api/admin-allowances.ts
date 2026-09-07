@@ -1,7 +1,7 @@
 import { fetchJson } from "./client";
 
 export type AllowanceKey = "tools.execute" | "images.generated" | "ocr.requests";
-export interface AllowanceWorkspace { id: string; name: string; slug: string }
+export interface AllowanceWorkspace { id: string; name: string; slug: string; owner?: { name: string; email: string } | null }
 export interface AllowancePage<T> { items: T[]; nextCursor: string | null }
 export interface AllowanceSummary {
   workspace: AllowanceWorkspace;
@@ -64,7 +64,10 @@ function choice<T extends string>(value: unknown, choices: readonly T[]): T {
   return value as T;
 }
 function workspace(value: unknown): AllowanceWorkspace {
-  const v = object(value); return { id: string(v.id), name: string(v.name), slug: string(v.slug) };
+  const v = object(value);
+  const owner = v.owner === undefined ? undefined : v.owner === null ? null : object(v.owner);
+  return { id: string(v.id), name: string(v.name), slug: string(v.slug),
+    ...(owner === undefined ? {} : { owner: owner === null ? null : { name: string(owner.name), email: string(owner.email) } }) };
 }
 function page<T>(value: unknown, parse: (item: unknown) => T): AllowancePage<T> {
   const v = object(value);

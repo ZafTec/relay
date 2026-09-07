@@ -2,7 +2,11 @@ import type { McpOptions } from "@better-auth/mcp";
 import { APIError } from "better-auth/api";
 import { isSuperadmin } from "./system-roles.ts";
 import { createInsufficientScopeError } from "better-auth/oauth2";
-import { RELAY_MCP_RESOURCE_SCOPES } from "@relay/contracts";
+import {
+  RELAY_MCP_ADMIN_SCOPES,
+  RELAY_MCP_RESOURCE_SCOPES,
+  RELAY_MCP_WORKSPACE_SCOPES,
+} from "@relay/contracts";
 import { getMembership, type Queryable } from "./authorization.ts";
 
 export { RELAY_MCP_RESOURCE_SCOPES } from "@relay/contracts";
@@ -20,12 +24,15 @@ export const RELAY_OAUTH_SCOPES = [
 ] as const;
 
 export const RELAY_WORKSPACE_ID_CLAIM = "urn:relay:workspace_id";
+export const RELAY_ADMIN_SESSION_CLAIM = "urn:relay:admin_session_id";
+const ADMIN_SCOPES = new Set<string>(RELAY_MCP_ADMIN_SCOPES);
 
 export interface AuthorizedMcpPrincipal {
   readonly actorUserId: string;
   readonly workspaceId: string;
   readonly clientId: string;
   readonly scopes: readonly string[];
+  readonly adminSessionId?: string;
 }
 
 const MAX_MCP_CLAIM_LENGTH = 255;
@@ -70,7 +77,16 @@ export function parseMcpAccessTokenClaims(
   ) {
     return null;
   }
-  return { actorUserId, workspaceId, clientId, scopes };
+  const requestsAdmin = scopes.some((scope) => ADMIN_SCOPES.has(scope));
+  const adminSessionId = claimIdentity(payload[RELAY_ADMIN_SESSION_CLAIM]);
+  if (requestsAdmin && adminSessionId === null) return null;
+  return {
+    actorUserId,
+    workspaceId,
+    clientId,
+    scopes,
+    ...(requestsAdmin ? { adminSessionId: adminSessionId! } : {}),
+  };
 }
 
 export function requireMcpScopes(
@@ -111,7 +127,35 @@ export async function authorizeMcpAccessTokenClaims(
       resource,
     ],
   );
-  return result.rows[0]?.authorized === true ? principal : null;
+  if (result.rows[0]?.authorized !== true) return null;
+  if (
+    principal.adminSessionId &&
+    !await currentAdminSession(
+      queryable,
+      principal.actorUserId,
+      principal.adminSessionId,
+    )
+  ) return null;
+  return principal;
+}
+
+async function currentAdminSession(
+  queryable: Queryable,
+  userId: string,
+  sessionId: string,
+  fresh = false,
+): Promise<boolean> {
+  const result = await queryable.query<{ authorized: boolean }>(
+    `select exists (
+       select 1 from auth.session s
+       join auth."user" u on u.id = s."userId" and u."emailVerified" is true
+       join relay.system_role_assignments r on r.user_id = u.id and r.revoked_at is null
+       where s.id = $1 and s."userId" = $2 and s."expiresAt" > now()
+         and (not $3::boolean or (s."createdAt" <= now() and s."createdAt" > now() - interval '15 minutes'))
+     ) as authorized`,
+    [sessionId, userId, fresh],
+  );
+  return result.rows[0]?.authorized === true;
 }
 
 const RELAY_MCP_RESOURCE_SCOPE_SET: ReadonlySet<string> = new Set(
@@ -194,6 +238,7 @@ async function requireCurrentWorkspace(
 export function createMcpOAuthOptions(
   queryable: Queryable,
   baseUrl: URL,
+  context: { isWorkspaceContinuation?: (headers: Headers) => boolean } = {},
 ): McpOptions {
   const resource = relayMcpResource(baseUrl);
 
@@ -206,16 +251,31 @@ export function createMcpOAuthOptions(
       identifier: resource,
       allowedScopes: [...RELAY_MCP_RESOURCE_SCOPES],
     }],
+    // Relay owns this resource's scope vocabulary. Merge only configured
+    // fields so upgrades publish new scopes without re-enabling a disabled row.
+    resourceSeedMode: "merge",
     enforcePerClientResources: true,
     clientRegistrationDefaultResources: [resource],
     clientRegistrationAllowedResources: [],
     grantTypes: ["authorization_code", "refresh_token"],
-    allowDynamicClientRegistration: false,
-    allowUnauthenticatedClientRegistration: false,
+    allowDynamicClientRegistration: true,
+    allowUnauthenticatedClientRegistration: true,
+    clientRegistrationDefaultScopes: [
+      ...RELAY_AUTHORIZATION_SCOPES,
+      ...RELAY_MCP_WORKSPACE_SCOPES,
+    ],
+    clientRegistrationAllowedScopes: [...RELAY_MCP_ADMIN_SCOPES],
+    clientRegistrationRequirePKCE: true,
     storeClientSecret: "hashed",
     clientPrivileges: async ({ user, session, action }) => {
       if (!user || !session) return false;
-      if (!await isSuperadmin(queryable, user.id)) return false;
+      if (!await isSuperadmin(queryable, user.id)) {
+        throw new APIError("FORBIDDEN", {
+          code: "AUTHORIZATION_DENIED",
+          message:
+            "A current superadmin role is required to manage OAuth clients.",
+        });
+      }
       if (action === "read" || action === "list") return true;
       // MCP integrations act through user consent, never a machine-only grant.
       if (action === "configure-client-credentials-scopes") return false;
@@ -230,14 +290,33 @@ export function createMcpOAuthOptions(
     },
     resourcePrivileges: () => Promise.resolve(false),
     refreshTokenReuseInterval: 30,
+    extensions: [{
+      claims: {
+        accessToken: async ({ user, sessionId, scopes }) => {
+          if (!scopes.some((scope) => ADMIN_SCOPES.has(scope))) return {};
+          if (
+            !user || !sessionId ||
+            !await currentAdminSession(queryable, user.id, sessionId, true)
+          ) {
+            throw new APIError("FORBIDDEN", {
+              error: "access_denied",
+              error_description:
+                "Platform permissions require a current superadmin and a recent sign-in.",
+            });
+          }
+          return { [RELAY_ADMIN_SESSION_CLAIM]: sessionId };
+        },
+      },
+    }],
     postLogin: {
       page: "/oauth/workspace",
-      // The provider re-evaluates this predicate on /oauth2/continue. Once a
-      // current workspace is selected, continuing must be allowed to reach consent.
-      shouldRedirect: async ({ scopes, user, session }) => {
+      // Initial authorizations always show the workspace choice. Only the
+      // server-marked, signed continuation request may advance to consent.
+      shouldRedirect: async ({ scopes, user, session, headers }) => {
         if (!requestsRelayResource(scopes)) return false;
         const workspaceId = session.activeOrganizationId;
-        return typeof workspaceId !== "string" || !workspaceId ||
+        return !context.isWorkspaceContinuation?.(headers) ||
+          typeof workspaceId !== "string" || !workspaceId ||
           await getMembership(queryable, workspaceId, user.id) === null;
       },
       consentReferenceId: async ({ user, session, scopes }) => {

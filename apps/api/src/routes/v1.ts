@@ -18,6 +18,7 @@ import {
   createShareLinkResultSchema,
   getArtifactResultSchema,
   getRunResultSchema,
+  getStorageUsageResultSchema,
   getToolResultSchema,
   getUsageSummaryResultSchema,
   HTTP_PATHS,
@@ -670,6 +671,19 @@ export function createV1Routes(
     );
     if (result.kind === "not_found") throw notFound();
     return context.json(result);
+  });
+
+  routes.get(HTTP_PATHS.storageUsage, async (context) => {
+    const identity = await requireWorkspaceIdentity(
+      dependencies.resolveIdentity,
+      context.req.raw,
+    );
+    assertNoQuery(context.req.raw);
+    const result = getStorageUsageResultSchema.parse(
+      await dependencies.services.usage.getStorageSummary(identity),
+    );
+    if (result.kind === "not_found") throw notFound();
+    return context.json(result, result.kind === "unavailable" ? 503 : 200);
   });
 
   routes.get(HTTP_PATHS.events, async (context) => {

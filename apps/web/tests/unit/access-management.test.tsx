@@ -27,7 +27,7 @@ it("creates an agent with explicit permissions and displays the secret only unti
   const user = userEvent.setup();
   vi.mocked(oauthClients.create).mockResolvedValue({ ...client, client_secret: "one-time-test-secret" });
   mountClients();
-  await screen.findByText("Connect your first agent");
+  await screen.findByRole("heading", { name: "No registered clients" });
   await user.click(screen.getByRole("button", { name: "Create client", exact: true }));
   await user.type(screen.getByLabelText("Client name"), "My agent");
   await user.type(screen.getByLabelText("Redirect URLs"), client.redirect_uris[0]);

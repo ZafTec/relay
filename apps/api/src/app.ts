@@ -2,6 +2,10 @@ import {
   createSuperadminAccessRoutes,
   type SuperadminAccessRouteDependencies,
 } from "./routes/admin_access.ts";
+import {
+  createWorkspaceRoutes,
+  type WorkspaceRouteDependencies,
+} from "./routes/workspaces.ts";
 import { type Context, Hono } from "@hono/hono";
 import { type Auth, parseTrustedProxyCidrs } from "@relay/auth";
 import { loadRuntimeConfig, type RuntimeConfig } from "@relay/config";
@@ -56,6 +60,7 @@ export interface AppDependencies {
   readonly adminCapacity?: AdminCapacityRouteDependencies;
   readonly adminAllowances?: AdminAllowanceRouteDependencies;
   readonly adminAccess?: SuperadminAccessRouteDependencies;
+  readonly workspaces?: WorkspaceRouteDependencies;
   /** Versioned HTTP resources and workspace event streaming. */
   readonly v1?: V1RouteDependencies;
   /** OAuth-protected MCP Streamable HTTP boundary. */
@@ -160,6 +165,9 @@ export function createApp(
 
   if (dependencies.adminAccess) {
     app.route("/", createSuperadminAccessRoutes(dependencies.adminAccess));
+  }
+  if (dependencies.workspaces) {
+    app.route("/", createWorkspaceRoutes(dependencies.workspaces));
   }
   if (dependencies.adminAllowances) {
     app.route("/", createAdminAllowanceRoutes(dependencies.adminAllowances));

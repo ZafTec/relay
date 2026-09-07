@@ -1124,10 +1124,29 @@ code {
 
 .oauth-scopes li {
   border-bottom: 1px solid var(--surface-border);
+}
+
+.oauth-scope-choice {
   padding: 16px;
   display: grid;
   grid-template-columns: 20px 1fr;
   gap: 12px;
+  cursor: pointer;
+}
+
+.oauth-scope-choice input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--surface-accent);
+}
+
+.oauth-scope-description {
+  display: block;
+  margin: 4px 0 8px;
+  color: var(--surface-copy);
+  font-size: 0.82rem;
+  line-height: 1.55;
 }
 
 .oauth-scopes li:last-child {
@@ -1902,3 +1921,4 @@ code {
     border-color: Highlight;
   }
 }
+.workspace-label__manage { display: inline-block; margin-top: 8px; color: var(--surface-accent); font-size: 0.75rem; line-height: 1.6; text-underline-offset: 3px; }

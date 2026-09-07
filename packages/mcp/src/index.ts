@@ -14,3 +14,12 @@ export type {
   RelayMcpPrincipal,
   RelayMcpScope,
 } from "./adapter.ts";
+export {
+  RELAY_MCP_ADMIN_TOOL_SCOPES,
+  RelayMcpAdminError,
+} from "./admin-tools.ts";
+export type {
+  RelayMcpAdminContext,
+  RelayMcpAdminOperation,
+  RelayMcpAdminServices,
+} from "./admin-tools.ts";

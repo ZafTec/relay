@@ -64,6 +64,7 @@ Deno.test("allowance input requires explicit whole counts, modes and windows", (
 async function fixture() {
   const suffix = crypto.randomUUID();
   const user = `allowance-user-${suffix}`;
+  const email = `${suffix}@example.invalid`;
   const session = `allowance-session-${suffix}`;
   const workspace = `allowance-ws-${suffix}`;
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 6 });
@@ -76,7 +77,7 @@ async function fixture() {
   await owner.query("set local role relay_owner");
   await owner.query(
     `insert into auth."user" (id, name, email, "emailVerified") values ($1, 'Allowance test', $2, true)`,
-    [user, `${suffix}@example.invalid`],
+    [user, email],
   );
   await owner.query(
     `insert into auth.organization (id, name, slug, "createdAt") values ($1, 'Allowance test', $1, now())`,
@@ -131,6 +132,7 @@ async function fixture() {
     pool,
     owner,
     user,
+    email,
     session,
     workspace,
     mutate,
@@ -278,6 +280,15 @@ Deno.test({
           .id,
         f.workspace,
       );
+      const byOwner = await listAllowanceWorkspaces(f.pool, f.session, f.email);
+      assertEquals(byOwner.items.map((workspace) => workspace.id), [
+        f.workspace,
+      ]);
+      assertEquals(byOwner.items[0].owner, {
+        name: "Allowance test",
+        email: f.email,
+      });
+      assertEquals(summary?.workspace.owner, byOwner.items[0].owner);
     } finally {
       await f.close();
     }

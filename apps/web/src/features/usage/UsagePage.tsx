@@ -16,6 +16,8 @@ import {
   type UsageSummaryRequest,
 } from "../../lib/api/usage";
 import "./usage.css";
+import { httpStorageUsageAdapter, type StorageUsageAdapter } from "../../lib/api/storage-usage";
+import { StorageUsagePanel } from "./StorageUsagePanel";
 
 interface UsageFilters {
   readonly metric: string;
@@ -54,6 +56,7 @@ const PERIOD_LABELS: Readonly<Record<UsagePeriod, string>> = Object.freeze({
 
 export interface UsagePageProps {
   readonly adapter?: UsageAdapter;
+  readonly storageAdapter?: StorageUsageAdapter;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -111,15 +114,15 @@ function resultSummary(state: UsagePageState): string {
     return "Usage unavailable";
   }
   const count = state.usage.items.length;
-  if (count === 0) return "No current buckets";
-  return `${count} current ${count === 1 ? "bucket" : "buckets"}${
-    state.usage.truncated ? ", response truncated" : ""
+  if (count === 0) return "No current tool usage";
+  return `${count} usage ${count === 1 ? "entry" : "entries"}${
+    state.usage.truncated ? ", more available" : ""
   }`;
 }
 
 function usageCaption(count: number): string {
-  return `Current consumed and reserved usage, ${count} active ${
-    count === 1 ? "bucket" : "buckets"
+  return `Current consumed and reserved usage, ${count} ${
+    count === 1 ? "entry" : "entries"
   }`;
 }
 
@@ -128,12 +131,12 @@ function UsageTable({ summary }: { readonly summary: UsageSummary }) {
     <>
       <div className="usage-results__meta">
         <p>
-          Generated{" "}
+          Updated{" "}
           <time dateTime={summary.generatedAt}>
             {formatTimestamp(summary.generatedAt)}
           </time>
         </p>
-        <p>{summary.items.length} {summary.items.length === 1 ? "bucket" : "buckets"} shown</p>
+        <p>{summary.items.length} {summary.items.length === 1 ? "entry" : "entries"} shown</p>
       </div>
       <div
         className="usage-table-scroll"
@@ -190,7 +193,7 @@ function UsageTable({ summary }: { readonly summary: UsageSummary }) {
   );
 }
 
-export function UsagePage({ adapter = httpUsageAdapter }: UsagePageProps) {
+export function UsagePage({ adapter = httpUsageAdapter, storageAdapter = httpStorageUsageAdapter }: UsagePageProps) {
   usePageMetadata("Usage | Relay", "#141A16");
   const { expireSession, session, workspace } = useAuth();
   const sessionId = session.status === "authenticated"
@@ -242,7 +245,7 @@ export function UsagePage({ adapter = httpUsageAdapter }: UsagePageProps) {
   }, [adapter, appliedFilters, expireSession, reloadKey, sessionId]);
 
   const workspaceLabel = workspace.status === "ready"
-    ? `Workspace ${workspace.workspace.id}`
+    ? `Workspace @${workspace.workspace.slug}`
     : "Workspace usage";
   const filtersApplied = hasFilters(appliedFilters);
   const noMatches = state.kind === "ok"
@@ -290,6 +293,12 @@ export function UsagePage({ adapter = httpUsageAdapter }: UsagePageProps) {
           </Button>
         </div>
       </header>
+
+      {workspace.status === "ready" ? <StorageUsagePanel
+        key={`${sessionId ?? "anonymous"}:${workspace.workspace.id}`}
+        adapter={storageAdapter}
+        reloadKey={reloadKey}
+      /> : null}
 
       <form
         className="usage-filterbar"
@@ -360,29 +369,22 @@ export function UsagePage({ adapter = httpUsageAdapter }: UsagePageProps) {
       <div className="usage-page__body">
         <section className="usage-scope" aria-labelledby="usage-scope-title">
           <div className="usage-scope__intro">
-            <h2 id="usage-scope-title">Current usage buckets</h2>
+            <h2 id="usage-scope-title">Tool usage</h2>
             <p>
-              Values stay in the metric and unit returned by Relay. Amounts are not
-              combined across rows.
+              Track tool usage by metric and time period. Each metric keeps its
+              own unit.
             </p>
           </div>
           <dl className="usage-scope__measures">
             <div>
               <dt>Consumed</dt>
-              <dd>Amount recorded in the active metric bucket.</dd>
+              <dd>Usage already recorded for this period.</dd>
             </div>
             <div>
               <dt>Reserved</dt>
-              <dd>Amount currently held in the same metric bucket.</dd>
+              <dd>Usage set aside for queued or running work.</dd>
             </div>
           </dl>
-          <p className="usage-scope__boundary">
-            <span aria-hidden="true">□</span>
-            <span>
-              <strong>Contract boundary.</strong>{" "}
-              Receipt and breakdown data is not exposed by the current contract.
-            </span>
-          </p>
         </section>
 
         <section
@@ -433,10 +435,9 @@ export function UsagePage({ adapter = httpUsageAdapter }: UsagePageProps) {
           ) : null}
 
           {state.kind === "ok" && state.usage.truncated ? (
-            <InlineNotice title="Usage response truncated" tone="warning">
+            <InlineNotice title="More usage is available" tone="warning">
               <p>
-                The bounded response omitted additional metric dimensions. Narrow
-                the metric or period filters to inspect a smaller result set.
+                Filter by metric or period to see the remaining usage entries.
               </p>
             </InlineNotice>
           ) : null}
@@ -444,7 +445,7 @@ export function UsagePage({ adapter = httpUsageAdapter }: UsagePageProps) {
           {state.kind === "ok" && state.usage.items.length === 0 && !filtersApplied ? (
             <EmptyState
               label="Usage summary"
-              title="No current usage"
+              title="No current tool usage"
               actions={(
                 <Button
                   variant="outline"
@@ -455,9 +456,8 @@ export function UsagePage({ adapter = httpUsageAdapter }: UsagePageProps) {
               )}
             >
               <p>
-                The API returned no active usage buckets for this workspace.
-                Consumed and reserved values will appear when a current bucket is
-                available.
+                No tool usage is recorded for this workspace in the current
+                periods. Consumed and reserved amounts appear here as tools run.
               </p>
             </EmptyState>
           ) : null}
@@ -466,8 +466,7 @@ export function UsagePage({ adapter = httpUsageAdapter }: UsagePageProps) {
             <div className="usage-no-match" role="status">
               <h2>No current usage matches these filters</h2>
               <p>
-                Change the metric or period to inspect the active usage buckets
-                returned for this workspace.
+                Try a different metric or period to see usage for this workspace.
               </p>
               <Button variant="outline" onClick={clearFilters}>Clear filters</Button>
             </div>

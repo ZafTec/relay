@@ -1,4 +1,5 @@
 import { createPostgresSuperadminAccessService } from "./routes/admin_access.ts";
+import { createPostgresWorkspaceManagementService } from "./routes/workspaces.ts";
 import type { ApplicationServices } from "@relay/application";
 import {
   getCapacityPolicy,
@@ -26,6 +27,7 @@ import {
   MIGRATIONS,
 } from "@relay/database";
 import { createAuth } from "@relay/auth";
+import { createMcpAdminServices } from "./http/mcp-admin-services.ts";
 import {
   createJsonLogger,
   createRelayTelemetry,
@@ -345,6 +347,15 @@ export async function startApi(
       : dependencies.createMcpHttpHandler({
         auth,
         services: applicationServices,
+        adminServices: createMcpAdminServices({
+          pool: databasePool,
+          publicOrigin: authConfig.baseUrl.origin,
+          allowances: createPostgresAdminAllowanceService(databasePool),
+          capacity: createPostgresAdminCapacityService(databasePool),
+          changelog: createPostgresAdminChangelogService(databasePool),
+          superadmins: createPostgresSuperadminAccessService(databasePool),
+          oauth: auth.manageMcpOAuthClient,
+        }),
         allowedHostnames: [authConfig.baseUrl.hostname],
         allowedOrigins: authConfig.trustedOrigins,
         serverInfo: { name: "relay", version: config.build.version },
@@ -391,6 +402,14 @@ export async function startApi(
       adminAccess: {
         auth,
         service: createPostgresSuperadminAccessService(databasePool),
+        allowedOrigins: [
+          authConfig.baseUrl.origin,
+          ...authConfig.trustedOrigins,
+        ],
+      },
+      workspaces: {
+        auth,
+        service: createPostgresWorkspaceManagementService(databasePool),
         allowedOrigins: [
           authConfig.baseUrl.origin,
           ...authConfig.trustedOrigins,

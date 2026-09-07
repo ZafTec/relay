@@ -15,6 +15,7 @@ export interface AllowanceWorkspace {
   id: string;
   name: string;
   slug: string;
+  owner?: { name: string; email: string } | null;
 }
 export interface GrantAllowanceInput {
   key: AllowanceKey;
@@ -180,6 +181,12 @@ async function authorizedRead<T>(
   }
 }
 const PAGE_SIZE = 30;
+const WORKSPACE_OWNER = `left join lateral (
+  select json_build_object('name',u.name,'email',u.email) as owner
+  from auth.member m join auth."user" u on u.id=m."userId"
+  where m."organizationId"=o.id and m.role='owner'
+  order by m."createdAt",m.id limit 1
+) owner_record on true`;
 function page<T>(rows: T[], cursor: (row: T) => string): AllowancePage<T> {
   return {
     items: rows.slice(0, PAGE_SIZE),
@@ -196,9 +203,12 @@ export function listAllowanceWorkspaces(
   if (after !== null) allowanceText(after);
   return authorizedRead(pool, sessionId, async (client) => {
     const result = await client.query<AllowanceWorkspace>(
-      `select id, name, slug from auth.organization
-        where ($1 = '' or strpos(lower(name), lower($1)) > 0 or strpos(lower(slug), lower($1)) > 0 or id = $1)
-          and ($2::text is null or id > $2) order by id limit $3`,
+      `select o.id,o.name,o.slug,owner_record.owner from auth.organization o ${WORKSPACE_OWNER}
+        where ($1 = '' or strpos(lower(o.name), lower($1)) > 0 or strpos(lower(o.slug), lower($1)) > 0 or o.id = $1
+          or exists(select 1 from auth.member m join auth."user" u on u.id=m."userId"
+            where m."organizationId"=o.id and m.role='owner'
+              and (strpos(lower(u.email),lower($1)) > 0 or strpos(lower(u.name),lower($1)) > 0)))
+          and ($2::text is null or o.id > $2) order by o.id limit $3`,
       [search, after, PAGE_SIZE + 1],
     );
     return page(result.rows, (row) => row.id);
@@ -216,7 +226,7 @@ export function getWorkspaceAllowances(
       [workspaceId],
     );
     const workspace = (await client.query<AllowanceWorkspace>(
-      "select id, name, slug from auth.organization where id = $1",
+      `select o.id,o.name,o.slug,owner_record.owner from auth.organization o ${WORKSPACE_OWNER} where o.id=$1`,
       [workspaceId],
     )).rows[0];
     if (!workspace) return null;

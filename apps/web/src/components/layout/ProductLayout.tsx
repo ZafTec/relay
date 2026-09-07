@@ -35,7 +35,8 @@ function WorkspaceLabel() {
       <div className="workspace-label">
         <span className="workspace-label__eyebrow">Workspace</span>
         <strong>{workspace.workspace.name}</strong>
-        <span className="workspace-label__id">{workspace.workspace.id}</span>
+        <span className="workspace-label__id">@{workspace.workspace.slug}</span>
+        <Link to="/dashboard/settings#workspaces" className="workspace-label__manage">Switch or create workspace</Link>
       </div>
     );
   }

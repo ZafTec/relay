@@ -1,6 +1,6 @@
 import axe from "axe-core";
 import { useState } from "react";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   MemoryRouter,
@@ -223,12 +223,9 @@ async function expectNoAxeViolations(container: HTMLElement) {
 }
 
 async function completeSharePolicy(user: ReturnType<typeof userEvent.setup>) {
-  await user.selectOptions(screen.getByLabelText("Version policy"), "pinned");
+  await user.click(screen.getByText("Advanced options"));
+  await user.selectOptions(screen.getByLabelText("File version"), "pinned");
   await user.selectOptions(screen.getByLabelText("Pinned version"), VERSION_ID);
-  await user.selectOptions(screen.getByLabelText("Expiry policy"), "never");
-  await user.selectOptions(screen.getByLabelText("Resolution limit"), "unlimited");
-  await user.selectOptions(screen.getByLabelText("Access policy"), "public");
-  await user.selectOptions(screen.getByLabelText("Delivery behavior"), "inline");
 }
 
 describe("artifact response parsing", () => {
@@ -480,7 +477,7 @@ describe("artifact detail and sharing", () => {
     await expectNoAxeViolations(container);
   });
 
-  it("requires the available public access policy and explains the disabled membership option", async () => {
+  it("creates a public, permanent link with unlimited opens without requiring policy choices", async () => {
     const user = userEvent.setup();
     const createShareLink = vi.fn(async () => ({ kind: "conflict" as const }));
     const adapter = createArtifactsAdapter({ createShareLink });
@@ -492,19 +489,85 @@ describe("artifact detail and sharing", () => {
 
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
     await user.click(screen.getAllByRole("button", { name: "Create share link" })[0]!);
-    const accessPolicy = screen.getByLabelText("Access policy");
-    expect(within(accessPolicy).getByRole("option", {
-      name: "Workspace membership, not available",
-    })).toBeDisabled();
-    expect(screen.getByText(/recipient continuation flow that is not available yet/i)).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Version policy"), "follow");
-    await user.selectOptions(screen.getByLabelText("Expiry policy"), "never");
-    await user.selectOptions(screen.getByLabelText("Resolution limit"), "unlimited");
-    await user.selectOptions(screen.getByLabelText("Delivery behavior"), "inline");
+    expect(screen.getByText("Advanced options").closest("details")).not.toHaveAttribute("open");
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.getByText(/Anyone with this link can view and download the file/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create link" }));
 
-    expect(screen.getByText("Choose public bearer access to create this share link.")).toBeInTheDocument();
+    expect(createShareLink).toHaveBeenCalledWith({
+      artifactId: ARTIFACT_ID,
+      followCurrent: true,
+      expiresAt: null,
+      maxResolutions: null,
+      requireAuth: false,
+      contentDisposition: "inline",
+    }, expect.stringMatching(/^artifact-ui:share-create:/));
+  });
+
+  it("keeps advanced controls out of the tab order until opened and traps focus in the dialog", async () => {
+    const user = userEvent.setup();
+    renderProtectedPage(
+      <ArtifactDetailPage adapter={createArtifactsAdapter()} />,
+      `/dashboard/artifacts/${ARTIFACT_ID}`,
+      "/dashboard/artifacts/:artifactId",
+    );
+    await screen.findByRole("heading", { level: 1, name: "Campaign master" });
+    const trigger = screen.getAllByRole("button", { name: "Create share link" })[0]!;
+    await user.click(trigger);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Create share link" })).toHaveFocus());
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByText("Advanced options").closest("summary")).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Create link" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
+    await user.click(screen.getByText("Advanced options"));
+    await user.tab();
+    expect(screen.getByLabelText("File version")).toHaveFocus();
+    expect(within(screen.getByLabelText("Link access")).getByRole("option", {
+      name: "Workspace members only (unavailable)",
+    })).toBeDisabled();
+    expect(within(screen.getByLabelText("Open limit")).getByRole("option", {
+      name: "Limited opens (unavailable)",
+    })).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+  });
+
+  it("reopens advanced options and focuses invalid expiry, then submits the corrected custom policy", async () => {
+    const user = userEvent.setup();
+    const createShareLink = vi.fn(async () => ({ kind: "conflict" as const }));
+    renderProtectedPage(
+      <ArtifactDetailPage adapter={createArtifactsAdapter({ createShareLink })} />,
+      `/dashboard/artifacts/${ARTIFACT_ID}`,
+      "/dashboard/artifacts/:artifactId",
+    );
+    await screen.findByRole("heading", { level: 1, name: "Campaign master" });
+    await user.click(screen.getAllByRole("button", { name: "Create share link" })[0]!);
+    await completeSharePolicy(user);
+    await user.selectOptions(screen.getByLabelText("Link expiry"), "custom");
+    await user.selectOptions(screen.getByLabelText("When opened"), "attachment");
+    await user.click(screen.getByText("Advanced options"));
+    await user.click(screen.getByRole("button", { name: "Create link" }));
     expect(createShareLink).not.toHaveBeenCalled();
+    expect(screen.getByText("Advanced options").closest("details")).toHaveAttribute("open");
+    expect(screen.getByLabelText("Expires at")).toHaveFocus();
+    expect(screen.getByLabelText("Expires at")).toHaveAttribute("aria-invalid", "true");
+    fireEvent.change(screen.getByLabelText("Expires at"), { target: { value: "2099-12-01T10:00" } });
+    await user.click(screen.getByRole("button", { name: "Create link" }));
+    expect(createShareLink).toHaveBeenCalledWith({
+      artifactId: ARTIFACT_ID,
+      followCurrent: false,
+      artifactVersionId: VERSION_ID,
+      expiresAt: new Date("2099-12-01T10:00").toISOString(),
+      maxResolutions: null,
+      requireAuth: false,
+      contentDisposition: "attachment",
+    }, expect.stringMatching(/^artifact-ui:share-create:/));
   });
 
   it("shows the absolute share URL and token once while serializing creation", async () => {
@@ -553,10 +616,10 @@ describe("artifact detail and sharing", () => {
     const createdHeading = await screen.findByRole("heading", { name: "Share link created" });
     expect(createdHeading).toHaveFocus();
     await user.tab();
-    expect(screen.getByRole("button", { name: "Clear and close" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
     createdHeading.focus();
     await user.tab({ shift: true });
-    expect(screen.getByRole("button", { name: "Clear values and refresh" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Done" })).toHaveFocus();
     expect(createShareLink).toHaveBeenCalledWith({
       artifactId: ARTIFACT_ID,
       followCurrent: false,
@@ -567,10 +630,10 @@ describe("artifact detail and sharing", () => {
       contentDisposition: "inline",
     }, expect.stringMatching(/^artifact-ui:share-create:/));
     const absoluteShareUrl = new URL(PUBLIC_PATH, window.location.origin).href;
-    expect(screen.getByLabelText("Public share URL, shown once")).toHaveAttribute("type", "password");
-    expect(screen.getByLabelText("Public share URL, shown once")).toHaveValue(absoluteShareUrl);
-    expect(screen.getByLabelText("Share token, shown once")).toHaveAttribute("type", "password");
-    expect(screen.getByLabelText("Share token, shown once")).toHaveValue(TOKEN);
+    expect(screen.getByLabelText("Share link")).toHaveAttribute("type", "text");
+    expect(screen.getByLabelText("Share link")).toHaveValue(absoluteShareUrl);
+    expect(screen.getByLabelText("Share token").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByLabelText("Share token")).toHaveValue(TOKEN);
     expect(screen.queryByText(TOKEN)).not.toBeInTheDocument();
     const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     const writeText = vi.fn(async () => undefined);
@@ -578,8 +641,16 @@ describe("artifact detail and sharing", () => {
       configurable: true,
       value: { writeText },
     });
-    await user.click(screen.getByRole("button", { name: "Copy share URL" }));
+    await user.click(screen.getByRole("button", { name: "Copy link" }));
     expect(writeText).toHaveBeenCalledWith(absoluteShareUrl);
+    expect(screen.getByText("Link copied.")).toBeInTheDocument();
+    writeText.mockRejectedValueOnce(new Error("Clipboard denied"));
+    await user.click(screen.getByRole("button", { name: "Copy link" }));
+    expect(screen.getByText("Copy failed. Link is selected so you can copy it manually.")).toBeInTheDocument();
+    const link = screen.getByLabelText<HTMLInputElement>("Share link");
+    expect(link).toHaveFocus();
+    expect(link.selectionStart).toBe(0);
+    expect(link.selectionEnd).toBe(absoluteShareUrl.length);
     if (clipboardDescriptor === undefined) Reflect.deleteProperty(navigator, "clipboard");
     else Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
     await expectNoAxeViolations(container);
@@ -616,7 +687,7 @@ describe("artifact detail and sharing", () => {
     await completeSharePolicy(user);
     await user.click(screen.getByRole("button", { name: "Create link" }));
     await screen.findByRole("heading", { name: "Share link created" });
-    await user.click(screen.getByRole("button", { name: "Clear values and refresh" }));
+    await user.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
 
     const revokeTrigger = screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` });
@@ -668,7 +739,7 @@ describe("artifact detail and sharing", () => {
     await completeSharePolicy(user);
     await user.click(screen.getByRole("button", { name: "Create link" }));
     await screen.findByRole("heading", { name: "Share link created" });
-    await user.click(screen.getByRole("button", { name: "Clear values and refresh" }));
+    await user.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
 
     await user.click(screen.getByRole("button", { name: "Switch artifact route" }));
@@ -712,7 +783,7 @@ describe("artifact detail and sharing", () => {
     expect(unknownStatus).toHaveTextContent("Retry only the exact request");
     expect(unknownStatus).toHaveFocus();
     expect(screen.getByRole("button", { name: "Retry exact request" })).toBeEnabled();
-    expect(screen.getByLabelText("Version policy")).toBeDisabled();
+    expect(screen.getByLabelText("File version")).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(screen.getByRole("dialog", { name: "Creation outcome unknown" })).toBeInTheDocument();
     expect(createShareLink).toHaveBeenCalledTimes(1);
@@ -720,12 +791,12 @@ describe("artifact detail and sharing", () => {
 
     await user.click(screen.getByRole("button", { name: "Retry exact request" }));
     expect(await screen.findByRole("heading", { name: "Share link created" })).toBeInTheDocument();
-    expect(screen.getByText(/replayed the stored creation result/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your link was recovered/i)).toBeInTheDocument();
     expect(createShareLink).toHaveBeenCalledTimes(2);
     expect(createShareLink.mock.calls[1]?.[0]).toBe(firstRequest);
     expect(createShareLink.mock.calls[1]?.[1]).toBe(firstKey);
 
-    await user.click(screen.getByRole("button", { name: "Clear values and refresh" }));
+    await user.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(createTrigger).toHaveFocus();
     await waitFor(() => expect(adapter.get).toHaveBeenCalledTimes(2));
@@ -811,13 +882,13 @@ describe("artifact detail and sharing", () => {
     expect(screen.queryByRole("button", { name: "Retry exact request" })).not.toBeInTheDocument();
     expect(createShareLink.mock.calls[0]?.[1]).toMatch(/^artifact-ui:share-create:/);
     if (result.kind === "idempotency-conflict") {
-      expect(screen.getByLabelText("Version policy")).toBeDisabled();
+      expect(screen.getByLabelText("File version")).toBeDisabled();
       const refresh = screen.getByRole("button", { name: "Refresh authoritative records" });
       expect(refresh).toBeEnabled();
       await user.click(refresh);
       await waitFor(() => expect(adapter.get).toHaveBeenCalledTimes(2));
     } else {
-      expect(screen.getByLabelText("Version policy")).toBeEnabled();
+      expect(screen.getByLabelText("File version")).toBeEnabled();
       expect(screen.queryByRole("button", { name: "Refresh authoritative records" })).not.toBeInTheDocument();
     }
   });

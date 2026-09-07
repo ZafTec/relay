@@ -1,6 +1,9 @@
 import {
+  type GetStorageUsageResult,
+  getStorageUsageResultSchema,
   type GetUsageSummaryResult,
   getUsageSummaryResultSchema,
+  storageByteCount,
   type UsagePeriod,
   usageSummaryItemSchema,
   type UsageSummaryRequest,
@@ -13,6 +16,15 @@ import type { UsageApplicationService } from "../services.ts";
 import { hasCurrentMembership, iso } from "./shared.ts";
 
 const MAX_USAGE_SUMMARY_ITEMS = 100;
+
+export type StorageUsageLimitResolver = (workspaceId: string) => Promise<
+  | { readonly kind: "limited"; readonly maxBytes: string }
+  | { readonly kind: "unlimited" }
+  | {
+    readonly kind: "denied";
+    readonly reason: "not_configured" | "unavailable";
+  }
+>;
 
 interface UsageBucketRow {
   readonly metric_key: string;
@@ -27,10 +39,73 @@ interface UsageBucketRow {
 export class PostgresUsageService implements UsageApplicationService {
   readonly #pool: DatabasePool;
   readonly #now: () => Date;
+  readonly #storageLimit?: StorageUsageLimitResolver;
 
-  constructor(pool: DatabasePool, now: () => Date = () => new Date()) {
+  constructor(
+    pool: DatabasePool,
+    now: () => Date = () => new Date(),
+    storageLimit?: StorageUsageLimitResolver,
+  ) {
     this.#pool = pool;
     this.#now = now;
+    this.#storageLimit = storageLimit;
+  }
+
+  async getStorageSummary(
+    rawContext: WorkspaceActorContext,
+  ): Promise<GetStorageUsageResult> {
+    const context = validateWorkspaceActorContext(rawContext);
+    // A member without an account has never reserved bytes. Read membership and
+    // both counters in one snapshot, so a missing membership cannot become zero.
+    const { rows } = await this.#pool.query<{
+      stored_bytes: string;
+      reserved_bytes: string;
+      cleanup_pending_bytes: string;
+    }>(
+      `select coalesce(account.committed_bytes, 0)::text as stored_bytes,
+              coalesce(account.reserved_bytes, 0)::text as reserved_bytes,
+              coalesce((
+                select sum(upload.expected_size_bytes)
+                  from relay.artifact_uploads upload
+                 where upload.workspace_id = member."organizationId"
+                   and upload.quota_state = 'cleanup_held'
+              ), 0)::text as cleanup_pending_bytes
+         from auth.member member
+         left join relay.artifact_storage_accounts account
+           on account.workspace_id = member."organizationId"
+        where member."organizationId" = $1 and member."userId" = $2`,
+      [context.workspaceId, context.actorUserId],
+    );
+    const row = rows[0];
+    if (row === undefined) return { kind: "not_found" };
+    if (this.#storageLimit === undefined) return { kind: "unavailable" };
+    let limitBytes: string | null;
+    try {
+      const decision = await this.#storageLimit(context.workspaceId);
+      if (decision.kind === "denied") return { kind: "unavailable" };
+      if (decision.kind === "unlimited") limitBytes = null;
+      else if (decision.kind === "limited") {
+        limitBytes = storageByteCount(decision.maxBytes, "limitBytes");
+      } else return { kind: "unavailable" };
+    } catch {
+      return { kind: "unavailable" };
+    }
+    const occupied = BigInt(row.stored_bytes) + BigInt(row.reserved_bytes);
+    const availableBytes = limitBytes === null
+      ? null
+      : (BigInt(limitBytes) > occupied ? BigInt(limitBytes) - occupied : 0n)
+        .toString();
+    return getStorageUsageResultSchema.parse({
+      kind: "ok",
+      storage: {
+        generatedAt: this.#now().toISOString(),
+        storedBytes: row.stored_bytes,
+        reservedBytes: row.reserved_bytes,
+        cleanupPendingBytes: row.cleanup_pending_bytes,
+        limitBytes,
+        availableBytes,
+      },
+    });
   }
 
   async getSummary(

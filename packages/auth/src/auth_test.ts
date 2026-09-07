@@ -6,12 +6,17 @@ import {
   assertStringIncludes,
 } from "@std/assert";
 import { createDatabasePool, type DatabasePool } from "@relay/database";
+import { RELAY_MCP_WORKSPACE_SCOPES } from "@relay/contracts";
 import {
   createAuth,
   createAuthOptions,
   isDeferredOrganizationMutation,
 } from "./auth.ts";
-import { RELAY_MCP_RESOURCE_SCOPES, RELAY_OAUTH_SCOPES } from "./oauth.ts";
+import {
+  RELAY_AUTHORIZATION_SCOPES,
+  RELAY_MCP_RESOURCE_SCOPES,
+  RELAY_OAUTH_SCOPES,
+} from "./oauth.ts";
 import {
   createTestAuth,
   TEST_AUTH_CONFIG,
@@ -134,8 +139,14 @@ Deno.test("production auth config contains only Google and GitHub", async () => 
       "authorization_code",
       "refresh_token",
     ]);
-    assertEquals(oauthOptions?.allowDynamicClientRegistration, false);
-    assertEquals(oauthOptions?.allowUnauthenticatedClientRegistration, false);
+    assertEquals(oauthOptions?.allowDynamicClientRegistration, true);
+    assertEquals(oauthOptions?.allowUnauthenticatedClientRegistration, true);
+    assertEquals(oauthOptions?.clientRegistrationRequirePKCE, true);
+    assertEquals(oauthOptions?.clientRegistrationDefaultScopes, [
+      ...RELAY_AUTHORIZATION_SCOPES,
+      ...RELAY_MCP_WORKSPACE_SCOPES,
+    ]);
+    assertEquals(oauthOptions?.resourceSeedMode, "merge");
     assertEquals(oauthOptions?.refreshTokenReuseInterval, 30);
   } finally {
     await pool.end();
@@ -287,11 +298,27 @@ Deno.test({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          client_name: "Discovery test client",
           redirect_uris: ["http://localhost:3000/callback"],
+          token_endpoint_auth_method: "none",
         }),
       }),
     );
-    assertEquals(registrationResponse.status, 403);
+    const registered = await registrationResponse.json() as {
+      client_id?: string;
+      client_secret?: string;
+    };
+    try {
+      assertEquals(registrationResponse.status, 201);
+      assertExists(registered.client_id);
+      assertEquals(registered.client_secret, undefined);
+    } finally {
+      if (registered.client_id) {
+        await pool.query('delete from auth."oauthClient" where "clientId"=$1', [
+          registered.client_id,
+        ]);
+      }
+    }
 
     const authorizationMetadataResponse = await auth.handler(
       new Request(
@@ -301,7 +328,10 @@ Deno.test({
     assertEquals(authorizationMetadataResponse.status, 200);
     const authorizationMetadata = await authorizationMetadataResponse
       .json() as Record<string, unknown>;
-    assertEquals(authorizationMetadata.registration_endpoint, undefined);
+    assertEquals(
+      authorizationMetadata.registration_endpoint,
+      "http://localhost:8000/api/auth/oauth2/register",
+    );
     assertEquals(authorizationMetadata.grant_types_supported, [
       "authorization_code",
       "refresh_token",
@@ -337,9 +367,10 @@ Deno.test({
     assertEquals(unauthorizedResponse.status, 401);
     const challenge = unauthorizedResponse.headers.get("www-authenticate");
     assertExists(challenge);
-    for (const scope of RELAY_MCP_RESOURCE_SCOPES) {
+    for (const scope of RELAY_MCP_WORKSPACE_SCOPES) {
       assertStringIncludes(challenge, scope);
     }
+    assertEquals(challenge.includes("admin:"), false);
   },
 });
 

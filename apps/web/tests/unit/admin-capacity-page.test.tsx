@@ -259,8 +259,8 @@ describe("admin capacity route", () => {
   it("renders at /admin/capacity and exposes the superadmin navigation entry", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input) => {
       const path = String(input);
-      if (path.startsWith("/api/v1/admin/changelog")) {
-        return new Response(JSON.stringify({ releases: [] }), {
+      if (path === "/api/v1/admin/access") {
+        return new Response(JSON.stringify({ allowed: true }), {
           status: 200,
           headers: { "content-type": "application/json" },
         });

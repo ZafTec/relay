@@ -1,12 +1,11 @@
 import { usePageMetadata } from "../../app/usePageMetadata";
 import { useAuth, type WorkspaceState } from "../../auth/AuthProvider";
-import { Button, LinkButton } from "../../components/ui/Button";
-import { InlineNotice } from "../../components/ui/InlineNotice";
-import { Skeleton } from "../../components/ui/Skeleton";
+import { LinkButton } from "../../components/ui/Button";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import "./settings.css";
 import { NotificationSettings } from "./NotificationSettings";
 import { LegalLinks } from "../../components/layout/LegalLinks";
+import { WorkspaceManagement } from "./WorkspaceManagement";
 
 const MCP_ENDPOINT = "/mcp";
 const MCP_RESOURCE_METADATA = "/.well-known/oauth-protected-resource/mcp";
@@ -19,7 +18,7 @@ const MCP_SCOPE_GUIDANCE = [
   ["artifacts:read", "List artifacts and read artifact detail."],
   ["artifacts:write", "Create an artifact upload."],
   ["artifacts:share", "Create or revoke a share link."],
-  ["usage:read", "Authorize usage reads. No current MCP management tool uses this scope."],
+  ["usage:read", "Read tool usage and workspace storage usage."],
   ["notifications:read", "Read your email preferences and delivery status."],
   ["notifications:write", "Change your email notification preferences."],
 ] as const;
@@ -41,79 +40,6 @@ function sessionExpiry(expiresAt: Date | null): { dateTime: string; label: strin
   };
 }
 
-function workspaceStatus(state: WorkspaceState) {
-  if (state.status === "ready") return <StatusBadge>Current</StatusBadge>;
-  if (state.status === "empty") return <StatusBadge tone="muted">No workspace</StatusBadge>;
-  if (state.status === "degraded") return <StatusBadge tone="warning">Unavailable</StatusBadge>;
-  return <StatusBadge tone="pending">Loading</StatusBadge>;
-}
-
-interface WorkspacePanelProps {
-  state: WorkspaceState;
-  onRetry: () => void;
-}
-
-function WorkspacePanel({ state, onRetry }: WorkspacePanelProps) {
-  const loading = state.status === "idle" || state.status === "loading";
-
-  return (
-    <section
-      className="settings-panel settings-panel--workspace"
-      aria-labelledby="settings-workspace-title"
-      aria-busy={loading || undefined}
-    >
-      <header className="settings-panel__header">
-        <div>
-          <h2 id="settings-workspace-title">Active workspace</h2>
-          <p>The tenant boundary attached to this session.</p>
-        </div>
-        {workspaceStatus(state)}
-      </header>
-
-      <div className="settings-panel__body">
-        {state.status === "ready" ? (
-          <dl className="settings-facts">
-            <div>
-              <dt>Name</dt>
-              <dd>{state.workspace.name}</dd>
-            </div>
-            <div>
-              <dt>Slug</dt>
-              <dd><code>{state.workspace.slug}</code></dd>
-            </div>
-            <div>
-              <dt>Workspace ID</dt>
-              <dd><code>{state.workspace.id}</code></dd>
-            </div>
-          </dl>
-        ) : null}
-
-        {loading ? <Skeleton label="Loading active workspace" lines={3} /> : null}
-
-        {state.status === "empty" ? (
-          <div className="settings-state">
-            <strong>No active workspace</strong>
-            <p>
-              No active workspace is attached to this session. Workspace settings and new MCP
-              authorization require an active workspace.
-            </p>
-          </div>
-        ) : null}
-
-        {state.status === "degraded" ? (
-          <InlineNotice
-            title="Workspace settings unavailable"
-            tone="error"
-            action={<Button variant="outline" onClick={onRetry}>Retry workspace</Button>}
-          >
-            <p>{state.message}</p>
-          </InlineNotice>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
 interface AuthorizationWorkspaceProps {
   state: WorkspaceState;
 }
@@ -123,7 +49,8 @@ function AuthorizationWorkspace({ state }: AuthorizationWorkspaceProps) {
     return (
       <div className="settings-mcp__binding">
         <span>New authorization target</span>
-        <code>{state.workspace.id}</code>
+        <strong>{state.workspace.name}</strong>
+        <code>@{state.workspace.slug}</code>
         <p>Relay records this workspace in the access token and rechecks membership.</p>
       </div>
     );
@@ -198,8 +125,9 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
           <div>
             <h3>Authorize with OAuth</h3>
             <p>
-              If the agent asks for a client ID and secret, copy its redirect URI and create
-              a client in Manage OAuth clients. A superadmin account is required to register clients.
+              Choose Connect in your agent. Compatible agents register automatically and open
+              Relay for sign-in. If it asks for a client ID and secret, copy its redirect URI;
+              a superadmin can create the client in Manage OAuth clients.
             </p>
           </div>
         </li>
@@ -249,7 +177,7 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
 
 export function SettingsPage() {
   usePageMetadata("Workspace settings | Relay", "#141A16");
-  const { session, workspace, refreshWorkspace } = useAuth();
+  const { session, workspace } = useAuth();
 
   if (session.status !== "authenticated") return null;
 
@@ -270,7 +198,7 @@ export function SettingsPage() {
 
       <div className="settings-page__body">
         <div className="settings-context">
-          <WorkspacePanel state={workspace} onRetry={() => void refreshWorkspace()} />
+          <WorkspaceManagement />
 
           <section className="settings-panel" aria-labelledby="settings-session-title">
             <header className="settings-panel__header">
@@ -304,11 +232,14 @@ export function SettingsPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt>Workspace claim</dt>
+                  <dt>Active workspace</dt>
                   <dd>
-                    {activeWorkspaceId
-                      ? <code>{activeWorkspaceId}</code>
-                      : <span className="settings-facts__muted">No active workspace selected</span>}
+                    {workspace.status === "ready" ? <>
+                      <span>{workspace.workspace.name}</span>
+                      <code>@{workspace.workspace.slug}</code>
+                    </> : <span className="settings-facts__muted">{activeWorkspaceId
+                      ? workspace.status === "degraded" ? "Workspace details unavailable" : "Loading workspace details"
+                      : "No active workspace selected"}</span>}
                   </dd>
                 </div>
               </dl>

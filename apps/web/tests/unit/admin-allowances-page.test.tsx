@@ -8,7 +8,7 @@ import { httpAdminAllowanceAdapter } from "../../src/lib/api/admin-allowances";
 import { ApiError } from "../../src/lib/api/client";
 
 vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: () => ({ session: { status: "authenticated", identity: { user: { id: "operator-test" } } } }) }));
-const workspace = { id: "workspace-one", name: "Studio", slug: "studio" };
+const workspace = { id: "workspace-one", name: "Studio", slug: "studio", owner: { name: "Morgan Lee", email: "morgan@example.test" } };
 const summary: AllowanceSummary = { workspace, asOf: "2026-09-06T12:00:00Z", executionAllowed: false,
   periodStartsAt: "2026-09-01T00:00:00Z", periodEndsAt: "2026-10-01T00:00:00Z", limits: [
     { key: "images.generated", state: "limited", amount: "20", consumed: "3", reserved: "2", remaining: "15" },
@@ -27,6 +27,19 @@ function mount(api: AdminAllowanceAdapter) {
   return render(<MemoryRouter initialEntries={["/admin/allowances?workspace=workspace-one"]}><AdminAllowancesPage adapter={api} /></MemoryRouter>);
 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); sessionStorage.clear(); });
+
+it("identifies a workspace by handle and owner and searches by owner email", async () => {
+  const api = adapter(); const user = userEvent.setup(); mount(api);
+  const card = await screen.findByRole("button", { name: /Studio/ });
+  expect(within(card).getByText("@studio")).toBeInTheDocument();
+  expect(within(card).getByText("morgan@example.test")).toBeInTheDocument();
+  expect(within(card).queryByText("workspace-one")).not.toBeInTheDocument();
+  expect(card).toHaveAttribute("aria-pressed", "true");
+  await user.type(screen.getByRole("searchbox", { name: "Workspace name, handle, or owner email" }), "morgan@example.test");
+  await user.click(screen.getByRole("button", { name: "Search", exact: true }));
+  await waitFor(() => expect(api.workspaces).toHaveBeenLastCalledWith("morgan@example.test", null, expect.any(AbortSignal)));
+  expect(api.mutate).not.toHaveBeenCalled();
+});
 
 it("requires an explicit grant and uses exact string amounts for the selected workspace", async () => {
   const api = adapter(); const user = userEvent.setup(); mount(api);
