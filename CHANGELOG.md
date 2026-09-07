@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 (2026-09-07)
+
+## What's Changed
+* feat: improve workspaces, MCP access and storage visibility by @Euaell in https://github.com/ZafTec/relay/pull/45
+
+
+**Full Changelog**: https://github.com/ZafTec/relay/compare/v0.2.0...v0.3.0
+
 ## 0.2.0 (2026-09-07)
 
 ## What's Changed
