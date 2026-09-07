@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 (2026-09-07)
+
+## What's Changed
+* fix: repair release publishing and externalize deployment configuration by @Euaell in https://github.com/ZafTec/relay/pull/40
+
+
+**Full Changelog**: https://github.com/ZafTec/relay/compare/v0.1.0...v0.1.1
+
 ## 0.1.0 (2026-09-06)
 
 ## What's Changed
