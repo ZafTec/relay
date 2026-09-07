@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 (2026-09-07)
+
+## What's Changed
+* feat: add agent access, image editing and notifications by @Euaell in https://github.com/ZafTec/relay/pull/43
+
+
+**Full Changelog**: https://github.com/ZafTec/relay/compare/v0.1.1...v0.2.0
+
 ## 0.1.1 (2026-09-07)
 
 ## What's Changed
