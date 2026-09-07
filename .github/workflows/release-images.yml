@@ -99,25 +99,28 @@ jobs:
 
           release_json="$RUNNER_TEMP/release.json"
           found=false
+          # The CLI lookup includes drafts; the REST releases/tags endpoint
+          # returns published releases only.
           for _attempt in {1..12}; do
-            if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > "$release_json" 2>/dev/null; then
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+              --json databaseId,tagName,isDraft,isPrerelease > "$release_json" 2>/dev/null; then
               found=true
               break
             fi
             sleep 5
           done
           if [[ "$found" != "true" ]]; then
-            echo "::error::Release Please did not create a release for $tag." >&2
+            echo "::error::Unable to find release $tag after waiting for Release Please; check the release and workflow token permissions." >&2
             exit 1
           fi
           jq -e --arg tag "$tag" \
-            '.tag_name == $tag and .draft == true and .prerelease == false' \
+            '.tagName == $tag and .isDraft == true and .isPrerelease == false' \
             "$release_json" >/dev/null || {
               echo "::error::The matching GitHub release must still be a non-prerelease draft." >&2
               exit 1
             }
 
-          release_id=$(jq -er '.id | select(type == "number")' "$release_json")
+          release_id=$(jq -er '.databaseId | select(type == "number")' "$release_json")
           releases_json="$RUNNER_TEMP/releases.json"
           # A published stable release is the durable success marker because
           # publishing this workflow's draft is its final operation. Failed
@@ -222,6 +225,8 @@ jobs:
             APP_VERSION=${{ steps.identity.outputs.version }}
             GIT_SHA=${{ steps.identity.outputs.revision }}
             IMAGE_CREATED=${{ steps.identity.outputs.created }}
+            VITE_APP_ORIGIN=${{ vars.VITE_APP_ORIGIN }}
+            VITE_FARO_COLLECTOR_URL=${{ vars.VITE_FARO_COLLECTOR_URL }}
           provenance: mode=max
           sbom: true
 

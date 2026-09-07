@@ -8,10 +8,9 @@ import {
   resolveClientOptions,
   type ResolvedClientOptions,
 } from "./http.ts";
-import {
-  AZURE_AI_BASE_URL,
-  type AzureProviderClientOptions,
-  type ProviderCallOptions,
+import type {
+  AzureProviderClientOptions,
+  ProviderCallOptions,
 } from "./types.ts";
 import {
   boundedString,
@@ -25,8 +24,7 @@ import {
 const PROVIDER = "azure-gpt-image-2" as const;
 
 export const AZURE_GPT_IMAGE_2_MODEL = "gpt-image-2" as const;
-export const AZURE_GPT_IMAGE_2_ENDPOINT =
-  `${AZURE_AI_BASE_URL}/openai/v1/images/generations` as const;
+export const AZURE_GPT_IMAGE_2_PATH = "/openai/v1/images/generations" as const;
 export const AZURE_GPT_IMAGE_2_MAX_PROMPT_CODE_POINTS = 32_000;
 export const AZURE_GPT_IMAGE_2_MIN_PIXELS = 655_360;
 export const AZURE_GPT_IMAGE_2_MAX_PIXELS = 8_294_400;
@@ -190,7 +188,7 @@ export class AzureGptImage2Client {
     const response = await postJson(
       this.#config,
       PROVIDER,
-      AZURE_GPT_IMAGE_2_ENDPOINT,
+      this.#config.baseUrl + AZURE_GPT_IMAGE_2_PATH,
       prepared.body,
       prepared.signal,
     );

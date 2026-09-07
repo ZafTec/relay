@@ -429,37 +429,15 @@ tool publication
 - No prompt, provider token, signed URL, or content leaks to telemetry.
 - Browser golden path passes keyboard, screen-reader, mobile, and visual checks.
 
-## Wave 6 — release and production validation
+## Wave 6 — release validation
 
-Parallel lanes after release policy is approved:
+- Protect main with the required pull-request CI gate.
+- Use Release Please and Conventional Commit titles for release preparation.
+- Build, scan, and publish backend/web images from the same SHA and version.
+- Attach SBOM, provenance, and the paired image digest manifest.
+- Verify retry and promotion behavior before publishing the draft release.
 
-- Protected-main/ruleset configuration
-- Release Please and Conventional Commit/PR-title policy
-- Backend/web image workflows
-- Production Compose/Nginx templates
-- Grafana dashboards/alerts and telemetry backend remediation
-- Backup, migration, deploy, rollback, and incident runbooks
-
-Integration is serial:
-
-1. Release PR
-2. Version/tag creation
-3. Build, scan, SBOM, provenance, image publication
-4. Digest manifest
-5. Manual VPS pull/migrate/up
-6. Non-destructive production health/telemetry smoke; rollback and billable job
-   rehearsals run in isolated staging unless a separately approved synthetic
-   production check is defined
-7. Customer changelog draft and superadmin publication
-
-### Wave 6 gate
-
-- Protected branch rejects direct/failed changes.
-- Tag builds both images from the same SHA/version.
-- Deployment uses digest-pinned images and no application-owned destructive
-  volume operation.
-- Expand-only schema supports previous-image rollback.
-- Telemetry, alerts, backup, restore, and notification delivery are exercised.
+Host configuration and operational runbooks are maintained outside Git.
 
 ## Wave 7 — future expansion
 

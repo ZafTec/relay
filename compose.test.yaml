@@ -167,7 +167,10 @@ services:
     command: ["worker"]
     environment:
       <<: *runtime-environment
-      AZURE_API_KEY: ci-only-azure-key-not-used
+      AZURE_IMAGE_ENDPOINT: https://image-test.services.ai.azure.com
+      AZURE_IMAGE_API_KEY: container-test-only-not-a-provider-key
+      AZURE_OCR_ENDPOINT: https://ocr-test.services.ai.azure.com
+      AZURE_OCR_API_KEY: container-test-only-not-a-provider-key
       RELAY_PROCESS_ROLE: worker
     stop_grace_period: 30s
     depends_on:

@@ -47,7 +47,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
             <Link to="/docs">Docs</Link>
             <Link to="/status">Status</Link>
             <Link to="/sign-in">Sign in</Link>
-            <a href="https://zaftech.co" rel="noreferrer">ZafTech</a>
+            <span>ZafTech</span>
           </nav>
         </div>
       </footer>

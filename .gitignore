@@ -3,8 +3,10 @@
 !.env.example
 .DS_Store
 node_modules/
-dist/*
-!dist/.gitkeep
+dist/
+deploy/
+.zed/
+.superdesign/
 coverage/
 .ci-artifacts/
 *.log

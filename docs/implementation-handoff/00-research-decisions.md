@@ -12,7 +12,6 @@ The handoff was prepared from:
 - Better Auth's current `llms.txt` and official documentation
 - BullMQ, Redis, Deno, PostgreSQL, Kysely, AWS/R2, MCP, OpenTelemetry, Grafana,
   Docker, Nginx, GitHub Actions, and Release Please primary documentation
-- The redacted VPS Compose/configuration excerpts supplied by the owner
 
 No application implementation was performed. The raw v3 directory remained
 unmodified and untracked.
@@ -121,7 +120,7 @@ filesystem permission solely to enumerate migrations.
 ## Better Auth decisions
 
 - Mount `auth.handler(c.req.raw)` under `/api/auth/*` before catch-all routes.
-- Use exact production origin `https://relay.zaftech.co`.
+- Use the exact origin configured by `BETTER_AUTH_URL`.
 - Use host-only secure cookies with `SameSite=Lax` for OAuth callbacks.
 - Keep CSRF and origin checks enabled.
 - Do not enable cross-subdomain cookies.
@@ -302,25 +301,6 @@ Implementation blockers or corrections:
 Preserve v3 raw files as provenance. The web agent copies approved assets and
 reimplements semantic components; it does not mechanically convert the canvas
 markup.
-
-## VPS decisions inferred from supplied configuration
-
-- Relay joins external Docker networks; it does not recreate PostgreSQL, Redis,
-  MinIO, Nginx, or telemetry services.
-- Only Nginx should expose Relay web/API traffic publicly.
-- Application telemetry goes to Alloy, not directly to every backend.
-- Tempo is the preferred persistent trace backend after its live configuration
-  is audited. Current in-memory Jaeger is not production retention.
-- Redis needs authenticated health checks, `noeviction`, explicit tested image,
-  sufficient memory, and a safer secret configuration.
-- PostgreSQL and Redis host ports should be removed or bound to a
-  private/loopback interface once Docker-network administration is sufficient.
-- Production should not use `docker compose down -v`.
-- Infrastructure `latest` tags should become tested pinned versions/digests.
-- Nginx must proxy `/api/`, `/mcp`, the exact approved OAuth/OIDC and
-  protected-resource metadata locations, and managed share routes to the API,
-  with buffering disabled for SSE. It must not capture unrelated `/.well-known/`
-  paths such as ACME.
 
 ## Primary sources
 

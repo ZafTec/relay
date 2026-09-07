@@ -9,6 +9,12 @@ COPY index.html tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.t
 COPY public ./public
 COPY scripts ./scripts
 COPY src ./src
+ARG APP_VERSION=development
+ARG VITE_APP_ORIGIN
+ARG VITE_FARO_COLLECTOR_URL
+ENV VITE_APP_VERSION=${APP_VERSION}
+ENV VITE_APP_ORIGIN=${VITE_APP_ORIGIN}
+ENV VITE_FARO_COLLECTOR_URL=${VITE_FARO_COLLECTOR_URL}
 RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:1.31.4-alpine@sha256:d9083fe47768377ef55dedafd67d4da7c2f2bc2bece7554954f29359deb0dce9 AS runtime

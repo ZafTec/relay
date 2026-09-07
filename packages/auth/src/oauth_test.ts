@@ -102,7 +102,7 @@ Deno.test("Relay MCP OAuth constants and resource policy are exact", () => {
   ]);
   assertEquals(
     RELAY_WORKSPACE_ID_CLAIM,
-    "https://relay.zaftech.co/claims/workspace_id",
+    "urn:relay:workspace_id",
   );
   assertEquals(relayMcpResource(baseUrl), resource);
   assertEquals(options.resource, resource);
@@ -140,7 +140,7 @@ Deno.test("MCP access-token claims are strict and current authorization is reche
       return Promise.resolve({ rows: [{ authorized: true }] as T[] });
     },
   };
-  const resource = "https://relay.zaftech.co/mcp";
+  const resource = "https://relay.example.test/mcp";
   assertEquals(
     await authorizeMcpAccessTokenClaims(queryable, resource, claims),
     parseMcpAccessTokenClaims(claims),

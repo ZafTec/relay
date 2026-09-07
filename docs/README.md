@@ -11,7 +11,7 @@
   technology decisions; detailed authority lives in the canonical document
 - [`implementation-handoff/README.md`](implementation-handoff/README.md):
   researched, dependency-ordered implementation handoff with parallel
-  workstreams, tests, VPS operations, and blockers
+  workstreams, tests, releases, and blockers
 
 ## Supporting decisions
 

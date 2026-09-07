@@ -12,6 +12,7 @@ import {
   jsonResponse,
   pngBytes,
   TEST_API_KEY,
+  TEST_AZURE_BASE_URL,
 } from "./test_helpers.ts";
 
 function validImageResponse(): Response {
@@ -32,6 +33,7 @@ Deno.test("HTTP status failures have stable sanitized classifications", async ()
   ];
   for (const [status, classification] of cases) {
     const client = new AzureGptImage2Client({
+      baseUrl: TEST_AZURE_BASE_URL,
       apiKey: TEST_API_KEY,
       fetch: asFetch(() =>
         new Response(`upstream leaked ${TEST_API_KEY}`, { status })
@@ -50,6 +52,7 @@ Deno.test("HTTP status failures have stable sanitized classifications", async ()
 
 Deno.test("HTTP 429 exposes only bounded Retry-After metadata", async () => {
   const client = new AzureGptImage2Client({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch(() =>
       new Response("private rate-limit detail", {
@@ -69,6 +72,7 @@ Deno.test("HTTP 429 exposes only bounded Retry-After metadata", async () => {
 
 Deno.test("network errors discard thrown messages and secrets", async () => {
   const client = new AzureGptImage2Client({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch(() => {
       throw new Error(`socket failed with ${TEST_API_KEY} and private prompt`);
@@ -89,6 +93,7 @@ Deno.test("network errors discard thrown messages and secrets", async () => {
 Deno.test("caller abort is classified separately and aborts injected fetch", async () => {
   let observedAbort = false;
   const client = new AzureGptImage2Client({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch((_input, init) =>
       new Promise<Response>((_resolve, reject) => {
@@ -114,6 +119,7 @@ Deno.test("caller abort is classified separately and aborts injected fetch", asy
 Deno.test("pre-aborted requests never invoke fetch", async () => {
   let fetchCalls = 0;
   const client = new AzureGptImage2Client({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch(() => {
       fetchCalls += 1;
@@ -132,6 +138,7 @@ Deno.test("pre-aborted requests never invoke fetch", async () => {
 Deno.test("timeout is bounded and aborts an in-flight fetch", async () => {
   let observedAbort = false;
   const client = new AzureGptImage2Client({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     timeoutMs: 5,
     fetch: asFetch((_input, init) =>
@@ -153,6 +160,7 @@ Deno.test("timeout is bounded and aborts an in-flight fetch", async () => {
 
 Deno.test("declared and streamed oversized responses are rejected", async () => {
   const declared = new AzureGptImage2Client({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     maxResponseBytes: 32,
     fetch: asFetch(() =>
@@ -175,6 +183,7 @@ Deno.test("declared and streamed oversized responses are rejected", async () => 
     },
   });
   const streamed = new AzureGptImage2Client({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     maxResponseBytes: 32,
     fetch: asFetch(() => new Response(stream)),
@@ -187,6 +196,7 @@ Deno.test("declared and streamed oversized responses are rejected", async () => 
 
 Deno.test("decoded base64 has an independent hard response bound", async () => {
   const client = new AzureGptImage2Client({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     maxBase64Bytes: 8,
     fetch: asFetch(() => validImageResponse()),
@@ -218,6 +228,7 @@ Deno.test("malformed image responses are rejected without raw data", async () =>
 
   for (const response of malformedResponses) {
     const client = new AzureGptImage2Client({
+      baseUrl: TEST_AZURE_BASE_URL,
       apiKey: TEST_API_KEY,
       fetch: asFetch(response),
     });
@@ -232,11 +243,26 @@ Deno.test("client limits and credentials are validated before fetch", () => {
   const fetch = asFetch(() => validImageResponse());
   for (
     const options of [
-      { apiKey: "", fetch },
-      { apiKey: "line\nbreak", fetch },
-      { apiKey: TEST_API_KEY, fetch, timeoutMs: 300_001 },
-      { apiKey: TEST_API_KEY, fetch, maxResponseBytes: 0 },
-      { apiKey: TEST_API_KEY, fetch, maxBase64Bytes: 64 * 1024 * 1024 + 1 },
+      { baseUrl: TEST_AZURE_BASE_URL, apiKey: "", fetch },
+      { baseUrl: TEST_AZURE_BASE_URL, apiKey: "line\nbreak", fetch },
+      {
+        baseUrl: TEST_AZURE_BASE_URL,
+        apiKey: TEST_API_KEY,
+        fetch,
+        timeoutMs: 300_001,
+      },
+      {
+        baseUrl: TEST_AZURE_BASE_URL,
+        apiKey: TEST_API_KEY,
+        fetch,
+        maxResponseBytes: 0,
+      },
+      {
+        baseUrl: TEST_AZURE_BASE_URL,
+        apiKey: TEST_API_KEY,
+        fetch,
+        maxBase64Bytes: 64 * 1024 * 1024 + 1,
+      },
     ]
   ) {
     assert.throws(
@@ -247,4 +273,34 @@ Deno.test("client limits and credentials are validated before fetch", () => {
         !JSON.stringify(error).includes(TEST_API_KEY),
     );
   }
+});
+
+Deno.test("resource URLs are validated before any credential can be sent", () => {
+  let calls = 0;
+  const fetch = asFetch(() => {
+    calls += 1;
+    return validImageResponse();
+  });
+  for (
+    const baseUrl of [
+      "",
+      "http://test-resource.services.ai.azure.com",
+      "https://test-resource.services.ai.azure.com.attacker.test",
+      "https://user:secret@test-resource.services.ai.azure.com",
+      "https://test-resource.services.ai.azure.com/api/projects/private",
+      "https://test-resource.services.ai.azure.com?api-key=private",
+      "https://test-resource.services.ai.azure.com#private",
+      "https://test-resource.services.ai.azure.com:8443",
+    ]
+  ) {
+    assert.throws(
+      () => new AzureGptImage2Client({ baseUrl, apiKey: TEST_API_KEY, fetch }),
+      (error: unknown) =>
+        error instanceof AzureProviderError &&
+        error.classification === "invalid_input" &&
+        !JSON.stringify(error).includes(TEST_API_KEY) &&
+        !JSON.stringify(error).includes("private"),
+    );
+  }
+  assert.equal(calls, 0);
 });

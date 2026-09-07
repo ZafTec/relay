@@ -83,7 +83,8 @@ Also inspect:
 deno.json
 deno.lock
 Dockerfile
-compose.yaml
+compose.dev.yaml
+compose.test.yaml
 .env.example
 apps/api/
 apps/worker/
@@ -119,7 +120,7 @@ The canonical product identity is:
 ```text
 Name: Relay
 Company lockup: Relay by ZafTech
-Domain: relay.zaftech.co
+Domain: relay.example.test
 Landing: /
 Protected application: /dashboard
 Public changelog: /changelog
@@ -693,27 +694,12 @@ Required scope:
 - Dependency/security scanning
 - No production secrets
 
-### Merge to `main`
+### Release automation
 
-- Re-run required checks
-- Build the application image once
-- Publish immutable Git SHA tag
-- Publish `main` convenience tag
-- Publish `latest` only if the repository policy explicitly approves it
-- Add standard OCI labels
-- Do not create SemVer tags automatically while `docs/versioning.md` remains a
-  proposal
-
-Use documented Docker Hub secrets and fail clearly when they are absent. Do not
-expose secrets in logs.
-
-Tests and validation:
-
-- Validate workflow syntax
-- Build the same Dockerfile locally
-- Confirm cache does not alter output correctness
-- Confirm PR workflows cannot publish images from untrusted contexts
-- Document manual VPS deployment and rollback using immutable tags
+Use the approved Release Please flow and paired image publication contract in
+`docs/versioning.md`. Validate workflow syntax, the local image build, and the
+boundary preventing pull-request workflows from publishing images. Host
+configuration and deployment runbooks are maintained outside Git.
 
 ## Milestone 2 integration worktree
 

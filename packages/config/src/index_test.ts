@@ -32,9 +32,10 @@ const validObservabilityEnv = {
 };
 
 const validAuthEnv = {
-  BETTER_AUTH_URL: "https://relay.zaftech.co",
+  BETTER_AUTH_URL: "https://relay.example.test",
   BETTER_AUTH_SECRET: "a".repeat(32),
-  AUTH_TRUSTED_ORIGINS: "https://relay.zaftech.co, https://staging.example.com",
+  AUTH_TRUSTED_ORIGINS:
+    "https://relay.example.test, https://staging.example.com",
   GOOGLE_CLIENT_ID: "google-id",
   GOOGLE_CLIENT_SECRET: "google-secret",
   GITHUB_CLIENT_ID: "github-id",
@@ -261,14 +262,14 @@ Deno.test("loadAuthConfig requires AUTH_TRUSTED_ORIGINS", () => {
 Deno.test("loadAuthConfig splits and trims comma-separated trusted origins", () => {
   const config = loadAuthConfig(validAuthEnv);
   assertEquals(config.trustedOrigins, [
-    "https://relay.zaftech.co",
+    "https://relay.example.test",
     "https://staging.example.com",
   ]);
 });
 
 Deno.test("loadAuthConfig accepts a fully valid environment", () => {
   const config = loadAuthConfig(validAuthEnv);
-  assertEquals(config.baseUrl.toString(), "https://relay.zaftech.co/");
+  assertEquals(config.baseUrl.toString(), "https://relay.example.test/");
   assertEquals(config.google.clientId, "google-id");
   assertEquals(config.github.clientId, "github-id");
 });
@@ -299,6 +300,27 @@ function encodeBase64(bytes: Uint8Array, urlSafe = false): string {
     : encoded;
 }
 
+const validAzureEnv = {
+  AZURE_IMAGE_ENDPOINT: "https://images-resource.services.ai.azure.com",
+  AZURE_IMAGE_API_KEY: "image-secret",
+  AZURE_OCR_ENDPOINT: "https://ocr-resource.services.ai.azure.com",
+  AZURE_OCR_API_KEY: "ocr-secret",
+};
+const expectedAzureResources = {
+  gptImage2: {
+    baseUrl: validAzureEnv.AZURE_IMAGE_ENDPOINT,
+    apiKey: "image-secret",
+  },
+  flux2Pro: {
+    baseUrl: validAzureEnv.AZURE_IMAGE_ENDPOINT,
+    apiKey: "image-secret",
+  },
+  mistralOcr: {
+    baseUrl: validAzureEnv.AZURE_OCR_ENDPOINT,
+    apiKey: "ocr-secret",
+  },
+};
+
 Deno.test("API config defaults never read worker-only Azure secrets", () => {
   const secret = encodeBase64(new Uint8Array(32).fill(7));
   withStubbedProcessEnvironment(
@@ -311,7 +333,7 @@ Deno.test("API config defaults never read worker-only Azure secrets", () => {
       SHARE_TOKEN_ACTIVE_VERSION: "1",
       SHARE_TOKEN_KEYS: JSON.stringify({ 1: secret }),
       OTEL_DENO: "false",
-      AZURE_API_KEY: "worker-only-canary",
+      ...validAzureEnv,
     },
     (reads) => {
       assertEquals(loadRuntimeConfig().deploymentEnvironment, "test");
@@ -320,7 +342,7 @@ Deno.test("API config defaults never read worker-only Azure secrets", () => {
       loadArtifactLifecycleConfig();
       loadApiShareTokenKeyringConfig();
       assertEquals(loadEnabledObservabilityConfig(), null);
-      assertEquals(reads.includes("AZURE_API_KEY"), false);
+      assertEquals(reads.some((name) => name.startsWith("AZURE_")), false);
     },
   );
 });
@@ -332,7 +354,7 @@ Deno.test("worker config defaults never read API-only secrets", () => {
       ...validS3Env,
       APP_ENV: "test",
       ARTIFACT_WORKSPACE_MAX_BYTES: "1000000",
-      AZURE_API_KEY: "worker-secret",
+      ...validAzureEnv,
       ...validAuthEnv,
       SHARE_TOKEN_ACTIVE_VERSION: "api-only-canary",
       SHARE_TOKEN_KEYS: "api-only-canary",
@@ -693,28 +715,26 @@ Deno.test("share-token keyring errors never echo key material", () => {
 
 Deno.test("loadWorkerAzureProviderConfig applies provider-aligned defaults", () => {
   const config = loadWorkerAzureProviderConfig({
-    AZURE_API_KEY: "azure-secret",
-    AZURE_ENDPOINT: "https://ignored.example.test",
+    ...validAzureEnv,
   });
   assertEquals(config, {
-    apiKey: "azure-secret",
+    ...expectedAzureResources,
     timeoutMs: 120_000,
     maxResponseBytes: 96 * 1024 * 1024,
     maxBase64Bytes: 64 * 1024 * 1024,
   });
-  assertEquals(Object.hasOwn(config, "endpoint"), false);
 });
 
 Deno.test("loadWorkerAzureProviderConfig reads bounded worker limits", () => {
   assertEquals(
     loadWorkerAzureProviderConfig({
-      AZURE_API_KEY: "azure-secret",
+      ...validAzureEnv,
       AZURE_REQUEST_TIMEOUT_MS: "1000",
       AZURE_MAX_RESPONSE_BYTES: "2048",
       AZURE_MAX_OUTPUT_BYTES: "1024",
     }),
     {
-      apiKey: "azure-secret",
+      ...expectedAzureResources,
       timeoutMs: 1_000,
       maxResponseBytes: 2_048,
       maxBase64Bytes: 1_024,
@@ -732,15 +752,14 @@ Deno.test("Azure provider limits reject zero and oversized values", () => {
     assertThrows(
       () =>
         loadWorkerAzureProviderConfig({
-          AZURE_API_KEY: "secret",
+          ...validAzureEnv,
           [name]: value,
         }),
       Error,
       name,
     );
     assertThrows(
-      () =>
-        loadWorkerAzureProviderConfig({ AZURE_API_KEY: "secret", [name]: "0" }),
+      () => loadWorkerAzureProviderConfig({ ...validAzureEnv, [name]: "0" }),
       Error,
       name,
     );
@@ -751,15 +770,71 @@ Deno.test("Azure provider errors name variables without echoing API keys", () =>
   assertThrows(
     () => loadWorkerAzureProviderConfig({}),
     Error,
-    "AZURE_API_KEY",
+    "AZURE_IMAGE_ENDPOINT",
   );
   const secret = "azure-key-that-must-not-leak";
   const message = thrownMessage(() =>
     loadWorkerAzureProviderConfig({
-      AZURE_API_KEY: secret,
+      ...validAzureEnv,
+      AZURE_IMAGE_API_KEY: secret,
       AZURE_REQUEST_TIMEOUT_MS: "invalid",
     })
   );
   assertEquals(message.includes("AZURE_REQUEST_TIMEOUT_MS"), true);
   assertEquals(message.includes(secret), false);
+});
+
+Deno.test("Azure model overrides require matching endpoint and credential pairs", () => {
+  const config = loadWorkerAzureProviderConfig({
+    ...validAzureEnv,
+    AZURE_FLUX_2_PRO_ENDPOINT: "https://third-resource.services.ai.azure.com/",
+    AZURE_FLUX_2_PRO_API_KEY: "third-secret",
+  });
+  assertEquals(config.flux2Pro, {
+    baseUrl: "https://third-resource.services.ai.azure.com",
+    apiKey: "third-secret",
+  });
+  assertEquals(config.gptImage2, expectedAzureResources.gptImage2);
+  assertEquals(config.mistralOcr, expectedAzureResources.mistralOcr);
+  for (const suffix of ["ENDPOINT", "API_KEY"]) {
+    assertThrows(() =>
+      loadWorkerAzureProviderConfig({
+        ...validAzureEnv,
+        [`AZURE_FLUX_2_PRO_${suffix}`]: suffix === "ENDPOINT"
+          ? "https://third-resource.services.ai.azure.com"
+          : "third-secret",
+      })
+    );
+  }
+});
+
+Deno.test("Azure resource validation rejects unsafe or incomplete destinations without leaking input", () => {
+  for (const key of Object.keys(validAzureEnv)) {
+    assertThrows(
+      () => loadWorkerAzureProviderConfig({ ...validAzureEnv, [key]: "" }),
+      Error,
+      key,
+    );
+  }
+  for (
+    const value of [
+      "http://images-resource.services.ai.azure.com",
+      "https://images-resource.services.ai.azure.com.attacker.test",
+      "https://user:secret@images-resource.services.ai.azure.com",
+      "https://images-resource.services.ai.azure.com/api/projects/private",
+      "https://images-resource.services.ai.azure.com?key=private",
+      "https://images-resource.services.ai.azure.com#private",
+      "https://images-resource.services.ai.azure.com:8443",
+      "not-a-url-private",
+    ]
+  ) {
+    const message = thrownMessage(() =>
+      loadWorkerAzureProviderConfig({
+        ...validAzureEnv,
+        AZURE_IMAGE_ENDPOINT: value,
+      })
+    );
+    assertEquals(message.includes("AZURE_IMAGE_ENDPOINT"), true);
+    assertEquals(message.includes(value), false);
+  }
 });

@@ -7,8 +7,10 @@ Mistral OCR on Azure.
 
 The Deno/Hono API and worker, React dashboard, OAuth authentication, MCP,
 PostgreSQL usage ledger, Redis scheduling, and MinIO artifacts are implemented.
-Release and deployment templates are available; the first production release
-and deployment still require operator verification.
+Release Please prepares releases and publishes backend and web images. This
+repository contains application code, build definitions, and local development
+and test configuration. Host deployment files and credentials are managed
+outside the repository.
 
 ## Prerequisites
 
@@ -18,8 +20,7 @@ and deployment still require operator verification.
 - Redis
 - S3-compatible storage such as MinIO, Cloudflare R2, or AWS S3
 
-PostgreSQL, Redis, object storage, and observability services are expected to be
-deployed independently from the application Compose project.
+`compose.dev.yaml` provides PostgreSQL, Redis, and MinIO for local development.
 
 ## Local setup
 
@@ -60,7 +61,7 @@ The first system superadmin is granted by a one-shot operator command, never by
 email matching or an HTTP endpoint. The target user must sign in once so an
 immutable Better Auth user ID exists.
 
-Run the command with these values injected by the deployment secret mechanism:
+Run the command with these values supplied through the process environment:
 
 ```text
 DATABASE_URL                         dedicated relay_migrator login
@@ -97,7 +98,7 @@ and line coverage. Both commands write ignored LCOV reports under their local
 `coverage/` directories.
 
 Run the disposable PostgreSQL, Redis, MinIO, backend-image, and web-image gate
-without production credentials:
+with its built-in test configuration:
 
 ```sh
 deno task check:containers
@@ -105,6 +106,11 @@ deno task check:containers
 
 The container gate publishes no host ports and removes its isolated volumes on
 exit. Diagnostic logs are written to the ignored `.ci-artifacts/` directory.
+
+`deno task compile` creates the executable under `dist/`; `npm run build` in
+`apps/web` creates `apps/web/dist/`. Both directories contain generated output
+and are ignored by Git. Local editor settings in `.zed/` and design-tool state
+in `.superdesign/` are also ignored.
 
 ## Repository structure
 

@@ -72,7 +72,7 @@ function fakeAuth(options: FakeAuthOptions = {}): McpHttpAuth {
     sub: USER_ID,
     client_id: "client_test",
     scope: scopes.join(" "),
-    "https://relay.zaftech.co/claims/workspace_id": WORKSPACE_ID,
+    "urn:relay:workspace_id": WORKSPACE_ID,
   };
   return {
     mcpResource: MCP_RESOURCE,

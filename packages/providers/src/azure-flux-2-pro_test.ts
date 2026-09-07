@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  AZURE_FLUX_2_PRO_ENDPOINT,
+  AZURE_FLUX_2_PRO_PATH,
   AzureFlux2ProClient,
   type AzureFlux2ProRequest,
 } from "./index.ts";
@@ -14,6 +14,7 @@ import {
   pngBytes,
   requestBody,
   TEST_API_KEY,
+  TEST_AZURE_BASE_URL,
   webpBytes,
 } from "./test_helpers.ts";
 
@@ -21,9 +22,10 @@ Deno.test("FLUX.2 Pro sends fixed model/n and numbered input image fields", asyn
   const first = imageDataUrl("image/png", pngBytes(64, 64));
   const second = imageDataUrl("image/webp", webpBytes(64, 64));
   const client = new AzureFlux2ProClient({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch((input, init) => {
-      assert.equal(input, AZURE_FLUX_2_PRO_ENDPOINT);
+      assert.equal(input, TEST_AZURE_BASE_URL + AZURE_FLUX_2_PRO_PATH);
       assertJsonRequest(init);
       assert.deepEqual(requestBody(init), {
         model: "FLUX.2-pro",
@@ -64,6 +66,7 @@ Deno.test("FLUX.2 Pro sends fixed model/n and numbered input image fields", asyn
 Deno.test("FLUX.2 Pro maps all eight trusted data URLs", async () => {
   const dataUrl = imageDataUrl("image/png", pngBytes(64, 64));
   const client = new AzureFlux2ProClient({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch((_input, init) => {
       const body = requestBody(init) as Record<string, unknown>;
@@ -92,6 +95,7 @@ Deno.test("FLUX.2 Pro rejects unsafe URLs and capability violations", async () =
   let fetchCalls = 0;
   const dataUrl = imageDataUrl("image/png", pngBytes(64, 64));
   const client = new AzureFlux2ProClient({
+    baseUrl: TEST_AZURE_BASE_URL,
     apiKey: TEST_API_KEY,
     fetch: asFetch(() => {
       fetchCalls += 1;

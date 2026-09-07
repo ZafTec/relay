@@ -24,7 +24,7 @@ readers reject embedded credentials, query strings, and non-HTTPS in
 production.
 
 **Conclusion:** no exploitable exposure path was found. `S3_SECRET_ACCESS_KEY`
-and `AZURE_API_KEY` are held as plain in-memory strings, and
+and the Azure resource API keys are held as plain in-memory strings, and
 `SHARE_TOKEN_KEYS` secrets are decoded to a plain `Uint8Array` — this is
 necessary to actually sign requests/calls and is not evidence of a defeat on
 its own. This most likely reflects a heuristic scanner flagging the presence

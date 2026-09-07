@@ -52,6 +52,11 @@ create an environment named exactly **release**:
   image repositories and no Delete permission.
 - Set environment variable `DOCKERHUB_USERNAME`, or use an environment secret
   of the same name.
+- Optional public browser telemetry settings: set `VITE_APP_ORIGIN` to the exact
+  application origin (without a trailing slash) and `VITE_FARO_COLLECTOR_URL` to
+  the HTTPS collector URL. The web build embeds these public values; never put
+  secrets in them. Telemetry is disabled when either is unset or the browser's
+  origin does not match. Local builds leave both unset by default.
 
 Repository credentials already work as inherited fallbacks, but the release
 environment is the documented boundary for publication credentials. Secret values
@@ -97,12 +102,14 @@ patch version, including during `0.x`. A failed setup run can be rerun from
 [Actions](https://github.com/ZafTec/relay/actions) after correcting configuration;
 do not create a manual version tag to work around it.
 
-## Production deployment is a separate step
+A rerun uses the original tagged commit and workflow. If the failure requires a
+code or workflow fix, merge that fix through a PR and let Release Please prepare
+the next version. Keep the failed release as an unpublished draft and preserve
+its tag. Changing `main` does not repair a rerun of an older tag.
+
+## Publication boundary
 
 Release Please prepares versions and release notes. The image workflow publishes
-verified artifacts. Neither provisions or deploys a VPS. Deploy the paired image
-digests in the resulting `release-manifest.json` using the existing deployment
-runbook, after host configuration, production secrets, migration/backup checks,
-OAuth callbacks, and operational readiness have been verified. See the approved
-[release/versioning policy](versioning.md) and
-[deployment handoff](implementation-handoff/09-ci-release-deployment.md).
+verified artifacts and a manifest identifying the paired image digests. Host
+deployment files, credentials, dashboards, and operator procedures are managed
+outside this repository. See the [release/versioning policy](versioning.md).

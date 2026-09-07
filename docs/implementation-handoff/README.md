@@ -8,8 +8,8 @@ Audience: implementation orchestrator and independent worktree agents
 ## Purpose
 
 This directory is the implementation source for the next engineering agent. It
-turns Relay's product architecture, the v3 design export, and the approved VPS
-constraints into dependency-ordered work with parallel lanes and test gates.
+turns Relay's product architecture, the v3 design export, and the runtime
+contracts into dependency-ordered work with parallel lanes and test gates.
 
 The implementation agent must not interpret this as permission to skip product,
 security, migration, or design gates. Where this handoff says **spike**, the
@@ -114,8 +114,7 @@ Known blockers at research time:
 | [`06-http-mcp-events.md`](06-http-mcp-events.md)                     | HTTP contracts, MCP TypeScript SDK v2, OAuth resource protection, idempotency, and SSE        |
 | [`07-observability-audit.md`](07-observability-audit.md)             | Deno OTel, Alloy pipelines, metrics/logs/traces, audit, dashboards, and alerts                |
 | [`08-web-v3.md`](08-web-v3.md)                                       | Raw v3 cleanup, React decomposition, parallel UI routes, accessibility, and visual tests      |
-| [`09-ci-release-deployment.md`](09-ci-release-deployment.md)         | Protected main, CI, Release Please, Docker Hub, Compose, Nginx, migration, and rollback       |
-| [`10-vps-remediation.md`](10-vps-remediation.md)                     | Concrete remediation for the supplied VPS Redis/PostgreSQL/Grafana/Nginx stack                |
+| [`09-ci-release.md`](09-ci-release.md)         | Protected main, CI, Release Please, and paired image publication       |
 | [`11-test-matrix.md`](11-test-matrix.md)                             | Cross-phase unit, integration, failure-injection, E2E, security, and operations gates         |
 | [`12-blockers-and-inputs.md`](12-blockers-and-inputs.md)             | Decisions and live configuration still required before specific phases                        |
 

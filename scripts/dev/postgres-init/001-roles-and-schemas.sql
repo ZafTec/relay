@@ -1,6 +1,5 @@
--- Local development role/schema model, mirroring production
--- (docs/implementation-handoff/02-runtime-database.md,
--- docs/implementation-handoff/10-vps-remediation.md). Runs once against a
+-- Local development role/schema model
+-- (docs/implementation-handoff/02-runtime-database.md). Runs once against a
 -- fresh `relay` database via docker-entrypoint-initdb.d. Passwords here are
 -- dev-only defaults matching compose.dev.yaml and are never valid outside
 -- this disposable local stack.

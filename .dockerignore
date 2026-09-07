@@ -2,6 +2,8 @@
 .github
 .superdesign
 .zed
+.ci-artifacts
+vps_context
 .env
 .env.*
 !.env.example

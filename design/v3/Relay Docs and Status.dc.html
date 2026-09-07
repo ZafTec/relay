@@ -97,7 +97,7 @@
                 <button type="button" style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92; background: transparent; border: 1px solid #2E3830; padding: 3px 8px; cursor: pointer;">COPY</button>
               </div>
             </div>
-            <pre style="margin: 0; padding: 18px 16px; font-family: var(--font-mono); font-size: 13px; line-height: 1.7; color: #B4C0B6; overflow-x: auto;"><code>curl https://relay.zaftech.co/api/v1/tools/image.generate \
+            <pre style="margin: 0; padding: 18px 16px; font-family: var(--font-mono); font-size: 13px; line-height: 1.7; color: #B4C0B6; overflow-x: auto;"><code>curl https://relay.example.test/api/v1/tools/image.generate \
   -H <span style="color: #F5F4ED;">"Authorization: Bearer $RELAY_TOKEN"</span>
 
 <span style="color: #63C8BC;">200</span> { <span style="color: #F5F4ED;">"version"</span>: 3, <span style="color: #F5F4ED;">"meter_unit"</span>: "per_output",
@@ -113,7 +113,7 @@
               <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92;">POST /api/v1/runs</span>
               <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: #8E9A92; border: 1px solid #2E3830; padding: 3px 8px;">CURL &amp; MCP</span>
             </div>
-            <pre style="margin: 0; padding: 18px 16px; font-family: var(--font-mono); font-size: 13px; line-height: 1.7; color: #B4C0B6; overflow-x: auto;"><code>curl -X POST https://relay.zaftech.co/api/v1/runs \
+            <pre style="margin: 0; padding: 18px 16px; font-family: var(--font-mono); font-size: 13px; line-height: 1.7; color: #B4C0B6; overflow-x: auto;"><code>curl -X POST https://relay.example.test/api/v1/runs \
   -H <span style="color: #F5F4ED;">"Authorization: Bearer $RELAY_TOKEN"</span> \
   -d <span style="color: #F5F4ED;">'{"tool":"image.generate","input":{"prompt":"a lighthouse at dusk"}}'</span>
 
@@ -125,7 +125,7 @@
           <h2 style="margin: 0 0 12px; font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #1F776E;">03 · Check the run</h2>
           <p style="margin: 0 0 18px; font-size: 17px; line-height: 1.65; color: #141A16; max-width: 62ch;">Poll from an MCP client, or read the SSE stream from the dashboard. Deterministic failures never retry automatically.</p>
           <div style="border: 1px solid #D8D5C8; background: #141A16; margin-bottom: 28px;">
-            <pre style="margin: 0; padding: 18px 16px; font-family: var(--font-mono); font-size: 13px; line-height: 1.7; color: #B4C0B6; overflow-x: auto;"><code>curl https://relay.zaftech.co/api/v1/runs/run_9f21c4 \
+            <pre style="margin: 0; padding: 18px 16px; font-family: var(--font-mono); font-size: 13px; line-height: 1.7; color: #B4C0B6; overflow-x: auto;"><code>curl https://relay.example.test/api/v1/runs/run_9f21c4 \
   -H <span style="color: #F5F4ED;">"Authorization: Bearer $RELAY_TOKEN"</span>
 
 <span style="color: #63C8BC;">200</span> { <span style="color: #F5F4ED;">"state"</span>: "SUCCEEDED", <span style="color: #F5F4ED;">"output_set"</span>: ["art_9f21c4"] }

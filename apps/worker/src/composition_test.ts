@@ -13,6 +13,7 @@ import type {
 } from "@relay/config";
 import type { DatabasePool } from "@relay/database";
 import type { S3CompatibleStorage } from "@relay/storage";
+import type { AzureProviderClientOptions } from "@relay/providers";
 import type { ArtifactMaintenanceOptions } from "./artifact-maintenance.ts";
 import {
   type MvpWorkerCompositionDependencies,
@@ -67,7 +68,18 @@ const LIFECYCLE: ArtifactLifecycleConfig = {
 };
 
 const AZURE_CONFIG: AzureProviderConfig = {
-  apiKey: "azure-test-secret",
+  gptImage2: {
+    baseUrl: "https://images-resource.services.ai.azure.com",
+    apiKey: "image-test-secret",
+  },
+  flux2Pro: {
+    baseUrl: "https://flux-resource.services.ai.azure.com",
+    apiKey: "flux-test-secret",
+  },
+  mistralOcr: {
+    baseUrl: "https://ocr-resource.services.ai.azure.com",
+    apiKey: "ocr-test-secret",
+  },
   timeoutMs: 1_000,
   maxResponseBytes: 2_000_000,
   maxBase64Bytes: 1_000_000,
@@ -75,6 +87,7 @@ const AZURE_CONFIG: AzureProviderConfig = {
 
 async function captureComposedWorkerEnvironment(
   runtimeOptions: Parameters<typeof startMvpWorker>[0],
+  resources = new Map<string, AzureProviderClientOptions>(),
 ): Promise<string | undefined> {
   const pool = {
     end: () => Promise.resolve(),
@@ -101,15 +114,22 @@ async function captureComposedWorkerEnvironment(
     loadWorkerAzureProviderConfig: () => AZURE_CONFIG,
     createDatabasePool: () => pool,
     createS3ObjectStorage: () => storage,
-    createAzureGptImage2Client: createProviderClient,
-    createAzureFlux2ProClient:
-      createProviderClient as unknown as MvpWorkerCompositionDependencies[
-        "createAzureFlux2ProClient"
-      ],
-    createAzureMistralOcrClient:
-      createProviderClient as unknown as MvpWorkerCompositionDependencies[
-        "createAzureMistralOcrClient"
-      ],
+    createAzureGptImage2Client(options) {
+      resources.set("gptImage2", options);
+      return createProviderClient(options);
+    },
+    createAzureFlux2ProClient: ((options: AzureProviderClientOptions) => {
+      resources.set("flux2Pro", options);
+      return createProviderClient(options);
+    }) as unknown as MvpWorkerCompositionDependencies[
+      "createAzureFlux2ProClient"
+    ],
+    createAzureMistralOcrClient: ((options: AzureProviderClientOptions) => {
+      resources.set("mistralOcr", options);
+      return createProviderClient(options);
+    }) as unknown as MvpWorkerCompositionDependencies[
+      "createAzureMistralOcrClient"
+    ],
     createArtifactMaintenanceLoop: createMaintenanceLoop,
     startWorker(_config, options) {
       environment = options?.environment;
@@ -126,6 +146,18 @@ Deno.test("MVP worker forwards its deployment environment unless overridden", as
     await captureComposedWorkerEnvironment({ environment: "runtime-override" }),
     "runtime-override",
   );
+});
+
+Deno.test("MVP worker wires each model to its own resource and credential pair", async () => {
+  const resources = new Map<string, AzureProviderClientOptions>();
+  await captureComposedWorkerEnvironment({}, resources);
+  for (const name of ["gptImage2", "flux2Pro", "mistralOcr"] as const) {
+    const options = resources.get(name);
+    assertExists(options);
+    assertEquals(options.baseUrl, AZURE_CONFIG[name].baseUrl);
+    assertEquals(options.apiKey, AZURE_CONFIG[name].apiKey);
+    assertEquals(options.timeoutMs, AZURE_CONFIG.timeoutMs);
+  }
 });
 
 Deno.test("MVP worker composes without loading API-only secrets", async () => {
@@ -315,7 +347,7 @@ Deno.test("MVP worker fails before resources when worker-only config is missing"
         loadWorkerS3Config: () => S3_CONFIG,
         loadArtifactLifecycleConfig: () => LIFECYCLE,
         loadWorkerAzureProviderConfig() {
-          throw new Error("AZURE_API_KEY is required");
+          throw new Error("AZURE_IMAGE_API_KEY is required");
         },
         createDatabasePool() {
           poolCreated = true;
@@ -327,7 +359,7 @@ Deno.test("MVP worker fails before resources when worker-only config is missing"
         },
       }),
     Error,
-    "AZURE_API_KEY",
+    "AZURE_IMAGE_API_KEY",
   );
   assertEquals(poolCreated, false);
   assertEquals(storageCreated, false);

@@ -184,7 +184,6 @@ export async function startMvpWorker(
       cleanupLeaseSeconds: lifecycle.cleanupLeaseSeconds,
     });
     const providerOptions = {
-      apiKey: azure.apiKey,
       fetch: globalThis.fetch,
       timeoutMs: azure.timeoutMs,
       maxResponseBytes: azure.maxResponseBytes,
@@ -196,11 +195,14 @@ export async function startMvpWorker(
         storage: objectStorage,
         artifactService: artifacts,
         gptImage2Client: dependencies.createAzureGptImage2Client(
-          providerOptions,
+          { ...providerOptions, ...azure.gptImage2 },
         ),
-        flux2ProClient: dependencies.createAzureFlux2ProClient(providerOptions),
+        flux2ProClient: dependencies.createAzureFlux2ProClient({
+          ...providerOptions,
+          ...azure.flux2Pro,
+        }),
         mistralOcrClient: dependencies.createAzureMistralOcrClient(
-          providerOptions,
+          { ...providerOptions, ...azure.mistralOcr },
         ),
       }),
     );

@@ -25,13 +25,10 @@ docs/brand.md
 docs/changelog.md
 docs/legal.md
 docs/versioning.md
-.superdesign/design-system.md
-.superdesign/init/routes.md
-.superdesign/init/theme.md
+design/v3/HANDOFF.md
 ```
 
-Also inspect the current public ZafTech site at <https://zaftech.co> and its
-product index at <https://zaftech.co/products> to understand the parent
+Use the checked-in ZafTech design references to understand the parent
 company's voice and visual lineage.
 
 Sample ZafTech, but do not clone it. Relay should feel like a mature ZafTech

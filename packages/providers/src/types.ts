@@ -1,6 +1,3 @@
-export const AZURE_AI_BASE_URL =
-  "https://munis-4051-resource.services.ai.azure.com" as const;
-
 export type AzureProviderId =
   | "azure-gpt-image-2"
   | "azure-flux-2-pro"
@@ -9,6 +6,7 @@ export type AzureProviderId =
 export type FetchLike = typeof globalThis.fetch;
 
 export interface AzureProviderClientOptions {
+  readonly baseUrl: string;
   readonly apiKey: string;
   readonly fetch: FetchLike;
   readonly timeoutMs?: number;
