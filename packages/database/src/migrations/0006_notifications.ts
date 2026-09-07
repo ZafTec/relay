@@ -29,6 +29,11 @@ CREATE TABLE relay.notification_deliveries (
 CREATE INDEX notification_deliveries_pending ON relay.notification_deliveries(available_at,id) WHERE status IN ('pending','retrying','sending');
 CREATE INDEX notification_deliveries_owner ON relay.notification_deliveries(workspace_id,user_id,id DESC);
 
+REVOKE ALL ON TABLE relay.notification_preferences, relay.notification_deliveries FROM PUBLIC, relay_app;
+REVOKE ALL ON SEQUENCE relay.notification_deliveries_id_seq FROM PUBLIC, relay_app;
+GRANT SELECT, INSERT, UPDATE ON TABLE relay.notification_preferences TO relay_app;
+GRANT SELECT, UPDATE ON TABLE relay.notification_deliveries TO relay_app;
+
 CREATE FUNCTION relay.enqueue_run_notification() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $body$
 BEGIN
@@ -51,7 +56,7 @@ CREATE TRIGGER enqueue_run_notification AFTER UPDATE OF status ON relay.tool_run
 export const migration: Migration = {
   id: "0006_notifications",
   checksumSha256:
-    "f6db90b24d74cc6deb5dbbc314a3db5d9eb1325bc35880142dde9b60212a9f9c",
+    "57b7dacc158b9977a50a0d6e547a1f7cfd8031c17cf3661678936196d13b1582",
   transactional: true,
   up: async (db) => {
     await sql.raw(CANONICAL_SQL).execute(db);
