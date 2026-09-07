@@ -3,6 +3,7 @@ set -eu
 
 command_name="${1:-}"
 expected_service=""
+relay_binary="/app/relay"
 case "$command_name" in
   api)
     expected_service="relay-api"
@@ -14,14 +15,15 @@ case "$command_name" in
     # One-shot admin commands reuse the API image and may inherit its service
     # label from Compose. The explicit command name is authoritative here.
     expected_service="relay-admin"
-    OTEL_SERVICE_NAME=""
+    export OTEL_DENO=false
     ;;
   migrate | healthcheck)
-    expected_service="${OTEL_SERVICE_NAME:-}"
+    export OTEL_DENO=false
     ;;
 esac
 
 if [ "${OTEL_DENO:-false}" = "true" ]; then
+  relay_binary="/app/relay-otel"
   if [ -z "$expected_service" ]; then
     echo "OTEL_SERVICE_NAME is required for this command" >&2
     exit 78
@@ -40,4 +42,4 @@ if [ "${OTEL_DENO:-false}" = "true" ]; then
   export OTEL_RESOURCE_ATTRIBUTES="deployment.environment.name=${DEPLOYMENT_ENVIRONMENT_NAME:-production},relay.build.revision=${GIT_SHA:-unknown},service.instance.id=${service_instance_id},service.namespace=relay,service.version=${APP_VERSION:-development}"
 fi
 
-exec /app/relay "$@"
+exec "$relay_binary" "$@"

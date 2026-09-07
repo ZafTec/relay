@@ -61,14 +61,16 @@ const SCOPE_COPY: Record<string, Omit<ScopeDescription, "scope">> = {
     title: "Keep the connection available",
     description: "Refresh access without asking you to repeat this browser flow each time.",
   },
-  "mcp:tools": {
-    title: "Use workspace tools",
-    description: "Discover and invoke the tools available to the selected workspace.",
-  },
-  "mcp:read": {
-    title: "Read workspace results",
-    description: "Inspect authorized runs and artifact metadata in the selected workspace.",
-  },
+  "tools:read": { title: "Browse workspace tools", description: "List the tools available in this workspace and read their options." },
+  "tools:execute": { title: "Run workspace tools", description: "Generate images, edit files and run OCR within your workspace's usage allowances." },
+  "runs:read": { title: "Read runs and results", description: "Read run inputs, status and output details in this workspace." },
+  "runs:cancel": { title: "Cancel runs", description: "Request cancellation of a workspace run." },
+  "artifacts:read": { title: "Read and download files", description: "Read stored file details and create temporary download links." },
+  "artifacts:write": { title: "Upload files", description: "Save file content and new versions in workspace storage." },
+  "artifacts:share": { title: "Share stored files", description: "Create or revoke share links. Permanent links can let anyone who has the link download a file." },
+  "usage:read": { title: "Read usage", description: "Read usage records for this workspace." },
+  "notifications:read": { title: "Read email preferences", description: "Read your notification preferences and recent delivery status." },
+  "notifications:write": { title: "Change email preferences", description: "Enable or disable emails to your verified address when your runs complete or fail." },
 };
 
 export function describeScope(scope: string): ScopeDescription {

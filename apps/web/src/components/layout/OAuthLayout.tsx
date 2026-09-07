@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { RelayBrand } from "../brand/RelayBrand";
+import { LegalLinks } from "./LegalLinks";
 
 interface OAuthLayoutProps {
   children: ReactNode;
@@ -19,6 +20,7 @@ export function OAuthLayout({ children }: OAuthLayoutProps) {
       <footer className="oauth-shell__footer">
         <span>RLY-01 / MCP OAUTH</span>
         <span>Only approve clients you recognize.</span>
+        <LegalLinks />
       </footer>
     </div>
   );

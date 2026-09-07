@@ -30,6 +30,12 @@ export const PRODUCTION_TOOL_KEYS = [
   "image.generate.gpt-image-2",
   "image.generate.flux-2-pro",
   "document.ocr",
+  "image.edit.gpt-image-2",
+  "image.edit.flux-2-pro",
+  "image.generate.mai-image-2.5",
+  "image.edit.mai-image-2.5",
+  "image.generate.mai-image-2.5-flash",
+  "image.edit.mai-image-2.5-flash",
 ] as const;
 
 export type ProductionToolKey = typeof PRODUCTION_TOOL_KEYS[number];
@@ -391,18 +397,18 @@ function useArtifactCatalog(
 
 function artifactChoices(
   state: ArtifactCatalogState,
-  mode: "flux" | "ocr",
+  mode: "flux" | "ocr" | "gpt" | "mai",
 ): readonly ArtifactChoice[] {
   if (state.kind !== "ready") return [];
-  const mimeTypes = mode === "flux" ? FLUX_MIME_TYPES : OCR_MIME_TYPES;
+  const mimeTypes = mode === "ocr" ? OCR_MIME_TYPES : mode === "mai" ? new Set(["image/png", "image/jpeg"]) : FLUX_MIME_TYPES;
   return state.items.flatMap((artifact): readonly ArtifactChoice[] => {
     const version = artifact.currentVersion;
     if (version === null || !mimeTypes.has(version.mimeType)) return [];
     let disabledReason: string | null = null;
     if (!VERIFIED_ARTIFACT_STATUSES.has(version.verificationStatus)) {
       disabledReason = "Current version is not verified.";
-    } else if (mode === "flux" && version.sizeBytes > FLUX_MAX_SOURCE_BYTES) {
-      disabledReason = "Current version exceeds the 64 MiB FLUX input limit.";
+    } else if (mode !== "ocr" && version.sizeBytes > FLUX_MAX_SOURCE_BYTES) {
+      disabledReason = "Current version exceeds the 64 MiB image input limit.";
     } else if (mode === "ocr" && version.sizeBytes > OCR_MAX_SOURCE_BYTES) {
       disabledReason = "Current version exceeds the 30,000,000-byte OCR source limit.";
     }
@@ -620,6 +626,8 @@ interface GptErrors {
   readonly size?: string;
   readonly outputCompression?: string;
   readonly background?: string;
+  readonly artifacts?: string;
+  readonly mask?: string;
 }
 
 function validateGptSize(size: string): string | undefined {
@@ -650,8 +658,31 @@ interface ComposerFormProps {
   readonly onCreate: (input: JsonObject) => void;
 }
 
-function GptImageComposer({ disabled, submitting, onCreate }: ComposerFormProps) {
+function GptImageComposer({ disabled, submitting, onCreate, edit = false, artifactsAdapter, onAuthExpired }: ComposerFormProps & {
+  readonly edit?: boolean;
+  readonly artifactsAdapter: ToolArtifactsAdapter;
+  readonly onAuthExpired: () => void;
+}) {
   const id = useId();
+  const catalog = useArtifactCatalog(artifactsAdapter, edit, onAuthExpired);
+  const choices = useMemo(() => artifactChoices(catalog.state, "gpt"), [catalog.state]);
+  const [references, setReferences] = useState<readonly string[]>([]);
+  const [mask, setMask] = useState("");
+  const [fidelity, setFidelity] = useState("");
+  const [uploadTarget, setUploadTarget] = useState<"reference" | "mask" | null>(null);
+  function changeReference(value: string, selected: boolean) {
+    setReferences((current) => selected ? current.includes(value) || current.length >= 16 ? current : [...current, value] : current.filter((id) => id !== value));
+    setErrors((current) => ({ ...current, artifacts: undefined }));
+  }
+  function completedUpload(artifactId: string, artifactVersionId?: string) {
+    const target = uploadTarget;
+    void catalog.resolveCompletedUpload(artifactId, artifactVersionId).then((value) => {
+      if (value !== null) {
+        if (target === "mask") setMask(value);
+        else changeReference(value, true);
+      }
+    });
+  }
   const [prompt, setPrompt] = useState("");
   const [count, setCount] = useState("1");
   const [size, setSize] = useState("auto");
@@ -670,6 +701,8 @@ function GptImageComposer({ disabled, submitting, onCreate }: ComposerFormProps)
       ? integerText(outputCompression, "Output compression", 0, 100, true)
       : {};
     const nextErrors: GptErrors = {
+      artifacts: edit && references.length === 0 ? "Select at least one reference image." : undefined,
+      mask: edit && mask && choices.find((choice) => choice.version.id === mask)?.version.mimeType !== "image/png" ? "Select a verified PNG mask." : undefined,
       prompt: promptError(prompt),
       n: countResult.error,
       size: validateGptSize(size),
@@ -686,6 +719,7 @@ function GptImageComposer({ disabled, submitting, onCreate }: ComposerFormProps)
 
     onCreate({
       prompt,
+      ...(edit ? { inputArtifactVersionIds: [...references], ...(mask ? { maskArtifactVersionId: mask } : {}), ...(fidelity ? { inputFidelity: fidelity } : {}) } : {}),
       n: countResult.value ?? 1,
       size,
       ...(quality.length === 0 ? {} : { quality }),
@@ -699,9 +733,17 @@ function GptImageComposer({ disabled, submitting, onCreate }: ComposerFormProps)
   }
 
   return (
-    <form className="tool-composer-form" noValidate onSubmit={submit}>
+    <><form className="tool-composer-form" noValidate onSubmit={submit}>
       <fieldset disabled={disabled}>
         <legend className="sr-only">GPT Image 2 run configuration</legend>
+        {edit ? <>
+          <ArtifactPicker catalog={catalog} choices={choices} disabled={disabled} error={errors.artifacts} hint="Required. Select up to 16 reference images. The first selection is the primary image." label="Reference images" maxSelected={16} multiple onChange={changeReference} onUpload={() => setUploadTarget("reference")} selectedVersionIds={references} />
+          <details className="tool-option-group tool-advanced"><summary>Mask and input fidelity <span>Optional</span></summary>
+            <ArtifactPicker catalog={catalog} choices={choices.filter((choice) => choice.version.mimeType === "image/png")} disabled={disabled} error={errors.mask} hint="Optional PNG with the same dimensions as the first reference. Transparent regions mark the area to edit." label="Edit mask" maxSelected={1} multiple={false} onChange={(value, selected) => setMask(selected ? value : "")} onUpload={() => setUploadTarget("mask")} selectedVersionIds={mask ? [mask] : []} />
+            {mask ? <Button variant="quiet" onClick={() => setMask("")}>Remove mask</Button> : null}
+            <div className="tool-field"><label htmlFor={`${id}-fidelity`}>Input fidelity</label><select className="tool-composer-control" id={`${id}-fidelity`} value={fidelity} onChange={(event) => setFidelity(event.target.value)}><option value="">Provider default</option><option value="low">Low</option><option value="high">High</option></select></div>
+          </details>
+        </> : null}
         <div className="tool-field tool-field--wide">
           <label htmlFor={`${id}-prompt`}>Prompt</label>
           <textarea
@@ -865,6 +907,8 @@ function GptImageComposer({ disabled, submitting, onCreate }: ComposerFormProps)
         </Button>
       </div>
     </form>
+    {uploadTarget ? <ArtifactUploadDialog adapter={artifactsAdapter} onAuthExpired={onAuthExpired} onClose={() => setUploadTarget(null)} onCompleted={completedUpload} /> : null}
+    </>
   );
 }
 
@@ -878,12 +922,14 @@ interface FluxErrors {
 }
 
 function FluxComposer({
+  edit = false,
   artifactsAdapter,
   disabled,
   submitting,
   onAuthExpired,
   onCreate,
 }: ComposerFormProps & {
+  readonly edit?: boolean;
   readonly artifactsAdapter: ToolArtifactsAdapter;
   readonly onAuthExpired: () => void;
 }) {
@@ -938,7 +984,7 @@ function FluxComposer({
       : undefined;
     const nextErrors: FluxErrors = {
       prompt: promptError(prompt),
-      artifacts: selectedVersionIds.length > FLUX_MAX_INPUTS
+      artifacts: edit && selectedVersionIds.length === 0 ? "Select at least one reference image." : selectedVersionIds.length > FLUX_MAX_INPUTS
         ? "Select no more than eight current artifact versions."
         : selectedBytes > FLUX_MAX_SOURCE_BYTES
           ? "Selected artifact versions exceed the 64 MiB combined input limit."
@@ -1010,7 +1056,7 @@ function FluxComposer({
             choices={choices}
             disabled={disabled}
             error={errors.artifacts}
-            hint="Optional. Select up to eight verified current PNG, JPEG, or WebP versions."
+            hint={`${edit ? "Required." : "Optional."} Select up to eight verified current PNG, JPEG, or WebP versions.`}
             label="Input artifact versions"
             maxSelected={FLUX_MAX_INPUTS}
             multiple
@@ -1145,6 +1191,53 @@ function FluxComposer({
         : null}
     </>
   );
+}
+
+function MaiImageComposer({ edit, disabled, submitting, onCreate, artifactsAdapter, onAuthExpired }: ComposerFormProps & {
+  readonly edit: boolean;
+  readonly artifactsAdapter: ToolArtifactsAdapter;
+  readonly onAuthExpired: () => void;
+}) {
+  const id = useId();
+  const catalog = useArtifactCatalog(artifactsAdapter, edit, onAuthExpired);
+  const choices = useMemo(() => artifactChoices(catalog.state, "mai"), [catalog.state]);
+  const [prompt, setPrompt] = useState("");
+  const [source, setSource] = useState("");
+  const [width, setWidth] = useState("1024");
+  const [height, setHeight] = useState("1024");
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [errors, setErrors] = useState<{ prompt?: string; source?: string; width?: string; height?: string; dimensions?: string }>({});
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (disabled) return;
+    const parsedWidth = integerText(width, "Width", 768, 1365, true);
+    const parsedHeight = integerText(height, "Height", 768, 1365, true);
+    const next = {
+      prompt: promptError(prompt),
+      source: edit && !source ? "Select a source image." : undefined,
+      ...(!edit ? { width: parsedWidth.error, height: parsedHeight.error, dimensions: (parsedWidth.value ?? 0) * (parsedHeight.value ?? 0) > 1048576 ? "Width × height must not exceed 1,048,576 pixels." : undefined } : {}),
+    };
+    setErrors(next);
+    if (Object.values(next).some(Boolean)) { focusFirstInvalid(event.currentTarget); return; }
+    onCreate({ prompt, ...(edit ? { sourceArtifactVersionId: source } : { width: parsedWidth.value!, height: parsedHeight.value! }) });
+  }
+  function completedUpload(artifactId: string, artifactVersionId?: string) {
+    void catalog.resolveCompletedUpload(artifactId, artifactVersionId).then((value) => { if (value !== null) setSource(value); });
+  }
+  return <>
+    <form className="tool-composer-form" noValidate onSubmit={submit}>
+      <fieldset disabled={disabled}><legend className="sr-only">MAI Image run configuration</legend>
+        {edit ? <ArtifactPicker catalog={catalog} choices={choices} disabled={disabled} error={errors.source} hint="Required. Select one verified PNG or JPEG image to edit." label="Source image" maxSelected={1} multiple={false} onChange={(value, selected) => { setSource(selected ? value : ""); setErrors((current) => ({ ...current, source: undefined })); }} onUpload={() => setUploadOpen(true)} selectedVersionIds={source ? [source] : []} /> : null}
+        <div className="tool-field tool-field--wide"><label htmlFor={`${id}-prompt`}>{edit ? "Edit instruction" : "Prompt"}</label><textarea className="tool-composer-control tool-composer-control--textarea" id={`${id}-prompt`} value={prompt} aria-invalid={errors.prompt ? true : undefined} aria-describedby={errors.prompt ? `${id}-prompt-error` : undefined} placeholder={edit ? "Describe what should change and what should stay the same…" : "Describe the image you want to create…"} onChange={(event) => setPrompt(event.target.value)} /><FieldError id={`${id}-prompt-error`} message={errors.prompt} /></div>
+        {!edit ? <>
+          <div className="tool-form-grid tool-form-grid--two">{([['Width', width, setWidth, errors.width], ['Height', height, setHeight, errors.height]] as const).map(([label, value, update, error]) => <div className="tool-field" key={label}><label htmlFor={`${id}-${label}`}>{label}</label><input className="tool-composer-control" id={`${id}-${label}`} type="number" min="768" max="1365" step="1" value={value} onChange={(event) => update(event.target.value)} aria-invalid={error || errors.dimensions ? true : undefined} aria-describedby={describedBy(`${id}-dimensions-hint`, error && `${id}-${label}-error`, errors.dimensions && `${id}-dimensions-error`)} /><FieldError id={`${id}-${label}-error`} message={error} /></div>)}</div>
+          <p className="tool-field__hint" id={`${id}-dimensions-hint`}>Each edge: 768–1,365 pixels. Total area: up to 1,048,576 pixels.</p><FieldError id={`${id}-dimensions-error`} message={errors.dimensions} />
+        </> : null}
+        <p className="tool-field__hint">Produces one PNG image, saved to your workspace.</p>
+      </fieldset><div className="tool-composer-form__actions"><Button type="submit" disabled={disabled} pending={submitting} pendingLabel="Creating run">Create run</Button></div>
+    </form>
+    {uploadOpen ? <ArtifactUploadDialog adapter={artifactsAdapter} onAuthExpired={onAuthExpired} onClose={() => setUploadOpen(false)} onCompleted={completedUpload} /> : null}
+  </>;
 }
 
 interface OcrErrors {
@@ -1826,18 +1919,22 @@ export function ToolExecutionComposer({
         onRetry={retryExact}
       />
 
-      {tool.key === "image.generate.gpt-image-2"
+      {tool.key === "image.generate.gpt-image-2" || tool.key === "image.edit.gpt-image-2"
         ? (
           <GptImageComposer
+            edit={tool.key.startsWith("image.edit.")}
+            artifactsAdapter={artifactsAdapter}
+            onAuthExpired={onAuthExpired}
             disabled={formDisabled}
             submitting={submitting}
             onCreate={create}
           />
         )
         : null}
-      {tool.key === "image.generate.flux-2-pro"
+      {tool.key === "image.generate.flux-2-pro" || tool.key === "image.edit.flux-2-pro"
         ? (
           <FluxComposer
+            edit={tool.key.startsWith("image.edit.")}
             artifactsAdapter={artifactsAdapter}
             disabled={formDisabled}
             submitting={submitting}
@@ -1846,6 +1943,7 @@ export function ToolExecutionComposer({
           />
         )
         : null}
+      {tool.key.includes("mai-image") ? <MaiImageComposer edit={tool.key.startsWith("image.edit.")} artifactsAdapter={artifactsAdapter} disabled={formDisabled} submitting={submitting} onAuthExpired={onAuthExpired} onCreate={create} /> : null}
       {tool.key === "document.ocr"
         ? (
           <OcrComposer

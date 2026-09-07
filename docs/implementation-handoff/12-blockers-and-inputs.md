@@ -1,6 +1,12 @@
 # Blockers, risks, and required inputs
 
-Status: living implementation gate register
+Status: historical implementation gate register
+
+The original blockers below are retained as design history. For the current
+implementation and outstanding release work, see
+[implementation status](../implementation-status.md), [legal notes](../legal.md),
+and issues #10/#18/#28. Release Please, the image build, explicit allowances, and
+the initial deployment have since been implemented.
 
 ## P0 blockers before implementation waves
 

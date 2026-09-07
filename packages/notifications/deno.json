@@ -1,0 +1,4 @@
+{
+  "name": "@relay/notifications",
+  "exports": "./src/index.ts"
+}

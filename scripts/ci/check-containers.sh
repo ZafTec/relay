@@ -88,7 +88,7 @@ docker run --rm \
   "$RELAY_CI_WEB_IMAGE" \
   -ec 'test -r /usr/share/nginx/html/index.html && test ! -e /src && test ! -e /usr/share/nginx/html/src && ! find /usr/share/nginx/html -type f -name "*.map" -print -quit | grep -q .'
 
-compose up -d --wait --wait-timeout 120 postgres redis minio
+compose up -d --wait --wait-timeout 120 postgres redis minio telemetry
 compose exec -T minio mc alias set relay-ci http://127.0.0.1:9000 relay_dev_only relay_dev_only >/dev/null
 compose exec -T minio mc mb --ignore-existing relay-ci/relay-artifacts >/dev/null
 compose exec -T minio mc version enable relay-ci/relay-artifacts >/dev/null
@@ -114,6 +114,7 @@ while [ "$worker_start_attempt" -lt 60 ]; do
   sleep 1
 done
 [ "$worker_started" = "true" ]
+compose run --rm telemetry-probe
 compose stop -t 30 worker
 compose logs --no-color worker > "$CI_ARTIFACT_DIR/worker.log"
 grep -F '"event.name":"worker.stopped"' "$CI_ARTIFACT_DIR/worker.log" | grep -F '"outcome":"success"' >/dev/null

@@ -41,7 +41,7 @@ LABEL org.opencontainers.image.title="Relay Web" \
       org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.revision="${GIT_SHA}" \
       org.opencontainers.image.created="${IMAGE_CREATED}" \
-      org.opencontainers.image.licenses="UNLICENSED"
+      org.opencontainers.image.licenses="MIT"
 
 USER 101:101
 EXPOSE 8080

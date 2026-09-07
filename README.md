@@ -50,10 +50,14 @@ bucket first; `compose.dev.yaml` provides local service templates. Run
 runtime processes with the restricted `relay_app` credentials.
 
 Signing in creates a personal workspace but grants no execution allowance.
-Execution requires an explicit `tools.execute` capability and a usage grant
-for `images.generated` or `ocr.requests`. See the
+Execution requires an explicit `tools.execute` capability and a usage grant for
+`images.generated` or `ocr.requests`. See the
 [allowance policy](docs/implementation-handoff/05-domain-storage-metering.md#explicit-mvp-allowances)
 before enabling a workspace.
+
+See
+[connecting agents, image tools, uploads, and notifications](docs/mcp-and-notifications.md)
+for the OAuth client, superadmin invitation, file-sharing, and email workflows.
 
 ## Initial superadmin bootstrap
 
@@ -129,3 +133,8 @@ canonical product and architecture direction,
 [`docs/implementation-status.md`](docs/implementation-status.md) for verified
 repository progress, and [`docs/versioning.md`](docs/versioning.md) for the
 approved release-versioning policy.
+
+## License
+
+Relay is licensed under the [MIT License](LICENSE). Third-party dependencies and
+fonts retain their own licenses.

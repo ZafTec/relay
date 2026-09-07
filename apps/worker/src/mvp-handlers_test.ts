@@ -12,6 +12,9 @@ import {
   type AzureGptImage2Request,
   type AzureMistralOcrRequest,
   AzureProviderError,
+  createAzureFlux2ProClient,
+  createAzureGptImage2Client,
+  createAzureMaiImageClient,
   type GeneratedImage,
   type ImageGenerationResult,
   type OcrResult,
@@ -21,12 +24,26 @@ import type { ObjectStorage } from "@relay/storage";
 import type { RegisteredExecutionHandler } from "./handlers.ts";
 import {
   createMvpExecutionHandlers,
+  FLUX_2_PRO_EDIT_HANDLER_KEY,
   FLUX_2_PRO_HANDLER_KEY,
+  GPT_IMAGE_2_EDIT_HANDLER_KEY,
   GPT_IMAGE_2_HANDLER_KEY,
+  MAI_FLASH_EDIT_HANDLER_KEY,
+  MAI_FLASH_HANDLER_KEY,
+  MAI_IMAGE_EDIT_HANDLER_KEY,
+  MAI_IMAGE_HANDLER_KEY,
   MISTRAL_OCR_HANDLER_KEY,
   type MvpExecutionHandlerDependencies,
   type MvpMeteringOperations,
 } from "./mvp-handlers.ts";
+
+import {
+  asFetch,
+  base64,
+  pngBytes,
+  TEST_API_KEY,
+  TEST_AZURE_BASE_URL,
+} from "../../../packages/providers/src/test_helpers.ts";
 
 const NOW = new Date("2026-08-26T12:00:00.000Z");
 const WORKSPACE_ID = "workspace-test";
@@ -114,6 +131,7 @@ interface MeteringCallLog {
 interface HarnessOptions {
   readonly input: unknown;
   readonly pricingPolicyId?: string | null;
+  readonly reservationStatus?: string;
   readonly artifactFixtures?: readonly ArtifactFixture[];
   readonly failedOrdinals?: ReadonlySet<number>;
   readonly gpt?: (
@@ -348,7 +366,7 @@ function createHarness(options: HarnessOptions): Harness {
         rows: [{
           input: options.input,
           reservation_id: RESERVATION_ID,
-          reservation_status: "active",
+          reservation_status: options.reservationStatus ?? "active",
           pricing_policy_id: options.pricingPolicyId ?? null,
         }] as Row[],
         rowCount: 1,
@@ -514,9 +532,9 @@ function assertCallerOwnedTransaction(queryTexts: readonly string[]): void {
   assertEquals(controls[3].toLowerCase(), "commit");
 }
 
-Deno.test("MVP factory registers only the exact baseline handlers", () => {
+Deno.test("MVP factory registers the available execution handlers", () => {
   const handlers = createMvpExecutionHandlers(
-    {} as unknown as MvpExecutionHandlerDependencies,
+    { gptImage2Client: {} } as unknown as MvpExecutionHandlerDependencies,
   );
   assertEquals(
     handlers.map(({ key, inputSchemaVersion, handlerVersion }) => ({
@@ -537,6 +555,11 @@ Deno.test("MVP factory registers only the exact baseline handlers", () => {
       },
       {
         key: MISTRAL_OCR_HANDLER_KEY,
+        inputSchemaVersion: 1,
+        handlerVersion: "1",
+      },
+      {
+        key: FLUX_2_PRO_EDIT_HANDLER_KEY,
         inputSchemaVersion: 1,
         handlerVersion: "1",
       },
@@ -1176,3 +1199,206 @@ Deno.test("OCR rejects oversized authorized sources before storage or provider w
     "validation_rejected",
   );
 });
+
+const newImageTools = [
+  { key: MAI_IMAGE_HANDLER_KEY, model: "MAI-Image-2.5", edit: false },
+  { key: MAI_IMAGE_EDIT_HANDLER_KEY, model: "MAI-Image-2.5", edit: true },
+  { key: MAI_FLASH_HANDLER_KEY, model: "MAI-Image-2.5-Flash", edit: false },
+  { key: MAI_FLASH_EDIT_HANDLER_KEY, model: "MAI-Image-2.5-Flash", edit: true },
+  { key: GPT_IMAGE_2_EDIT_HANDLER_KEY, model: "gpt-image-2", edit: true },
+  { key: FLUX_2_PRO_EDIT_HANDLER_KEY, model: "FLUX.2-pro", edit: true },
+] as const;
+
+for (const tool of newImageTools) {
+  const inputFor = (versionId: string) => {
+    return {
+      prompt: "Private instruction",
+      ...(tool.edit
+        ? tool.model.startsWith("MAI")
+          ? { sourceArtifactVersionId: versionId }
+          : { inputArtifactVersionIds: [versionId] }
+        : { width: 1024, height: 1024 }),
+      ...(tool.model === "FLUX.2-pro" ? { outputFormat: "png" } : {}),
+    };
+  };
+  const clients = (fetch: Parameters<typeof asFetch>[0]) => {
+    const options = {
+      baseUrl: TEST_AZURE_BASE_URL,
+      apiKey: TEST_API_KEY,
+      fetch: asFetch(fetch),
+    };
+    return {
+      gptImage2Client: createAzureGptImage2Client(options),
+      flux2ProClient: createAzureFlux2ProClient(options),
+      maiImageClient: createAzureMaiImageClient(options, "MAI-Image-2.5"),
+      maiFlashClient: createAzureMaiImageClient(options, "MAI-Image-2.5-Flash"),
+    };
+  };
+  Deno.test(`${tool.key}: actual adapter stores output and charges one authorized image`, async () => {
+    const fixture = await artifactFixture(
+      501,
+      "image/png",
+      pngBytes(1024, 1024),
+    );
+    const harness = createHarness({
+      input: inputFor(fixture.row.artifact_version_id),
+      artifactFixtures: [fixture],
+      pricingPolicyId: "test-price",
+    });
+    let calls = 0;
+    const dependencies = {
+      ...harness.dependencies,
+      ...clients(async (url, init) => {
+        calls++;
+        if (tool.edit && tool.model !== "FLUX.2-pro") {
+          const form = await new Request(url, init).formData();
+          assertEquals(form.get("model"), tool.model);
+          assertEquals(form.get("prompt"), "Private instruction");
+          const source = form.get(
+            tool.model === "gpt-image-2" ? "image[]" : "image",
+          ) as File;
+          assertEquals(
+            new Uint8Array(await source.arrayBuffer()),
+            fixture.bytes,
+          );
+        } else assertEquals(JSON.parse(String(init?.body)).model, tool.model);
+        return Response.json({
+          data: [{ b64_json: base64(pngBytes(1024, 1024)) }],
+        });
+      }),
+    };
+    assertEquals(
+      await handler(dependencies, tool.key).execute(executionContext(tool.key)),
+      { kind: "succeeded" },
+    );
+    assertEquals(calls, 1);
+    assertEquals(harness.storageReads.length, tool.edit ? 1 : 0);
+    assertEquals(harness.artifactCalls.ingests.length, 1);
+    assertEquals(harness.artifactCalls.ingests[0].bytes, pngBytes(1024, 1024));
+    assertEquals(harness.meteringCalls.commits[0].actualAmount, "1");
+    assertEquals(harness.meteringCalls.releases, []);
+    assertEquals(harness.meteringCalls.costs[0].actualModelVersion, tool.model);
+    assertEquals(
+      JSON.stringify(harness.artifactCalls).includes("Private instruction"),
+      false,
+    );
+    assertCallerOwnedTransaction(harness.queryTexts);
+  });
+  Deno.test(`${tool.key}: an inactive allowance reservation blocks provider execution`, async () => {
+    const harness = createHarness({
+      input: inputFor("aver_" + "1".repeat(32)),
+      reservationStatus: "released",
+    });
+    let calls = 0;
+    const dependencies = {
+      ...harness.dependencies,
+      ...clients(() => {
+        calls++;
+        throw new Error("Must not submit");
+      }),
+    };
+    const result = await handler(dependencies, tool.key).execute(
+      executionContext(tool.key),
+    );
+    assertEquals(result.kind, "failed");
+    assertEquals(calls, 0);
+    assertEquals(harness.artifactCalls.ingests, []);
+  });
+  if (tool.edit) {
+    Deno.test(`${tool.key}: inaccessible, unverified and deleted source files never reach Azure`, async () => {
+      for (
+        const override of [
+          { workspace_id: "other" },
+          { verification_status: "pending" },
+          { artifact_deleted_at: NOW },
+          { version_purge_status: "deleted" },
+        ]
+      ) {
+        const fixture = await artifactFixture(
+          502,
+          "image/png",
+          pngBytes(1024, 1024),
+          override,
+        );
+        const harness = createHarness({
+          input: inputFor(fixture.row.artifact_version_id),
+          artifactFixtures: [fixture],
+        });
+        let calls = 0;
+        const dependencies = {
+          ...harness.dependencies,
+          ...clients(() => {
+            calls++;
+            throw new Error("Must not submit");
+          }),
+        };
+        const result = await handler(dependencies, tool.key).execute(
+          executionContext(tool.key),
+        );
+        assertEquals(result.kind, "failed");
+        assertEquals(calls, 0);
+        assertEquals(harness.storageReads, []);
+        assertEquals(
+          harness.meteringCalls.releases[0].outcome,
+          "validation_rejected",
+        );
+      }
+    });
+  }
+  Deno.test(`${tool.key}: provider failures release usage and ambiguous failures cannot retry`, async () => {
+    const fixture = await artifactFixture(
+      503,
+      "image/png",
+      pngBytes(1024, 1024),
+    );
+    for (const status of [422, 500]) {
+      const harness = createHarness({
+        input: inputFor(fixture.row.artifact_version_id),
+        artifactFixtures: [fixture],
+      });
+      const dependencies = {
+        ...harness.dependencies,
+        ...clients(() => new Response("private provider body", { status })),
+      };
+      const result = await handler(dependencies, tool.key).execute(
+        executionContext(tool.key),
+      );
+      assertEquals(result.kind, "failed");
+      if (result.kind === "failed") {
+        assertEquals(result.retryable, false);
+        assertEquals(
+          result.retryClassification,
+          status === 500 ? "submission_ambiguous" : "safety_rejection",
+        );
+      }
+      assertEquals(harness.meteringCalls.commits, []);
+      assertEquals(harness.meteringCalls.releases.length, 1);
+      assertEquals(harness.artifactCalls.ingests, []);
+    }
+  });
+  Deno.test(`${tool.key}: failed artifact storage does not charge the customer`, async () => {
+    const fixture = await artifactFixture(
+      504,
+      "image/png",
+      pngBytes(1024, 1024),
+    );
+    const harness = createHarness({
+      input: inputFor(fixture.row.artifact_version_id),
+      artifactFixtures: [fixture],
+      failedOrdinals: new Set([0]),
+    });
+    const dependencies = {
+      ...harness.dependencies,
+      ...clients(() =>
+        Response.json({ data: [{ b64_json: base64(pngBytes(1024, 1024)) }] })
+      ),
+    };
+    const result = await handler(dependencies, tool.key).execute(
+      executionContext(tool.key),
+    );
+    assertEquals(result.kind, "failed");
+    assertEquals(harness.meteringCalls.commits, []);
+    assertEquals(harness.meteringCalls.releases.length, 1);
+    assertEquals(harness.artifactCalls.failures.length, 1);
+  });
+}

@@ -195,6 +195,9 @@ async function mockAuthenticatedWorkspace(
   options: { readonly adminAccess?: boolean } = {},
 ) {
   await mockSession(page, true);
+  await page.route("**/api/v1/notifications", (route) => route.fulfill({
+    json: { notifications: { configured: false, completed: false, failed: false, deliveries: [] } },
+  }));
   await page.route("**/api/v1/admin/changelog**", async (route) => {
     if (!options.adminAccess) {
       await route.fulfill({
@@ -417,6 +420,12 @@ const productionTools = [
   { key: "image.generate.gpt-image-2", name: "GPT Image 2", category: "image", summary: "Generate images from a text prompt." },
   { key: "image.generate.flux-2-pro", name: "FLUX.2 Pro", category: "image", summary: "Generate images with optional reference images." },
   { key: "document.ocr", name: "Document OCR", category: "document", summary: "Extract text, tables, and structured data from a document." },
+  { key: "image.edit.gpt-image-2", name: "GPT Image 2 Edit", category: "image", summary: "Edit with reference images and an optional mask." },
+  { key: "image.edit.flux-2-pro", name: "FLUX.2 Pro Edit", category: "image", summary: "Edit with reference images." },
+  { key: "image.generate.mai-image-2.5", name: "MAI Image 2.5", category: "image", summary: "Generate a PNG image." },
+  { key: "image.edit.mai-image-2.5", name: "MAI Image 2.5 Edit", category: "image", summary: "Edit a PNG or JPEG image." },
+  { key: "image.generate.mai-image-2.5-flash", name: "MAI Image 2.5 Flash", category: "image", summary: "Generate a PNG image." },
+  { key: "image.edit.mai-image-2.5-flash", name: "MAI Image 2.5 Flash Edit", category: "image", summary: "Edit a PNG or JPEG image." },
 ];
 
 async function mockProductionTools(page: Page) {
@@ -444,7 +453,7 @@ async function captureReview(page: Page, name: string) {
 }
 
 test("MVP tool composers remain accessible and usable on desktop and mobile", async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await mockProductionTools(page);
   for (const width of [1440, 768, 390]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -643,7 +652,7 @@ test("product resource routes expose real contract data across required widths",
     await expect(
       page.getByRole("region", { name: "Active workspace" }).getByText("Browser workspace"),
     ).toBeVisible();
-    await expect(page.getByText("Contract defined")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Manage OAuth clients" })).toBeVisible();
     await expectNoPageOverflow(page);
   }
 
@@ -983,4 +992,67 @@ test("superadmin allowances support explicit grants, revocation and responsive h
   await page.getByRole("button", { name: "Revoke grant", exact: true }).click();
   await expect(page.getByText("Grant revoked. Recorded usage is preserved.")).toBeVisible();
   await expect(page.getByRole("row", { name: "Images Not granted 12 2 —" })).toBeVisible();
+});
+
+test("OAuth clients, superadmin invitations and notifications work across screen sizes", async ({ page }) => {
+  test.setTimeout(120_000);
+  await mockAuthenticatedWorkspace(page, { adminAccess: true });
+  let clients: Record<string, unknown>[] = [];
+  const invitationId = `sinv_${"a".repeat(32)}`;
+  const invitation = { id: invitationId, email: "colleague@example.test", expiresAt: "2030-01-01T00:00:00Z" };
+  let invitations: typeof invitation[] = [];
+  let notifications = { configured: true, completed: false, failed: false, deliveries: [] };
+  await page.route("**/api/auth/oauth2/**", async (route) => {
+    if (route.request().url().endsWith("/get-clients")) return route.fulfill({ json: clients });
+    if (route.request().url().endsWith("/create-client")) {
+      const client = { ...route.request().postDataJSON(), client_id: "browser-fixture-client" };
+      clients = [client];
+      return route.fulfill({ status: 201, json: { ...client, client_secret: "browser-fixture-secret" } });
+    }
+    return route.fulfill({ status: 404, json: {} });
+  });
+  await page.route("**/api/v1/admin/superadmins**", async (route) => {
+    if (route.request().method() === "POST") { invitations = [invitation]; return route.fulfill({ json: invitation }); }
+    return route.fulfill({ json: { admins: [{ userId: identity.user.id, name: identity.user.name, email: identity.user.email, grantedAt: "2026-09-07T00:00:00Z" }], invitations } });
+  });
+  await page.route("**/api/v1/notifications", async (route) => {
+    if (route.request().method() === "PUT") notifications = { ...notifications, ...route.request().postDataJSON() };
+    return route.fulfill({ json: { notifications } });
+  });
+  await page.route("**/api/v1/superadmin-invitations/*", (route) => route.fulfill({ json: { email: invitation.email, accepted: route.request().method() === "POST" } }));
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/admin/oauth-clients");
+    await expect(page.getByRole("heading", { name: "OAuth clients", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Create client", exact: true }).click();
+    await page.getByLabel("Client name").fill("Browser agent");
+    await page.getByLabel("Redirect URLs").fill("https://agent.example.test/callback");
+    await expectNoPageOverflow(page);
+    await expectNoSeriousAxeViolations(page);
+    await page.screenshot({ path: path.join("artifacts", "access-review", `oauth-client-${width}.png`), fullPage: true });
+    await page.locator("form").getByRole("button", { name: "Create client", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Save your client secret" })).toBeFocused();
+    await page.getByRole("button", { name: "I’ve saved the credentials" }).click();
+    await expect(page.getByLabel("Client secret", { exact: true })).toHaveCount(0);
+    await page.goto("/admin/superadmins");
+    await expect(page.getByRole("heading", { name: "Superadmins", exact: true })).toBeVisible();
+    await page.getByLabel("Email address").fill(invitation.email);
+    await page.getByRole("button", { name: "Create invitation link" }).click();
+    await expect(page.getByRole("heading", { name: "Share this invitation" })).toBeVisible();
+    await expectNoPageOverflow(page);
+    await expectNoSeriousAxeViolations(page);
+    await page.screenshot({ path: path.join("artifacts", "access-review", `superadmins-${width}.png`), fullPage: true });
+    await page.goto("/dashboard/settings");
+    await expect(page.getByRole("heading", { name: "Email notifications" })).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: /Run completed/ })).toBeEnabled();
+    await expectNoPageOverflow(page);
+    await expectNoSeriousAxeViolations(page);
+  }
+  await page.getByRole("checkbox", { name: /Run completed/ }).check();
+  await page.getByRole("button", { name: "Save preferences" }).click();
+  await expect(page.getByText("Email preferences saved.")).toBeVisible();
+  await page.goto(`/superadmin-invitations/${invitationId}`);
+  await page.getByRole("button", { name: "Accept superadmin invitation" }).click();
+  await expect(page.getByRole("heading", { name: "Invitation accepted" })).toBeVisible();
+  await expectNoSeriousAxeViolations(page);
 });

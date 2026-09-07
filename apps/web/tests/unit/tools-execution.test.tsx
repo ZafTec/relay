@@ -11,6 +11,7 @@ import { ToolDetailPage } from "../../src/features/tools/ToolDetailPage";
 import type {
   ToolArtifactsAdapter,
   ToolRunsAdapter,
+  ProductionToolKey,
 } from "../../src/features/tools/ToolExecutionComposer";
 import type {
   ArtifactSummary,
@@ -100,13 +101,19 @@ const PDF_ARTIFACT: ArtifactSummary = {
 };
 
 function tool(
-  key: "image.generate.gpt-image-2" | "image.generate.flux-2-pro" | "document.ocr",
+  key: ProductionToolKey,
   lifecycle: ToolDetail["lifecycle"] = "published",
 ): ToolDetail {
   const names = {
     "image.generate.gpt-image-2": "GPT Image 2",
     "image.generate.flux-2-pro": "FLUX.2 Pro",
     "document.ocr": "Document OCR",
+    "image.edit.gpt-image-2": "GPT Image 2 Edit",
+    "image.edit.flux-2-pro": "FLUX.2 Pro Edit",
+    "image.generate.mai-image-2.5": "MAI Image 2.5",
+    "image.edit.mai-image-2.5": "MAI Image 2.5 Edit",
+    "image.generate.mai-image-2.5-flash": "MAI Image 2.5 Flash",
+    "image.edit.mai-image-2.5-flash": "MAI Image 2.5 Flash Edit",
   } as const;
   return {
     id: `tool_${"5".repeat(32)}`,
@@ -520,5 +527,38 @@ describe("production tool run composers", () => {
     await configureGptPrompt(user);
     await user.click(screen.getByRole("button", { name: "Create run" }));
     expect(await screen.findByText(title)).toBeVisible();
+  });
+});
+
+describe("new image tools", () => {
+  it.each(["image.generate.mai-image-2.5", "image.generate.mai-image-2.5-flash"] as const)("submits %s dimensions and blocks an oversized image", async (key) => {
+    const user = userEvent.setup();
+    const { adapter, create } = acceptedAdapter(key);
+    renderTool(tool(key), adapter);
+    await user.type(await screen.findByLabelText("Prompt"), "A simple receipt");
+    fireEvent.change(screen.getByLabelText("Width"), { target: { value: "1365" } });
+    fireEvent.change(screen.getByLabelText("Height"), { target: { value: "1365" } });
+    await user.click(screen.getByRole("button", { name: "Create run" }));
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.getByText(/must not exceed 1,048,576 pixels/)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Height"), { target: { value: "768" } });
+    await user.click(screen.getByRole("button", { name: "Create run" }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0][0]).toEqual({ toolKey: key, input: { prompt: "A simple receipt", width: 1365, height: 768 } });
+  });
+
+  it.each(["image.edit.gpt-image-2", "image.edit.flux-2-pro", "image.edit.mai-image-2.5", "image.edit.mai-image-2.5-flash"] as const)("requires and pins the source for %s", async (key) => {
+    const user = userEvent.setup();
+    const { adapter, create } = acceptedAdapter(key);
+    const { container } = renderTool(tool(key), adapter);
+    const mai = key.includes("mai-image");
+    await user.type(await screen.findByLabelText(mai ? "Edit instruction" : "Prompt"), "Make the background blue");
+    await user.click(screen.getByRole("button", { name: "Create run" }));
+    expect(create).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole(mai ? "radio" : "checkbox", { name: /Reference image/i }));
+    await user.click(screen.getByRole("button", { name: "Create run" }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0][0]).toMatchObject({ toolKey: key, input: { prompt: "Make the background blue", ...(mai ? { sourceArtifactVersionId: IMAGE_ARTIFACT.currentVersion?.id } : { inputArtifactVersionIds: [IMAGE_ARTIFACT.currentVersion?.id] }) } });
+    await expectNoAxeViolations(container);
   });
 });

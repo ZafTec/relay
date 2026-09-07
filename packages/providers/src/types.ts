@@ -1,6 +1,8 @@
 export type AzureProviderId =
   | "azure-gpt-image-2"
   | "azure-flux-2-pro"
+  | "azure-mai-image-2.5"
+  | "azure-mai-image-2.5-flash"
   | "azure-mistral-ocr";
 
 export type FetchLike = typeof globalThis.fetch;

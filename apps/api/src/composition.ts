@@ -38,6 +38,16 @@ export const MVP_RUN_DEADLINE_MS = 5 * 60_000;
 
 export const MVP_API_HANDLER_REGISTRATIONS: readonly HandlerRegistration[] =
   Object.freeze([
+    ...[
+      "image.edit.azure-openai.gpt-image-2.v1",
+      "image.edit.azure-flux.flux-2-pro.v1",
+      "image.generate.azure-mai.mai-image-2.5.v1",
+      "image.edit.azure-mai.mai-image-2.5.v1",
+      "image.generate.azure-mai.mai-image-2.5-flash.v1",
+      "image.edit.azure-mai.mai-image-2.5-flash.v1",
+    ].map((key) =>
+      Object.freeze({ key, inputSchemaVersion: 1, handlerVersion: "1" })
+    ),
     Object.freeze({
       key: "image.generate.azure-openai.gpt-image-2.v1",
       inputSchemaVersion: 1,
@@ -91,6 +101,9 @@ export function createGlobalArtifactStorageLimitProvider(
   };
 }
 
+import { createNotificationService } from "@relay/notifications";
+import { createContentService } from "@relay/application";
+
 export function createMvpApiApplicationServices(
   pool: DatabasePool,
   storage: S3CompatibleStorage,
@@ -116,7 +129,7 @@ export function createMvpApiApplicationServices(
     cleanupLeaseSeconds: lifecycle.cleanupLeaseSeconds,
   });
 
-  return createPostgresApplicationServices({
+  const services = createPostgresApplicationServices({
     pool,
     handlers,
     admissionUsage: createPostgresAdmissionUsagePort(),
@@ -124,6 +137,18 @@ export function createMvpApiApplicationServices(
     admissionDeadlineMs: MVP_ADMISSION_DEADLINE_MS,
     runDeadlineMs: MVP_RUN_DEADLINE_MS,
   });
+  return {
+    ...services,
+    content: createContentService(
+      artifacts,
+      services.artifacts,
+      Deno.env.get("BETTER_AUTH_URL") ?? "http://localhost:8000",
+    ),
+    notifications: createNotificationService(
+      pool,
+      Boolean(Deno.env.get("SMTP_HOST")),
+    ),
+  };
 }
 
 function onceAsync(

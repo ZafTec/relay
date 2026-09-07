@@ -1,3 +1,4 @@
+import { createPostgresSuperadminAccessService } from "./routes/admin_access.ts";
 import type { ApplicationServices } from "@relay/application";
 import {
   getCapacityPolicy,
@@ -387,6 +388,14 @@ export async function startApi(
             requestId,
           }),
       },
+      adminAccess: {
+        auth,
+        service: createPostgresSuperadminAccessService(databasePool),
+        allowedOrigins: [
+          authConfig.baseUrl.origin,
+          ...authConfig.trustedOrigins,
+        ],
+      },
       adminAllowances: {
         auth,
         service: createPostgresAdminAllowanceService(databasePool),
@@ -426,6 +435,10 @@ export async function startApi(
       ...(applicationServices === undefined ? {} : {
         v1: {
           services: applicationServices,
+          allowedOrigins: [
+            authConfig.baseUrl.origin,
+            ...authConfig.trustedOrigins,
+          ],
           resolveIdentity: createAuthSessionIdentityResolver(
             auth,
             databasePool,

@@ -95,6 +95,8 @@ Deno.test("Relay MCP OAuth constants and resource policy are exact", () => {
     "artifacts:write",
     "artifacts:share",
     "usage:read",
+    "notifications:read",
+    "notifications:write",
   ]);
   assertEquals(RELAY_OAUTH_SCOPES, [
     ...RELAY_AUTHORIZATION_SCOPES,
@@ -275,21 +277,28 @@ Deno.test("Relay resource scopes require workspace selection and membership", as
   } as Parameters<typeof postLogin.shouldRedirect>[0];
 
   assertEquals(postLogin.page, "/oauth/workspace");
-  assertEquals(await postLogin.shouldRedirect(resourceContext), true);
+  assertEquals(await postLogin.shouldRedirect(resourceContext), false);
   assertEquals(await postLogin.shouldRedirect(identityContext), false);
   assertEquals(
     await postLogin.consentReferenceId(resourceContext),
     "workspace_1",
   );
-  assertEquals(member.calls.length, 1);
+  assertEquals(member.calls.length, 2);
   assertEquals(member.calls[0].params, ["workspace_1", "user_1"]);
   assertEquals(await postLogin.consentReferenceId(identityContext), undefined);
-  assertEquals(member.calls.length, 1);
+  assertEquals(member.calls.length, 2);
 
   const missingWorkspaceContext = {
     ...resourceContext,
     session: { ...resourceContext.session, activeOrganizationId: null },
   } as Parameters<typeof postLogin.consentReferenceId>[0];
+  assertEquals(
+    await postLogin.shouldRedirect({
+      ...missingWorkspaceContext,
+      headers: new Headers(),
+    }),
+    true,
+  );
   await assertRejects(async () =>
     await postLogin.consentReferenceId(missingWorkspaceContext)
   );
@@ -299,6 +308,7 @@ Deno.test("Relay resource scopes require workspace selection and membership", as
     nonmember.queryable,
     new URL("http://localhost:8000"),
   ).postLogin!;
+  assertEquals(await nonmemberPostLogin.shouldRedirect(resourceContext), true);
   await assertRejects(async () =>
     await nonmemberPostLogin.consentReferenceId(resourceContext)
   );

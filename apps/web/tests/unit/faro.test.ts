@@ -146,6 +146,8 @@ describe("telemetry startup", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    window.localStorage.setItem("zaf_consent", "granted");
+    window.localStorage.setItem("zaf_consent_at", String(Date.now()));
     vi.stubEnv("PROD", true);
     vi.stubEnv("VITE_APP_ORIGIN", "https://relay.example.test");
     vi.stubEnv(
@@ -157,6 +159,7 @@ describe("telemetry startup", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+    window.localStorage.clear();
   });
 
   it("never sends traffic from an unconfigured preview or local origin", async () => {
@@ -166,6 +169,23 @@ describe("telemetry startup", () => {
     );
     startBrowserTelemetry();
     expect(initializeFaro).not.toHaveBeenCalled();
+  });
+
+  it.each(["denied", "missing", "expired"])("does not start for %s analytics consent", async (choice) => {
+    if (choice === "missing") window.localStorage.clear();
+    else if (choice === "denied") window.localStorage.setItem("zaf_consent", "denied");
+    else window.localStorage.setItem("zaf_consent_at", "1");
+    const { startBrowserTelemetry } = await import("../../src/observability/faro");
+    startBrowserTelemetry();
+    expect(initializeFaro).not.toHaveBeenCalled();
+  });
+
+  it("drops buffered events at send time after consent is withdrawn", async () => {
+    const { startBrowserTelemetry } = await import("../../src/observability/faro");
+    startBrowserTelemetry();
+    const config = vi.mocked(initializeFaro).mock.calls[0][0];
+    window.localStorage.setItem("zaf_consent", "denied");
+    expect(config.beforeSend?.({ type: TransportItemType.EVENT, meta, payload: { name: "page_load" } } as TransportItem)).toBeNull();
   });
 
   it("uses the configured collector without persistent sessions and starts once", async () => {

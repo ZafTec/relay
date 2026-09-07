@@ -8,6 +8,7 @@ import { ProtectedRoute } from "../../src/auth/ProtectedRoute";
 import { createTestAuthAdapter } from "../../src/auth/test-adapter";
 import type { AuthAdapter, RelayIdentity, RelayWorkspace } from "../../src/auth/types";
 import { SettingsPage } from "../../src/features/settings/SettingsPage";
+vi.mock("../../src/lib/api/notifications", () => ({ notificationsApi: { get: vi.fn(async () => ({ configured: false, completed: false, failed: false, deliveries: [] })) } }));
 
 const SETTINGS_IDENTITY_FIXTURE: RelayIdentity = {
   session: {
@@ -75,15 +76,11 @@ describe("workspace settings page", () => {
       .toBeInTheDocument();
 
     const mcpSection = screen.getByRole("region", { name: "MCP connection" });
-    expect(within(mcpSection).getByText("POST /mcp")).toBeInTheDocument();
+    expect(within(mcpSection).getByText(new URL("/mcp", window.location.origin).href)).toBeInTheDocument();
     expect(within(mcpSection).getByText("/.well-known/oauth-protected-resource/mcp"))
       .toBeInTheDocument();
-    expect(within(mcpSection).getByText(/browser session cookies alone are rejected/i))
-      .toBeInTheDocument();
-
-    expect(within(mcpSection).getByText("Contract defined")).toBeInTheDocument();
-    expect(within(mcpSection).getByText(/without claiming that every deployment/i))
-      .toBeInTheDocument();
+    expect(within(mcpSection).getByRole("link", { name: "Manage OAuth clients" })).toHaveAttribute("href", "/admin/oauth-clients");
+    expect(within(mcpSection).getByText(/Running tools also requires a usage allowance/i)).toBeInTheDocument();
     const scopeTable = within(mcpSection).getByRole("table", {
       name: "Supported MCP authorization scopes",
     });
@@ -96,11 +93,13 @@ describe("workspace settings page", () => {
       "artifacts:write",
       "artifacts:share",
       "usage:read",
+      "notifications:read",
+      "notifications:write",
     ]) {
       expect(within(scopeTable).getByText(scope)).toBeInTheDocument();
     }
 
-    expect(container.querySelector("input, select, textarea")).not.toBeInTheDocument();
+    expect(workspaceSection.querySelector("input, select, textarea")).not.toBeInTheDocument();
     expect(screen.queryByText(/Halide XL|Aurora Fast|Claude MCP client|CI pipeline/i))
       .not.toBeInTheDocument();
     expect(screen.queryByText(/API key|billing plan|member count/i)).not.toBeInTheDocument();

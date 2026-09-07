@@ -24,6 +24,7 @@ import {
   type AzureFlux2ProRequest,
   type AzureGptImage2Client,
   type AzureGptImage2Request,
+  type AzureMaiImageClient,
   type AzureMistralOcrClient,
   type AzureMistralOcrRequest,
   AzureProviderError,
@@ -47,6 +48,18 @@ export const GPT_IMAGE_2_HANDLER_KEY =
 export const FLUX_2_PRO_HANDLER_KEY =
   "image.generate.azure-flux.flux-2-pro.v1" as const;
 export const MISTRAL_OCR_HANDLER_KEY = "document.ocr.azure-mistral.v1" as const;
+export const GPT_IMAGE_2_EDIT_HANDLER_KEY =
+  "image.edit.azure-openai.gpt-image-2.v1";
+export const FLUX_2_PRO_EDIT_HANDLER_KEY =
+  "image.edit.azure-flux.flux-2-pro.v1";
+export const MAI_IMAGE_HANDLER_KEY =
+  "image.generate.azure-mai.mai-image-2.5.v1";
+export const MAI_IMAGE_EDIT_HANDLER_KEY =
+  "image.edit.azure-mai.mai-image-2.5.v1";
+export const MAI_FLASH_HANDLER_KEY =
+  "image.generate.azure-mai.mai-image-2.5-flash.v1";
+export const MAI_FLASH_EDIT_HANDLER_KEY =
+  "image.edit.azure-mai.mai-image-2.5-flash.v1";
 
 const INPUT_SCHEMA_VERSION = 1;
 const HANDLER_VERSION = "1";
@@ -91,7 +104,17 @@ export interface MvpExecutionHandlerDependencies {
   readonly pool: DatabasePool;
   readonly storage: ObjectStorage;
   readonly artifactService: ArtifactOutputService;
-  readonly gptImage2Client: Pick<AzureGptImage2Client, "generate">;
+  readonly gptImage2Client:
+    & Pick<AzureGptImage2Client, "generate">
+    & Partial<Pick<AzureGptImage2Client, "edit">>;
+  readonly maiImageClient?: Pick<
+    AzureMaiImageClient,
+    "generate" | "edit" | "model"
+  >;
+  readonly maiFlashClient?: Pick<
+    AzureMaiImageClient,
+    "generate" | "edit" | "model"
+  >;
   readonly flux2ProClient: Pick<AzureFlux2ProClient, "generate">;
   readonly mistralOcrClient: Pick<AzureMistralOcrClient, "process">;
   /** Test seam. Production uses the imported @relay/metering operations. */
@@ -1315,7 +1338,11 @@ async function persistOutputs(
 function imageOutput(
   image: GeneratedImage,
   ordinal: number,
-  provider: "azure-gpt-image-2" | "azure-flux-2-pro",
+  provider:
+    | "azure-gpt-image-2"
+    | "azure-flux-2-pro"
+    | "azure-mai-image-2.5"
+    | "azure-mai-image-2.5-flash",
   extraMetadata: Readonly<Record<string, unknown>> = {},
 ): StoredOutput {
   const extension = extensionFor(image.mediaType);
@@ -1394,6 +1421,162 @@ async function executeGptImage(
     outcome: persisted.failed === 0 ? "success" : "partial_output",
     actualAmount: String(images.length),
   };
+}
+
+function artifactVersionIds(value: unknown, maximum: number): string[] {
+  if (
+    !Array.isArray(value) || value.length < 1 || value.length > maximum ||
+    value.some((id) =>
+      typeof id !== "string" || !ARTIFACT_VERSION_PATTERN.test(id)
+    ) || new Set(value).size !== value.length
+  ) throw new MvpValidationError("inputArtifactVersionIds");
+  return value;
+}
+
+async function executeGptEdit(
+  dependencies: MvpExecutionHandlerDependencies,
+  context: Parameters<RegisteredExecutionHandler["execute"]>[0],
+  value: unknown,
+  state: ExecutionState,
+): Promise<SuccessfulExecution> {
+  const raw = strictObject(value, [
+    "prompt",
+    "n",
+    "size",
+    "quality",
+    "outputFormat",
+    "outputCompression",
+    "background",
+    "moderation",
+    "inputArtifactVersionIds",
+    "maskArtifactVersionId",
+    "inputFidelity",
+  ]);
+  const {
+    inputArtifactVersionIds,
+    maskArtifactVersionId,
+    inputFidelity,
+    ...generation
+  } = raw;
+  parseGptImageInput(generation);
+  const ids = artifactVersionIds(inputArtifactVersionIds, 16);
+  const fidelity = optionalEnum(inputFidelity, "inputFidelity", [
+    "low",
+    "high",
+  ]);
+  const edit = dependencies.gptImage2Client.edit;
+  if (!edit) throw new MvpValidationError("provider_configuration");
+  const sources = await loadFluxDataUrls(
+    dependencies,
+    context.job.workspaceId,
+    ids,
+    context.signal,
+  );
+  const mask = maskArtifactVersionId === undefined
+    ? undefined
+    : (await loadFluxDataUrls(
+      dependencies,
+      context.job.workspaceId,
+      artifactVersionIds([maskArtifactVersionId], 1),
+      context.signal,
+    ))[0];
+  // Reuse the same output persistence, charging, cancellation, and failure path.
+  return await executeGptImage(
+    {
+      ...dependencies,
+      gptImage2Client: {
+        generate: (request, options) =>
+          edit.call(dependencies.gptImage2Client, {
+            ...request,
+            images: sources,
+            ...(mask === undefined ? {} : { mask }),
+            ...(fidelity === undefined ? {} : { input_fidelity: fidelity }),
+          }, options),
+      },
+    },
+    context,
+    generation,
+    state,
+  );
+}
+
+function maiExecutor(
+  client: Pick<AzureMaiImageClient, "generate" | "edit" | "model">,
+  edit: boolean,
+): ToolExecutor {
+  return async (dependencies, context, value, state) => {
+    const input = strictObject(
+      value,
+      edit
+        ? ["prompt", "sourceArtifactVersionId"]
+        : ["prompt", "width", "height"],
+    );
+    const prompt = stringValue(input.prompt, "prompt", 32_000);
+    const result = edit
+      ? await client.edit({
+        prompt,
+        image: (await loadFluxDataUrls(
+          dependencies,
+          context.job.workspaceId,
+          artifactVersionIds([input.sourceArtifactVersionId], 1),
+          context.signal,
+        ))[0],
+      }, { signal: context.signal })
+      : await client.generate({
+        prompt,
+        ...optionalProperty(
+          optionalInteger(input.width, "width", 768, 1365),
+          "width",
+        ),
+        ...optionalProperty(
+          optionalInteger(input.height, "height", 768, 1365),
+          "height",
+        ),
+      }, { signal: context.signal });
+    const images = validateImageResult(result, 1, "image/png");
+    if (images.length !== 1) throw new MvpProviderResponseError("images");
+    state.providerCost = {
+      actualModelVersion: client.model,
+      normalizedUsage: imageProviderUsage(result, 1),
+    };
+    const outputs = [
+      imageOutput(
+        images[0],
+        0,
+        client.model === "MAI-Image-2.5"
+          ? "azure-mai-image-2.5"
+          : "azure-mai-image-2.5-flash",
+      ),
+    ];
+    const outputSetId = await createOutputSet(
+      dependencies.artifactService,
+      context.job.workspaceId,
+      context.job.runId,
+      outputs,
+    );
+    const persisted = await persistOutputs(
+      dependencies,
+      context.job.workspaceId,
+      outputSetId,
+      outputs,
+      context.signal,
+    );
+    if (persisted.stored === 0) throw new MvpStorageError("no_output_stored");
+    return { outcome: "success", actualAmount: "1" };
+  };
+}
+
+async function executeFluxEdit(
+  dependencies: MvpExecutionHandlerDependencies,
+  context: Parameters<RegisteredExecutionHandler["execute"]>[0],
+  value: unknown,
+  state: ExecutionState,
+): Promise<SuccessfulExecution> {
+  const input = parseFluxInput(value);
+  if (input.artifactVersionIds.length === 0) {
+    throw new MvpValidationError("inputArtifactVersionIds");
+  }
+  return await executeFlux(dependencies, context, value, state);
 }
 
 async function loadFluxDataUrls(
@@ -2094,7 +2277,7 @@ function registeredHandler(
   };
 }
 
-/** Creates the exact three execution handlers published by the MVP baseline. */
+/** Provider calls share artifact persistence and explicit usage settlement. */
 export function createMvpExecutionHandlers(
   dependencies: MvpExecutionHandlerDependencies,
 ): RegisteredExecutionHandler[] {
@@ -2102,5 +2285,47 @@ export function createMvpExecutionHandlers(
     registeredHandler(GPT_IMAGE_2_HANDLER_KEY, dependencies, executeGptImage),
     registeredHandler(FLUX_2_PRO_HANDLER_KEY, dependencies, executeFlux),
     registeredHandler(MISTRAL_OCR_HANDLER_KEY, dependencies, executeOcr),
+    registeredHandler(
+      FLUX_2_PRO_EDIT_HANDLER_KEY,
+      dependencies,
+      executeFluxEdit,
+    ),
+    ...(dependencies.gptImage2Client.edit
+      ? [
+        registeredHandler(
+          GPT_IMAGE_2_EDIT_HANDLER_KEY,
+          dependencies,
+          executeGptEdit,
+        ),
+      ]
+      : []),
+    ...(dependencies.maiImageClient
+      ? [
+        registeredHandler(
+          MAI_IMAGE_HANDLER_KEY,
+          dependencies,
+          maiExecutor(dependencies.maiImageClient, false),
+        ),
+        registeredHandler(
+          MAI_IMAGE_EDIT_HANDLER_KEY,
+          dependencies,
+          maiExecutor(dependencies.maiImageClient, true),
+        ),
+      ]
+      : []),
+    ...(dependencies.maiFlashClient
+      ? [
+        registeredHandler(
+          MAI_FLASH_HANDLER_KEY,
+          dependencies,
+          maiExecutor(dependencies.maiFlashClient, false),
+        ),
+        registeredHandler(
+          MAI_FLASH_EDIT_HANDLER_KEY,
+          dependencies,
+          maiExecutor(dependencies.maiFlashClient, true),
+        ),
+      ]
+      : []),
   ];
 }

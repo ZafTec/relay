@@ -235,15 +235,19 @@ async function performRequest(
   config: ResolvedClientOptions,
   provider: AzureProviderId,
   url: string,
-  body: string,
+  body: BodyInit,
   signal: AbortSignal,
+  contentType = "application/json",
+  authentication: "bearer" | "api-key" = "bearer",
 ): Promise<unknown> {
   const response = await config.fetch(url, {
     method: "POST",
     headers: {
       Accept: "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
+      ...(authentication === "api-key"
+        ? { "api-key": config.apiKey }
+        : { Authorization: `Bearer ${config.apiKey}` }),
+      "Content-Type": contentType,
     },
     body,
     redirect: "error",
@@ -290,6 +294,7 @@ export async function postJson(
   url: string,
   value: unknown,
   callerSignal?: AbortSignal,
+  authentication: "bearer" | "api-key" = "bearer",
 ): Promise<unknown> {
   let body: string;
   try {
@@ -300,7 +305,61 @@ export async function postJson(
   if (new TextEncoder().encode(body).byteLength > config.maxRequestBytes) {
     throw invalidInput(provider, "request");
   }
+  return await postBody(
+    config,
+    provider,
+    url,
+    body,
+    "application/json",
+    callerSignal,
+    authentication,
+  );
+}
 
+export async function postFormData(
+  config: ResolvedClientOptions,
+  provider: AzureProviderId,
+  url: string,
+  form: FormData,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  if (signal?.aborted) {
+    throw new AzureProviderError({ provider, classification: "aborted" });
+  }
+  let minimumBytes = 0;
+  for (const value of form.values()) {
+    minimumBytes += typeof value === "string"
+      ? new TextEncoder().encode(value).byteLength
+      : value.size;
+  }
+  if (minimumBytes > config.maxRequestBytes) {
+    throw invalidInput(provider, "request");
+  }
+  const encoded = new Request(url, { method: "POST", body: form });
+  const body = await encoded.arrayBuffer();
+  if (body.byteLength > config.maxRequestBytes) {
+    throw invalidInput(provider, "request");
+  }
+  return await postBody(
+    config,
+    provider,
+    url,
+    body,
+    encoded.headers.get("content-type")!,
+    signal,
+    "api-key",
+  );
+}
+
+async function postBody(
+  config: ResolvedClientOptions,
+  provider: AzureProviderId,
+  url: string,
+  body: BodyInit,
+  contentType: string,
+  callerSignal?: AbortSignal,
+  authentication: "bearer" | "api-key" = "bearer",
+): Promise<unknown> {
   if (callerSignal?.aborted) {
     throw new AzureProviderError({ provider, classification: "aborted" });
   }
@@ -323,7 +382,15 @@ export async function postJson(
 
   try {
     return await Promise.race([
-      performRequest(config, provider, url, body, controller.signal),
+      performRequest(
+        config,
+        provider,
+        url,
+        body,
+        controller.signal,
+        contentType,
+        authentication,
+      ),
       cancellation,
     ]);
   } catch (error) {

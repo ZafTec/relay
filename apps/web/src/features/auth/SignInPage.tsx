@@ -8,6 +8,7 @@ import { AuthLayout } from "../../components/layout/AuthLayout";
 import { Button } from "../../components/ui/Button";
 import { InlineNotice } from "../../components/ui/InlineNotice";
 import { Skeleton } from "../../components/ui/Skeleton";
+import { legalLinks } from "../../lib/legal";
 
 function callbackError(code: string | null): { title: string; message: string } | null {
   if (!code) return null;
@@ -127,6 +128,7 @@ export function SignInPage() {
 
         <div className="sign-in-panel__footnote">
           <p>Signing in creates or resumes your personal Relay workspace.</p>
+          <p>By continuing, you agree to ZafTech’s <a href={legalLinks.terms}>Terms of Service</a> and <a href={legalLinks.acceptableUse}>Acceptable Use Policy</a>. Read the <a href={legalLinks.privacy}>Privacy Policy</a> and <a href={legalLinks.cookies}>Cookie Policy</a>.</p>
           <p className="mono-label">RLY-01 / OAuth only</p>
         </div>
       </div>

@@ -4,6 +4,7 @@ import {
   parseImageGenerationResponse,
 } from "./image.ts";
 import {
+  postFormData,
   postJson,
   resolveClientOptions,
   type ResolvedClientOptions,
@@ -20,6 +21,7 @@ import {
   strictRecord,
   withInputValidation,
 } from "./validation.ts";
+import { prepareImageFile } from "./image-input.ts";
 
 const PROVIDER = "azure-gpt-image-2" as const;
 
@@ -45,6 +47,12 @@ export interface AzureGptImage2Request {
   readonly output_compression?: number;
   readonly background?: AzureGptImage2Background;
   readonly moderation?: AzureGptImage2Moderation;
+}
+
+export interface AzureGptImage2EditRequest extends AzureGptImage2Request {
+  readonly images: readonly string[];
+  readonly mask?: string;
+  readonly input_fidelity?: "low" | "high";
 }
 
 interface PreparedGptRequest {
@@ -178,6 +186,95 @@ export class AzureGptImage2Client {
 
   constructor(options: AzureProviderClientOptions) {
     this.#config = resolveClientOptions(options, PROVIDER);
+  }
+
+  async edit(
+    value: AzureGptImage2EditRequest,
+    callOptions?: ProviderCallOptions,
+  ): Promise<ImageGenerationResult> {
+    const { prepared, form } = withInputValidation(PROVIDER, () => {
+      const raw = strictRecord(value, [
+        "prompt",
+        "n",
+        "size",
+        "quality",
+        "output_format",
+        "output_compression",
+        "background",
+        "moderation",
+        "images",
+        "mask",
+        "input_fidelity",
+      ], PROVIDER);
+      const { images, mask, input_fidelity, ...request } = raw;
+      const prepared = prepareRequest(
+        request as unknown as AzureGptImage2Request,
+        callOptions,
+      );
+      if (!Array.isArray(images) || images.length < 1 || images.length > 16) {
+        throw invalidInput(PROVIDER, "images");
+      }
+      const form = new FormData();
+      for (const [key, value] of Object.entries(prepared.body)) {
+        form.set(key, String(value));
+      }
+      let remaining = this.#config.maxBase64Bytes;
+      let first: { width: number; height: number } | undefined;
+      for (const image of images) {
+        const source = prepareImageFile(image, PROVIDER, remaining, "image", [
+          "image/png",
+          "image/jpeg",
+          "image/webp",
+        ]);
+        first ??= source;
+        remaining -= source.file.size;
+        form.append("image[]", source.file);
+      }
+      if (mask !== undefined) {
+        const preparedMask = prepareImageFile(
+          mask,
+          PROVIDER,
+          remaining,
+          "mask",
+          ["image/png"],
+        );
+        if (
+          preparedMask.width !== first?.width ||
+          preparedMask.height !== first.height
+        ) {
+          throw invalidInput(PROVIDER, "mask");
+        }
+        form.set("mask", preparedMask.file);
+      }
+      if (input_fidelity !== undefined) {
+        form.set(
+          "input_fidelity",
+          enumValue(
+            input_fidelity,
+            ["low", "high"],
+            PROVIDER,
+            "input_fidelity",
+          ),
+        );
+      }
+      return { prepared, form };
+    });
+    return parseImageGenerationResponse(
+      await postFormData(
+        this.#config,
+        PROVIDER,
+        `${this.#config.baseUrl}/openai/v1/images/edits`,
+        form,
+        prepared.signal,
+      ),
+      {
+        provider: PROVIDER,
+        maxBase64Bytes: this.#config.maxBase64Bytes,
+        maxImages: prepared.maximumImages,
+        maximumPixels: AZURE_GPT_IMAGE_2_MAX_PIXELS,
+        expectedFormat: prepared.expectedFormat,
+      },
+    );
   }
 
   async generate(

@@ -126,7 +126,17 @@ Deno.test("admission measures parse GPT n and keep fixed-count tools determinist
       requested_units: { minimum: "3", expected: "3", maximum: "3" },
     },
   );
-  for (const toolKey of ["image.generate.flux-2-pro", "document.ocr"]) {
+  for (
+    const toolKey of [
+      "image.generate.flux-2-pro",
+      "image.edit.flux-2-pro",
+      "image.generate.mai-image-2.5",
+      "image.edit.mai-image-2.5",
+      "image.generate.mai-image-2.5-flash",
+      "image.edit.mai-image-2.5-flash",
+      "document.ocr",
+    ]
+  ) {
     assertEquals(resolveAdmissionUsageMeasures(toolKey, {}), {
       requested_units: { minimum: "1", expected: "1", maximum: "1" },
     });
@@ -384,4 +394,25 @@ Deno.test("Postgres admission reserve rejects a policy mismatch", async () => {
     Error,
     "does not match",
   );
+});
+
+Deno.test("GPT edits reserve every requested output before execution", () => {
+  for (const n of [1, 2, 10]) {
+    assertEquals(
+      resolveAdmissionUsageMeasures("image.edit.gpt-image-2", { n }),
+      {
+        requested_units: {
+          minimum: String(n),
+          expected: String(n),
+          maximum: String(n),
+        },
+      },
+    );
+  }
+  for (const n of [0, 11, 1.5, "2", null]) {
+    assertThrows(
+      () => resolveAdmissionUsageMeasures("image.edit.gpt-image-2", { n }),
+      TypeError,
+    );
+  }
 });

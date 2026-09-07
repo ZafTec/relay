@@ -40,40 +40,39 @@ The workflow creates a short-lived installation token scoped only to Relay. This
 is needed because a tag created using the default `GITHUB_TOKEN` would not trigger
 the separate image-publication workflow.
 
-## 2. Configure the release boundary
+## 2. Configure image publication
 
-In [repository environments](https://github.com/ZafTec/relay/settings/environments),
-create an environment named exactly **release**:
+In [repository Actions settings](https://github.com/ZafTec/relay/settings/secrets/actions):
 
-- Add required reviewers where the GitHub plan supports them.
-- If using selected deployment branches/tags, allow release tags matching
-  `v*.*.*`; do not configure it for `main` only, since image jobs run on tags.
-- Add environment secret `DOCKERHUB_TOKEN`, with Read & Write access to both
+- Add repository secret `DOCKERHUB_TOKEN`, with Read & Write access to both
   image repositories and no Delete permission.
-- Set environment variable `DOCKERHUB_USERNAME`, or use an environment secret
-  of the same name.
+- Add repository secret `DOCKERHUB_USERNAME`. It controls both the registry login
+  and the destination namespace: `<username>/relay-backend` and
+  `<username>/relay-web`.
 - Optional public browser telemetry settings: set `VITE_APP_ORIGIN` to the exact
   application origin (without a trailing slash) and `VITE_FARO_COLLECTOR_URL` to
   the HTTPS collector URL. The web build embeds these public values; never put
   secrets in them. Telemetry is disabled when either is unset or the browser's
-  origin does not match. Local builds leave both unset by default.
+  origin does not match. The user must also allow analytics in Cookie settings.
+  Local builds leave both unset by default.
 
-Repository credentials already work as inherited fallbacks, but the release
-environment is the documented boundary for publication credentials. Secret values
-cannot be read back from GitHub to move them; re-enter the token from its source.
+Store the public frontend settings as repository variables. The workflow does not
+depend on GitHub environments, which GitHub Free does not support for private
+repositories. Secret values cannot be read back from GitHub to move them.
 
-Create Docker Hub repositories `zaftec/relay-backend` and `zaftec/relay-web`, or set
-`DOCKERHUB_NAMESPACE`, `DOCKERHUB_BACKEND_REPOSITORY`, and
-`DOCKERHUB_WEB_REPOSITORY` environment variables to the intended destinations.
+Create `relay-backend` and `relay-web` in the account named by
+`DOCKERHUB_USERNAME`. Optional repository variables `DOCKERHUB_BACKEND_REPOSITORY`
+and `DOCKERHUB_WEB_REPOSITORY` change the repository names within that account.
 Configure immutable SemVer, `git-<full-sha>`, and `candidate-<run-id>` tags, leaving
 `latest` mutable. Confirm registry support for OCI attestations/referrers and
-GitHub artifact-attestation availability for this private repository's plan.
+the expected visibility of both image repositories separately from GitHub.
 
-The GitHub build-provenance action requires **GitHub Enterprise Cloud** for
-private-repository attestations. Public repositories are supported on current
-GitHub plans. Saving an environment and its tag policy does not establish access
-to the attestation service. Resolve this requirement before merging the generated
-release PR.
+GitHub-signed attestations require **GitHub Enterprise Cloud** for private
+repositories. Private releases use the images' native BuildKit provenance by
+default and retain SBOMs, scans, and digest verification. On Enterprise Cloud, set
+repository variable `RELAY_GITHUB_ATTESTATIONS_ENABLED=true` to also require
+GitHub-signed attestations. Public releases always require them. A public Docker
+image remains downloadable even when its GitHub source repository is private.
 
 In [repository rulesets](https://github.com/ZafTec/relay/settings/rules), protect
 `main` with the required CI aggregate. Protect `v*` release tags from deletion and
@@ -82,18 +81,17 @@ restrictions separate from immutable-tag rules so a creation bypass does not
 also bypass deletion/update restrictions. Ensure the App can open release PRs
 and apply Release Please labels under organization policy.
 
-## 3. Run the first release
+## 3. Run a release
 
-1. Finish and review [PR #35](https://github.com/ZafTec/relay/pull/35), then merge it
-   when its CI is green and the release credentials are configured. Use its
-   Conventional Commit title if squash merging.
+1. Review and merge the implementation PR when its CI is green and the release
+   credentials are configured. Use its Conventional Commit title if squash merging.
    CI runs only on pull requests. The merge updates `main`, which triggers Release
    Please without rerunning CI; this also works when direct pushes are prohibited.
 2. The **Release Please** workflow runs on `main` and opens a release PR updating
-   `CHANGELOG.md`, `version.txt`, and `.release-please-manifest.json` to `0.1.0`.
+   `CHANGELOG.md`, `version.txt`, and `.release-please-manifest.json` to the next version.
 3. Review the release PR and CI. Merging that PR authorizes release creation:
-   Release Please creates `v0.1.0` and a draft GitHub release.
-4. **Release images** waits for any `release` environment review, builds the
+   Release Please creates the version tag and a draft GitHub release.
+4. **Release images** builds the
    backend/web pair, scans it, attaches provenance and release evidence, and
    publishes the GitHub release only after every publication check succeeds.
 

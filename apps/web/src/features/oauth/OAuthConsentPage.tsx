@@ -113,6 +113,7 @@ export function OAuthConsentPage() {
 
             <InlineNotice title="Workspace boundary" tone="info">
               <p>Consent does not bypass membership checks. Relay still authorizes every resource against the active workspace.</p>
+              <Link to={`/oauth/workspace${location.search}`}>Choose a different workspace</Link>
             </InlineNotice>
 
             <div className="oauth-panel__actions">

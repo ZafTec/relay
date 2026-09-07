@@ -16,6 +16,10 @@ import {
 } from "@relay/config";
 import { createDatabasePool } from "@relay/database";
 import {
+  createNotificationDeliveryLoop,
+  loadSmtpConfig,
+} from "@relay/notifications";
+import {
   createJsonLogger,
   type JsonLogger,
   type LogRecord,
@@ -23,6 +27,7 @@ import {
 import {
   createAzureFlux2ProClient,
   createAzureGptImage2Client,
+  createAzureMaiImageClient,
   createAzureMistralOcrClient,
 } from "@relay/providers";
 import { createS3ObjectStorage } from "@relay/storage";
@@ -51,11 +56,15 @@ export interface MvpWorkerCompositionDependencies {
   readonly loadWorkerS3Config: () => S3Config;
   readonly loadArtifactLifecycleConfig: () => ArtifactLifecycleConfig;
   readonly loadWorkerAzureProviderConfig: () => AzureProviderConfig;
+  readonly loadSmtpConfig: typeof loadSmtpConfig;
+  readonly createNotificationDeliveryLoop:
+    typeof createNotificationDeliveryLoop;
   readonly createDatabasePool: typeof createDatabasePool;
   readonly createS3ObjectStorage: typeof createS3ObjectStorage;
   readonly createAzureGptImage2Client: typeof createAzureGptImage2Client;
   readonly createAzureFlux2ProClient: typeof createAzureFlux2ProClient;
   readonly createAzureMistralOcrClient: typeof createAzureMistralOcrClient;
+  readonly createAzureMaiImageClient: typeof createAzureMaiImageClient;
   readonly createArtifactMaintenanceLoop: typeof createArtifactMaintenanceLoop;
   readonly startWorker: typeof startWorker;
 }
@@ -65,11 +74,14 @@ const MVP_WORKER_DEPENDENCIES: MvpWorkerCompositionDependencies = {
   loadWorkerS3Config,
   loadArtifactLifecycleConfig,
   loadWorkerAzureProviderConfig,
+  loadSmtpConfig,
+  createNotificationDeliveryLoop,
   createDatabasePool,
   createS3ObjectStorage,
   createAzureGptImage2Client,
   createAzureFlux2ProClient,
   createAzureMistralOcrClient,
+  createAzureMaiImageClient,
   createArtifactMaintenanceLoop,
   startWorker,
 };
@@ -155,6 +167,7 @@ export async function startMvpWorker(
   const s3Config = dependencies.loadWorkerS3Config();
   const lifecycle = dependencies.loadArtifactLifecycleConfig();
   const azure = dependencies.loadWorkerAzureProviderConfig();
+  const smtp = dependencies.loadSmtpConfig();
   const logger = workerLogger(runtimeOptions);
   const disposers: ResourceDisposer[] = [];
   let operationFailed = false;
@@ -204,6 +217,14 @@ export async function startMvpWorker(
         mistralOcrClient: dependencies.createAzureMistralOcrClient(
           { ...providerOptions, ...azure.mistralOcr },
         ),
+        maiImageClient: dependencies.createAzureMaiImageClient({
+          ...providerOptions,
+          ...azure.gptImage2,
+        }, "MAI-Image-2.5"),
+        maiFlashClient: dependencies.createAzureMaiImageClient({
+          ...providerOptions,
+          ...azure.gptImage2,
+        }, "MAI-Image-2.5-Flash"),
       }),
     );
     const artifactMaintenance = dependencies.createArtifactMaintenanceLoop(
@@ -216,6 +237,25 @@ export async function startMvpWorker(
         log: (record) => forwardSanitizedRecord(logger, record),
       },
     );
+    const notifications = smtp === null
+      ? null
+      : dependencies.createNotificationDeliveryLoop(pool, smtp, {
+        report: ({ outcome, code }) =>
+          logger.log({
+            eventName: "worker.notification.delivery",
+            severity: outcome === "success" ? "INFO" : "WARN",
+            message: "Notification delivery attempt completed",
+            operation: "notification_delivery",
+            outcome,
+            errorType: code === undefined
+              ? undefined
+              : code === "smtp_timeout"
+              ? "timeout"
+              : code === "interrupted"
+              ? "aborted"
+              : "dependency",
+          }),
+      });
     const {
       artifactMaintenanceConcurrency: _artifactMaintenanceConcurrency,
       ...workerOptions
@@ -227,7 +267,14 @@ export async function startMvpWorker(
       logger,
       pool,
       handlerRegistry: handlers,
-      artifactMaintenance,
+      artifactMaintenance: notifications === null ? artifactMaintenance : {
+        // Both loops begin after readiness and stop before the pool is released.
+        start: () =>
+          Promise.race([artifactMaintenance.start(), notifications.start()]),
+        stop: async () => {
+          await Promise.all([artifactMaintenance.stop(), notifications.stop()]);
+        },
+      },
       additionalReadinessChecks: [
         ...(runtimeOptions.additionalReadinessChecks ?? []),
         () => objectStorage.checkHealth(),

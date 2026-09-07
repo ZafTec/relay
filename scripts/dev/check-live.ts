@@ -86,6 +86,7 @@ const testCommand = new Deno.Command(Deno.execPath(), {
     "test",
     "--allow-env",
     "--allow-net",
+    "--allow-read",
     "apps/api",
     "apps/worker",
     "packages",

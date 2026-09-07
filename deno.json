@@ -1,4 +1,5 @@
 {
+  "license": "MIT",
   "workspace": [
     "./apps/api",
     "./apps/worker",
@@ -18,18 +19,19 @@
     "./packages/providers",
     "./packages/queue",
     "./packages/scheduler",
-    "./packages/storage"
+    "./packages/storage",
+    "./packages/notifications"
   ],
   "tasks": {
-    "dev:api": "deno run --env-file=.env --allow-env --allow-net --watch src/main.ts api",
-    "dev:worker": "deno run --env-file=.env --allow-env --allow-net --watch src/main.ts worker",
-    "start:api": "deno run --env-file=.env --allow-env --allow-net src/main.ts api",
-    "start:worker": "deno run --env-file=.env --allow-env --allow-net src/main.ts worker",
+    "dev:api": "deno run --env-file=.env --allow-env --allow-net --allow-read=packages/notifications/src --watch src/main.ts api",
+    "dev:worker": "deno run --env-file=.env --allow-env --allow-net --allow-read=packages/notifications/src --watch src/main.ts worker",
+    "start:api": "deno run --env-file=.env --allow-env --allow-net --allow-read=packages/notifications/src src/main.ts api",
+    "start:worker": "deno run --env-file=.env --allow-env --allow-net --allow-read=packages/notifications/src src/main.ts worker",
     "migrate:up": "deno run --env-file=.env --allow-env --allow-net src/main.ts migrate up",
     "migrate:status": "deno run --env-file=.env --allow-env --allow-net src/main.ts migrate status",
     "admin:bootstrap-superadmin": "deno run --allow-env --allow-net src/main.ts admin bootstrap-superadmin",
-    "compile": "deno compile --allow-env --allow-net --output dist/relay src/main.ts",
-    "test": "deno test --allow-env --allow-net apps/api apps/worker packages src",
+    "compile": "deno compile --allow-env --allow-net --include packages/notifications/src/smtp-worker.ts --output dist/relay src/main.ts",
+    "test": "deno test --allow-env --allow-net --allow-read apps/api apps/worker packages src",
     "test:coverage": "deno test --allow-env --allow-net --allow-read --coverage=coverage/backend --clean --coverage-threshold=55 apps/api apps/worker packages scripts/dependencies scripts/release src",
     "check": "deno fmt --check apps packages scripts src && deno lint apps packages scripts src && deno check src/main.ts scripts/dev/check-live.ts scripts/ci/api-container-smoke.ts scripts/ci/web-container-smoke.ts && deno task test:coverage",
     "check:live": "deno run --allow-env --allow-run --allow-read scripts/dev/check-live.ts",
@@ -63,6 +65,7 @@
     "ioredis": "npm:ioredis@5.11.1",
     "kysely": "npm:kysely@^0.29.5",
     "pg": "npm:pg@^8.23.0",
-    "zod/v4": "npm:zod@4.4.3/v4"
+    "zod/v4": "npm:zod@4.4.3/v4",
+    "@denomailer": "https://deno.land/x/denomailer@1.6.0/mod.ts"
   }
 }

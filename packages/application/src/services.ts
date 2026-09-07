@@ -26,6 +26,8 @@ import type {
   UsageSummaryRequest,
 } from "@relay/contracts";
 import type { WorkspaceActorContext } from "./context.ts";
+import type { NotificationService } from "@relay/notifications";
+import type { ContentApplicationService } from "./content.ts";
 
 export interface ToolApplicationService {
   list(
@@ -129,6 +131,8 @@ export interface WorkspaceEventApplicationService {
 }
 
 export interface ApplicationServices {
+  readonly notifications?: NotificationService;
+  readonly content?: ContentApplicationService;
   readonly tools: ToolApplicationService;
   readonly runs: RunApplicationService;
   readonly artifacts:
