@@ -96,13 +96,15 @@ that workspace. Messages contain an authenticated run link, without prompts or
 attachments. Delivery rechecks membership and preferences. An email already
 being sent may still arrive after opt-out.
 
-The API uses Deno SMTPClient with the existing relay configured by `SMTP_HOST`,
+The worker uses Deno SMTPClient with the existing relay configured by `SMTP_HOST`,
 `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, and `SMTP_SECURITY`
 (`starttls`, `tls`, or private-network `plain`). `NOTIFICATIONS_APP_URL`
 defaults to the authentication origin. An absent host leaves email disabled.
-Local development placeholders are in `.env.example`.
+Provide the same SMTP settings to the API and worker: the API exposes availability
+and preferences, while the worker sends messages. Local development placeholders
+are in `.env.example`.
 
-Delivery is stored in PostgreSQL and runs within the existing API process.
+Delivery is stored in PostgreSQL and runs within the existing worker process.
 Temporary failures retry after 1 minute, 5 minutes, 15 minutes, and 1 hour, with
 at most five attempts. Permanent SMTP rejections stop immediately. Each attempt
 has a 30-second timeout and a fenced lease. A stable Message-ID helps identify
