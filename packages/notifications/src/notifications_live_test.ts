@@ -39,6 +39,27 @@ Deno.test({
       },
     });
     try {
+      const privileges = await pool.query(
+        `select
+          has_table_privilege(current_user, 'relay.notification_preferences', 'SELECT') as read_preferences,
+          has_table_privilege(current_user, 'relay.notification_preferences', 'INSERT') as create_preferences,
+          has_table_privilege(current_user, 'relay.notification_preferences', 'UPDATE') as update_preferences,
+          has_table_privilege(current_user, 'relay.notification_preferences', 'DELETE') as delete_preferences,
+          has_table_privilege(current_user, 'relay.notification_deliveries', 'SELECT') as read_deliveries,
+          has_table_privilege(current_user, 'relay.notification_deliveries', 'UPDATE') as update_deliveries,
+          has_table_privilege(current_user, 'relay.notification_deliveries', 'INSERT') as create_deliveries,
+          has_table_privilege(current_user, 'relay.notification_deliveries', 'DELETE') as delete_deliveries`,
+      );
+      assertEquals(privileges.rows[0], {
+        read_preferences: true,
+        create_preferences: true,
+        update_preferences: true,
+        delete_preferences: false,
+        read_deliveries: true,
+        update_deliveries: true,
+        create_deliveries: false,
+        delete_deliveries: false,
+      });
       await pool.query(
         'insert into auth."user" (id,name,email,"emailVerified") values($1,\'Notification test\',$2,true)',
         [actorUserId, `${suffix}@example.test`],
