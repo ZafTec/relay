@@ -599,7 +599,16 @@ export async function createRelayMcpServer(
   const grantedScopes = new Set(options.principal.scopes);
   const server = new McpServer(
     options.serverInfo ?? { name: "relay", version: "0.0.0" },
-    { supportedProtocolVersions: [RELAY_MCP_PROTOCOL_VERSION] },
+    {
+      // The stateless HTTP fallback validates every request against this list,
+      // including initialized notifications and tool calls after negotiation.
+      supportedProtocolVersions: [
+        RELAY_MCP_PROTOCOL_VERSION,
+        "2025-11-25",
+        "2025-06-18",
+        "2025-03-26",
+      ],
+    },
   );
 
   server.registerTool(

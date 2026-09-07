@@ -133,74 +133,101 @@ function jsonRequest(
   });
 }
 
-Deno.test("official v2 HTTP client discovers and calls Relay tools without sessions", async () => {
-  const responses: Response[] = [];
-  const requests: Request[] = [];
-  const handler = createRelayMcpHttpHandler({
-    auth: fakeAuth(),
-    services: createStubServices(),
-    allowedHostnames: ["relay.test"],
-    allowedOrigins: ["https://app.relay.test"],
-    serverInfo: { name: "relay-test", version: "1.0.0" },
-  });
-  const fetch: typeof globalThis.fetch = async (input, init) => {
-    const original = input instanceof Request
-      ? input
-      : new Request(input, init);
-    const headers = new Headers(original.headers);
-    headers.set("host", "relay.test");
-    const request = new Request(original, { headers });
-    requests.push(request.clone());
-    const response = await handler.fetch(request);
-    responses.push(response.clone());
-    return response;
-  };
-  const transport = new StreamableHTTPClientTransport(
-    new URL(MCP_RESOURCE),
-    {
-      fetch,
-      authProvider: { token: () => Promise.resolve("valid-token") },
-      onInsufficientScope: "throw",
-    },
-  );
-  const client = new Client(
-    { name: "relay-http-test", version: "1.0.0" },
-    { versionNegotiation: { mode: { pin: RELAY_MCP_PROTOCOL_VERSION } } },
-  );
+for (
+  const mode of [
+    "default",
+    "2025-06-18",
+    "2025-03-26",
+    RELAY_MCP_PROTOCOL_VERSION,
+  ] as const
+) {
+  Deno.test(`official v2 HTTP client (${mode}) discovers and calls Relay tools without sessions`, async () => {
+    const responses: Response[] = [];
+    const requests: Request[] = [];
+    const authState = { current: true };
+    const handler = createRelayMcpHttpHandler({
+      auth: fakeAuth(authState),
+      services: createStubServices(),
+      allowedHostnames: ["relay.test"],
+      allowedOrigins: ["https://app.relay.test"],
+      serverInfo: { name: "relay-test", version: "1.0.0" },
+    });
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const original = input instanceof Request
+        ? input
+        : new Request(input, init);
+      const headers = new Headers(original.headers);
+      headers.set("host", "relay.test");
+      const request = new Request(original, { headers });
+      requests.push(request.clone());
+      const response = await handler.fetch(request);
+      responses.push(response.clone());
+      return response;
+    };
+    const transport = new StreamableHTTPClientTransport(
+      new URL(MCP_RESOURCE),
+      {
+        fetch,
+        authProvider: { token: () => Promise.resolve("valid-token") },
+        onInsufficientScope: "throw",
+      },
+    );
+    const client = new Client(
+      { name: "relay-http-test", version: "1.0.0" },
+      mode === "default"
+        ? {}
+        : mode === RELAY_MCP_PROTOCOL_VERSION
+        ? { versionNegotiation: { mode: { pin: mode } } }
+        : { supportedProtocolVersions: [mode] },
+    );
 
-  try {
-    await client.connect(transport);
-    const listed = await client.listTools();
-    assertEquals(
-      listed.tools.map((tool) => tool.name).sort(),
-      Object.values(RELAY_MCP_TOOL_NAMES).sort(),
-    );
-    const result = await client.callTool({
-      name: RELAY_MCP_TOOL_NAMES.listTools,
-      arguments: {},
-    });
-    assertEquals(result.isError, undefined);
-    assertEquals(result.structuredContent, {
-      kind: "ok",
-      items: [],
-      nextCursor: null,
-    });
-    assert(requests.length >= 3);
-    assert(
-      requests.some((request) =>
-        request.headers.get("mcp-protocol-version") ===
-          RELAY_MCP_PROTOCOL_VERSION
-      ),
-    );
-    assertEquals(
-      responses.some((response) => response.headers.has("mcp-session-id")),
-      false,
-    );
-  } finally {
-    await client.close();
-    await handler.close();
-  }
-});
+    try {
+      await client.connect(transport);
+      const listed = await client.listTools();
+      assertEquals(
+        listed.tools.map((tool) => tool.name).sort(),
+        Object.values(RELAY_MCP_TOOL_NAMES).sort(),
+      );
+      const result = await client.callTool({
+        name: RELAY_MCP_TOOL_NAMES.listTools,
+        arguments: {},
+      });
+      assertEquals(result.isError, undefined);
+      assertEquals(result.structuredContent, {
+        kind: "ok",
+        items: [],
+        nextCursor: null,
+      });
+      assert(requests.length >= 3);
+      assert(
+        requests.some((request) =>
+          request.headers.get("mcp-protocol-version") ===
+            (mode === "default" ? "2025-11-25" : mode)
+        ),
+      );
+      assertEquals(
+        responses.some((response) => response.headers.has("mcp-session-id")),
+        false,
+      );
+      // A successful initialization never replaces current-membership checks.
+      authState.current = false;
+      const revoked = await handler.fetch(jsonRequest({
+        jsonrpc: "2.0",
+        id: 99,
+        method: "tools/list",
+        params: mode === RELAY_MCP_PROTOCOL_VERSION
+          ? { _meta: MODERN_META }
+          : {},
+      }, {
+        "mcp-protocol-version": mode === "default" ? "2025-11-25" : mode,
+      }));
+      assertEquals(revoked.status, 403);
+    } finally {
+      await client.close();
+      await handler.close();
+    }
+  });
+}
 
 Deno.test("MCP rejects Host, Origin, and oversized bodies before authentication", async () => {
   let protectedCalls = 0;
@@ -317,7 +344,7 @@ Deno.test("MCP method, content, and authentication failures are explicit", async
   await handler.close();
 });
 
-Deno.test("MCP modern notifications, Accept negotiation, and legacy rejection are exact", async () => {
+Deno.test("MCP notifications, Accept negotiation, and legacy initialization remain stateless", async () => {
   const handler = createRelayMcpHttpHandler({
     auth: fakeAuth(),
     services: createStubServices(),
@@ -353,7 +380,7 @@ Deno.test("MCP modern notifications, Accept negotiation, and legacy rejection ar
       clientInfo: { name: "legacy-test", version: "1.0.0" },
     },
   }));
-  assertEquals(legacy.status, 400);
+  assertEquals(legacy.status, 200);
   assertEquals(legacy.headers.has("mcp-session-id"), false);
   await handler.close();
 });

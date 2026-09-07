@@ -9,6 +9,12 @@ method. Copy the client ID and the one-time secret into the agent. Public
 clients use PKCE without a secret. All authorization-code clients require PKCE
 with S256.
 
+The endpoint accepts the SDK's stateless 2025-03-26, 2025-06-18 and 2025-11-25
+compatibility flows as well as the 2026-07-28 protocol. Agents can use normal
+initialization without forcing a protocol revision. Both paths revalidate OAuth
+scopes and workspace membership for each request; Relay does not issue MCP
+session IDs.
+
 The agent sends you to Relay to sign in, select a workspace, and approve access.
 Registration does not grant usage allowances. Execution still needs an explicit
 `tools.execute` capability and the applicable image or OCR allowance. Client

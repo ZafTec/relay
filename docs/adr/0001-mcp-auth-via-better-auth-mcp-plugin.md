@@ -95,6 +95,15 @@ OAuth transport, produced and consumed automatically by the OAuth flow.
 
 ## Consequences
 
+Compatibility update, 2026-09-07: the endpoint also enables the official SDK's
+stateless path for revisions 2025-03-26, 2025-06-18 and 2025-11-25, including
+the client's default initialization flow. The 2026-07-28 path remains supported.
+Both pass through the same Host/Origin, OAuth, scope and current-membership
+checks on every request. MCP session IDs are not issued. Official SDK client
+tests cover discovery, tool calls and membership revocation for all four
+revisions; a local compiled-runtime check covers native OAuth, consent, PKCE,
+client-secret rotation and revocation through the default client flow.
+
 - `06-http-mcp-events.md`'s "OAuth resource protection" and "Client
   registration" sections are superseded by this ADR; the underlying resource
   identifier, scopes, DPoP, and metadata requirements they describe still apply
