@@ -382,7 +382,9 @@ export function createRelayMcpHttpHandler(
       });
     },
     {
-      legacy: "reject",
+      // Many agents still initialize with a 2025 protocol revision. The SDK's
+      // stateless compatibility path retains the same per-request auth boundary.
+      legacy: "stateless",
       responseMode: "auto",
       onerror: options.onerror,
     },
