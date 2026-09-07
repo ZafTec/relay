@@ -1,4 +1,5 @@
 import { Hono } from "@hono/hono";
+import { notificationSettingsSchema } from "@relay/notifications";
 import {
   type ApplicationServices,
   InvalidCursorError,
@@ -91,6 +92,7 @@ export interface V1RouteDependencies {
   readonly queueRetryAfterSeconds?: number;
   readonly eventStream?: WorkspaceEventStreamOptions;
   readonly createRequestId?: () => string;
+  readonly allowedOrigins?: readonly string[];
 }
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
@@ -236,6 +238,52 @@ export function createV1Routes(
       context.get("requestId"),
     )
   );
+
+  routes.get("/api/v1/notifications", async (context) => {
+    assertNoQuery(context.req.raw);
+    const identity = await requireWorkspaceIdentity(
+      dependencies.resolveIdentity,
+      context.req.raw,
+    );
+    const result = await dependencies.services.notifications?.get(identity);
+    if (!result || result.kind === "not_found") throw notFound();
+    return context.json(result);
+  });
+
+  routes.put("/api/v1/notifications", async (context) => {
+    assertNoQuery(context.req.raw);
+    const identity = await requireWorkspaceIdentity(
+      dependencies.resolveIdentity,
+      context.req.raw,
+    );
+    const origin = context.req.header("origin");
+    const origins = dependencies.allowedOrigins ??
+      [new URL(context.req.url).origin];
+    if (!origin || !origins.includes(origin)) {
+      throw new HttpAdapterError({
+        status: 403,
+        code: "invalid_request",
+        message: "A trusted browser origin is required.",
+      });
+    }
+    const settings = notificationSettingsSchema.safeParse(
+      await readJsonBody(context.req.raw, 1024),
+    );
+    if (!settings.success) throw invalidRequest();
+    const result = await dependencies.services.notifications?.update(
+      identity,
+      settings.data,
+    );
+    if (!result || result.kind === "not_found") throw notFound();
+    if (result.kind === "not_configured") {
+      throw new HttpAdapterError({
+        status: 503,
+        code: "dependency_unavailable",
+        message: "Email notifications are not configured.",
+      });
+    }
+    return context.json(result);
+  });
 
   routes.get(HTTP_PATHS.tools, async (context) => {
     const identity = await requireWorkspaceIdentity(

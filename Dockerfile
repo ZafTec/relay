@@ -14,12 +14,23 @@ COPY src ./src
 # defaults every deno command to this, but it's repeated explicitly here
 # so this build stays reproducible even if that default is ever changed
 # without someone re-reading this file too.
+# Deno 2.9 records native OTel enablement in the compiled executable. Ship both
+# modes so the launcher can honor OTEL_DENO at runtime, including a quiet
+# executable for one-shot commands. Export endpoints remain runtime settings.
 RUN mkdir -p /out && \
-    deno compile \
+    OTEL_DENO=false deno compile \
       --frozen \
       --allow-env \
       --allow-net \
+      --include packages/notifications/src/smtp-worker.ts \
       --output /out/relay \
+      src/main.ts && \
+    OTEL_DENO=true OTEL_PROPAGATORS=tracecontext deno compile \
+      --frozen \
+      --allow-env \
+      --allow-net \
+      --include packages/notifications/src/smtp-worker.ts \
+      --output /out/relay-otel \
       src/main.ts
 
 FROM build AS test
@@ -45,6 +56,8 @@ FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe6
 WORKDIR /app
 COPY --from=certificates /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/relay /app/relay
+COPY --from=build /out/relay-otel /app/relay-otel
+COPY LICENSE /app/LICENSE
 COPY apps/api/docker-entrypoint.sh /app/relay-entrypoint
 RUN sed -i 's/\r$//' /app/relay-entrypoint && \
     chmod 0555 /app/relay-entrypoint
@@ -67,7 +80,7 @@ LABEL org.opencontainers.image.title="Relay" \
       org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.revision="${GIT_SHA}" \
       org.opencontainers.image.created="${IMAGE_CREATED}" \
-      org.opencontainers.image.licenses="UNLICENSED"
+      org.opencontainers.image.licenses="MIT"
 
 USER 65532:65532
 EXPOSE 8000

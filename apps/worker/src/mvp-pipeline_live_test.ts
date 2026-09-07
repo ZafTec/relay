@@ -7,6 +7,7 @@ import { manageWorkspaceAllowance } from "@relay/metering";
 import {
   createAzureFlux2ProClient,
   createAzureGptImage2Client,
+  createAzureMaiImageClient,
   createAzureMistralOcrClient,
 } from "@relay/providers";
 import { admitToolRun } from "@relay/queue";
@@ -91,6 +92,11 @@ Deno.test({
         ...options,
         fetch: asFetch((_url, init) => {
           providerCalls++;
+          if (
+            new Headers(init?.headers).get("content-type")?.startsWith(
+              "multipart/",
+            )
+          ) return jsonResponse({ data: [{ b64_json: base64(imageBytes) }] });
           assertEquals((requestBody(init) as { n: number }).n, 2);
           return jsonResponse({
             data: [
@@ -106,11 +112,25 @@ Deno.test({
           providerCalls++;
           assertEquals(
             (requestBody(init) as { input_image: string }).input_image,
-            `data:image/png;base64,${base64(imageBytes)}`,
+            base64(imageBytes),
           );
           return jsonResponse({ data: [{ b64_json: base64(imageBytes) }] });
         }),
       }),
+      maiImageClient: createAzureMaiImageClient({
+        ...options,
+        fetch: asFetch(() => {
+          providerCalls++;
+          return jsonResponse({ data: [{ b64_json: base64(imageBytes) }] });
+        }),
+      }, "MAI-Image-2.5"),
+      maiFlashClient: createAzureMaiImageClient({
+        ...options,
+        fetch: asFetch(() => {
+          providerCalls++;
+          return jsonResponse({ data: [{ b64_json: base64(imageBytes) }] });
+        }),
+      }, "MAI-Image-2.5-Flash"),
       mistralOcrClient: createAzureMistralOcrClient({
         ...options,
         fetch: asFetch((_url, init) => {
@@ -161,9 +181,15 @@ Deno.test({
           "image.generate.gpt-image-2",
           "image.generate.flux-2-pro",
           "document.ocr",
+          "image.edit.gpt-image-2",
+          "image.edit.flux-2-pro",
+          "image.generate.mai-image-2.5",
+          "image.edit.mai-image-2.5",
+          "image.generate.mai-image-2.5-flash",
+          "image.edit.mai-image-2.5-flash",
         ]],
       );
-      assertEquals(tools.rows.length, 3);
+      assertEquals(tools.rows.length, 9);
       const versions = new Map<string, string>(
         tools.rows.map((
           row: { key: string; active_version_id: string },
@@ -271,7 +297,10 @@ Deno.test({
         const idempotencyKey = crypto.randomUUID();
         const admitted = await admit(key, input, idempotencyKey);
         assert(admitted.kind === "admitted", JSON.stringify(admitted));
-        const deadline = Date.now() + 15_000;
+        // MAI submissions share a 2/minute provider policy across generation and
+        // editing. Exercise that policy without mistaking the queue for a failure.
+        const deadline = Date.now() +
+          (key.includes("mai-image") ? 45_000 : 15_000);
         let status = "queued";
         while (Date.now() < deadline) {
           if (workerError !== undefined) throw workerError;
@@ -380,7 +409,39 @@ Deno.test({
         (await admit("document.ocr", { sourceArtifactVersionId })).kind,
         "allowance_exceeded",
       );
-      assertEquals(providerCalls, 5);
+      await manageWorkspaceAllowance(
+        pool,
+        operatorSession,
+        workspaceId,
+        "grant",
+        {
+          key: "images.generated",
+          mode: "finite",
+          amount: "9",
+          effectiveAt: null,
+          expiresAt: null,
+          reason: "Exercise six new image tools in local pipeline",
+        },
+        crypto.randomUUID(),
+        `req-${suffix}`,
+      );
+      for (const key of ["image.edit.gpt-image-2", "image.edit.flux-2-pro"]) {
+        await execute(key, {
+          prompt: "pipeline-prompt-canary",
+          inputArtifactVersionIds: [sourceArtifactVersionId],
+          ...(key === "image.edit.flux-2-pro" ? { outputFormat: "png" } : {}),
+        }, 1);
+      }
+      for (const model of ["mai-image-2.5", "mai-image-2.5-flash"]) {
+        await execute(`image.generate.${model}`, {
+          prompt: "pipeline-prompt-canary",
+        }, 1);
+        await execute(`image.edit.${model}`, {
+          prompt: "pipeline-prompt-canary",
+          sourceArtifactVersionId,
+        }, 1);
+      }
+      assertEquals(providerCalls, 11);
       const quantities = await pool.query<
         { metric_key: string; quantity: string }
       >(
@@ -391,7 +452,7 @@ Deno.test({
         quantities.rows.map((
           row: { metric_key: string; quantity: string },
         ) => [row.metric_key, Number(row.quantity)]),
-        [["images.generated", 3], ["ocr.requests", 3]],
+        [["images.generated", 9], ["ocr.requests", 3]],
       );
       // No production price is configured; a successful run must not invent one.
       const costs = await pool.query(

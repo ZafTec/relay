@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { RelayBrand } from "../brand/RelayBrand";
 import { LinkButton } from "../ui/Button";
+import { LegalLinks } from "./LegalLinks";
 
 interface PublicLayoutProps {
   children: ReactNode;
@@ -41,14 +42,14 @@ export function PublicLayout({ children }: PublicLayoutProps) {
             <RelayBrand surface="product" />
             <p>Metered tools and durable artifact URLs for AI agents.</p>
           </div>
-          <nav className="public-footer__nav" aria-label="Footer">
+          <div className="public-footer__policies"><nav className="public-footer__nav" aria-label="Footer">
             <Link to="/#platform">Platform</Link>
             <Link to="/changelog">Changelog</Link>
             <Link to="/docs">Docs</Link>
             <Link to="/status">Status</Link>
             <Link to="/sign-in">Sign in</Link>
             <span>ZafTech</span>
-          </nav>
+          </nav><LegalLinks /></div>
         </div>
       </footer>
     </div>

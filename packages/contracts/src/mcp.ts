@@ -7,6 +7,8 @@ export const RELAY_MCP_RESOURCE_SCOPES: readonly [
   "artifacts:write",
   "artifacts:share",
   "usage:read",
+  "notifications:read",
+  "notifications:write",
 ] = Object.freeze([
   "tools:read",
   "tools:execute",
@@ -16,6 +18,8 @@ export const RELAY_MCP_RESOURCE_SCOPES: readonly [
   "artifacts:write",
   "artifacts:share",
   "usage:read",
+  "notifications:read",
+  "notifications:write",
 ]);
 
 export type RelayMcpResourceScope = (typeof RELAY_MCP_RESOURCE_SCOPES)[number];

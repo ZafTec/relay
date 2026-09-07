@@ -12,6 +12,12 @@ import {
 } from "@relay/application/context";
 import type { ApplicationServices } from "@relay/application/services";
 import {
+  contentAccessSchema,
+  uploadContentSchema,
+} from "@relay/application/content";
+import { notificationSettingsSchema } from "@relay/notifications";
+import { z } from "zod/v4";
+import {
   cancelRunResultSchema,
   completeArtifactUploadResultSchema,
   type ContractSchema,
@@ -66,6 +72,10 @@ export const RELAY_MCP_TOOL_NAMES: Readonly<{
   completeArtifactUpload: "relay.artifacts.complete_upload";
   createShareLink: "relay.artifacts.create_share_link";
   revokeShareLink: "relay.artifacts.revoke_share_link";
+  uploadContent: "relay.artifacts.upload_content";
+  getAccess: "relay.artifacts.get_access";
+  getNotifications: "relay.notifications.get";
+  configureNotifications: "relay.notifications.configure";
 }> = Object.freeze({
   listTools: "relay.tools.list",
   getTool: "relay.tools.get",
@@ -78,6 +88,10 @@ export const RELAY_MCP_TOOL_NAMES: Readonly<{
   completeArtifactUpload: "relay.artifacts.complete_upload",
   createShareLink: "relay.artifacts.create_share_link",
   revokeShareLink: "relay.artifacts.revoke_share_link",
+  uploadContent: "relay.artifacts.upload_content",
+  getAccess: "relay.artifacts.get_access",
+  getNotifications: "relay.notifications.get",
+  configureNotifications: "relay.notifications.configure",
 });
 
 export type RelayMcpManagementToolName =
@@ -101,6 +115,10 @@ export const RELAY_MCP_MANAGEMENT_TOOL_SCOPES: Readonly<
   [RELAY_MCP_TOOL_NAMES.completeArtifactUpload]: ["artifacts:write"],
   [RELAY_MCP_TOOL_NAMES.createShareLink]: ["artifacts:share"],
   [RELAY_MCP_TOOL_NAMES.revokeShareLink]: ["artifacts:share"],
+  [RELAY_MCP_TOOL_NAMES.uploadContent]: ["artifacts:write", "artifacts:read"],
+  [RELAY_MCP_TOOL_NAMES.getAccess]: ["artifacts:read"],
+  [RELAY_MCP_TOOL_NAMES.getNotifications]: ["notifications:read"],
+  [RELAY_MCP_TOOL_NAMES.configureNotifications]: ["notifications:write"],
 });
 
 export const RELAY_MCP_PROTOCOL_VERSION = "2026-07-28" as const;
@@ -373,6 +391,12 @@ function resultOutcome(
             ? "The share link was already revoked."
             : "Share link revoked.",
         };
+    default:
+      return {
+        success: false,
+        text: "The tool call failed.",
+        code: "internal_error",
+      };
   }
 }
 
@@ -648,7 +672,8 @@ export async function createRelayMcpServer(
     RELAY_MCP_TOOL_NAMES.getRun,
     {
       title: "Get a Relay run",
-      description: "Get the current status and outputs of a workspace run.",
+      description:
+        "Get run status and stored outputs. Use relay.artifacts.get_access with an output artifact ID for a temporary download URL or a permanent revocable link.",
       inputSchema: getRunInputSchema,
       outputSchema: fromJsonSchema(getRunResultSchema.jsonSchema),
       annotations: { readOnlyHint: true, idempotentHint: true },
@@ -806,7 +831,8 @@ export async function createRelayMcpServer(
     RELAY_MCP_TOOL_NAMES.createShareLink,
     {
       title: "Create a Relay artifact share link",
-      description: "Create a revocable share link for a workspace artifact.",
+      description:
+        "Create a revocable share link for a workspace artifact. Set expiresAt to null for no expiry. Anyone with the link can access it unless requireAuth is true.",
       inputSchema: createShareLinkInputSchema,
       outputSchema: fromJsonSchema(createShareLinkResultSchema.jsonSchema),
       annotations: { readOnlyHint: false, idempotentHint: true },
@@ -862,6 +888,184 @@ export async function createRelayMcpServer(
             args.shareLinkId,
             requireMcpIdempotencyKey(context),
           ),
+      ),
+  );
+
+  async function callExtension(
+    name: RelayMcpManagementToolName,
+    permanent: boolean,
+    call: () => Promise<object>,
+  ): Promise<CallToolResult> {
+    const scopes = [
+      ...RELAY_MCP_MANAGEMENT_TOOL_SCOPES[name],
+      ...(permanent ? ["artifacts:share" as const] : []),
+    ];
+    if (!hasScopes(grantedScopes, scopes)) return missingScopeResult(scopes);
+    try {
+      const result = await call() as Record<string, unknown>;
+      if (result.kind === "authorized") {
+        return structuredResult(
+          result,
+          `${
+            result.access === "permanent"
+              ? "Permanent revocable link (anyone with this link can access the file)"
+              : "Temporary download link"
+          }: ${result.url}${
+            result.expiresAt ? `\nExpires: ${result.expiresAt}` : ""
+          }`,
+        );
+      }
+      if (result.kind === "ok") {
+        return structuredResult(
+          result,
+          "Email notification settings and recent delivery status returned. Settings apply to your own runs in this workspace.",
+        );
+      }
+      if (result.kind === "not_configured") {
+        return toolErrorResult(
+          "dependency_unavailable",
+          "Email notifications are not configured on this Relay instance.",
+        );
+      }
+      if (result.kind === "quota_exceeded") {
+        return toolErrorResult(
+          "upload_quota_exceeded",
+          "The workspace storage quota was exceeded.",
+        );
+      }
+      if (result.kind === "idempotency_conflict") {
+        return toolErrorResult(
+          "idempotency_conflict",
+          "This idempotency key was already used for different content or access settings.",
+        );
+      }
+      if (result.kind === "storage_error" || result.kind === "pending") {
+        return toolErrorResult(
+          "dependency_unavailable",
+          "Storage could not confirm the upload. Retry with the same idempotency key.",
+          { retryable: true },
+        );
+      }
+      if (result.kind === "not_found") {
+        return toolErrorResult(
+          "not_found",
+          "The file or notification settings were not found.",
+        );
+      }
+      return toolErrorResult(
+        "invalid_request",
+        "The requested operation is unavailable. Check the file and its access policy.",
+      );
+    } catch (error) {
+      if (
+        error instanceof TypeError || error instanceof RangeError ||
+        error instanceof z.ZodError
+      ) {
+        return toolErrorResult(
+          "invalid_request",
+          "Check the arguments and idempotency metadata. Inline uploads support up to 4 MiB of canonical base64 or UTF-8 text.",
+        );
+      }
+      return toolErrorResult(
+        "internal_error",
+        "Relay could not confirm the operation. Retry with the same idempotency key.",
+        { retryable: true },
+      );
+    }
+  }
+  server.registerTool(
+    RELAY_MCP_TOOL_NAMES.uploadContent,
+    {
+      title: "Save file content to Relay",
+      description:
+        "Persist actual file bytes (PDF, image, text or other content) in workspace storage and return an access URL. Accepts at most 4 MiB decoded base64 or UTF-8 text; no local paths, remote URLs or chat attachment IDs. If your client cannot read the attachment bytes, ask for a direct upload instead. Use create_upload/complete_upload for larger files. Defaults to a 5-minute URL; permanent access creates a revocable link readable by anyone who has it and requires artifacts:share. Supply io.relay/idempotency-key in MCP request _meta and reuse it on retries.",
+      inputSchema: uploadContentSchema,
+      annotations: { readOnlyHint: false, idempotentHint: true },
+      _meta: requiredScopeMetadata(
+        RELAY_MCP_MANAGEMENT_TOOL_SCOPES[RELAY_MCP_TOOL_NAMES.uploadContent],
+      ),
+    },
+    (args, context) =>
+      callExtension(
+        RELAY_MCP_TOOL_NAMES.uploadContent,
+        args.access === "permanent",
+        async () => {
+          if (!services.content) return { kind: "not_found" };
+          return await services.content.upload(
+            identity,
+            args,
+            requireMcpIdempotencyKey(context),
+          );
+        },
+      ),
+  );
+  server.registerTool(
+    RELAY_MCP_TOOL_NAMES.getAccess,
+    {
+      title: "Get a file access URL",
+      description:
+        "Get a URL for an uploaded file or saved tool output. Temporary URLs expire after 1–3600 seconds (default 300). Permanent links have no expiry, can be revoked, and are readable by anyone who has the link; they require artifacts:share and io.relay/idempotency-key in request _meta. Links remain valid while the stored file is retained.",
+      inputSchema: contentAccessSchema,
+      annotations: { readOnlyHint: false, idempotentHint: true },
+      _meta: requiredScopeMetadata(
+        RELAY_MCP_MANAGEMENT_TOOL_SCOPES[RELAY_MCP_TOOL_NAMES.getAccess],
+      ),
+    },
+    (args, context) =>
+      callExtension(
+        RELAY_MCP_TOOL_NAMES.getAccess,
+        args.access === "permanent",
+        async () => {
+          if (!services.content) return { kind: "not_found" };
+          return await services.content.access(
+            identity,
+            args,
+            args.access === "permanent"
+              ? requireMcpIdempotencyKey(context)
+              : undefined,
+          );
+        },
+      ),
+  );
+  server.registerTool(
+    RELAY_MCP_TOOL_NAMES.getNotifications,
+    {
+      title: "Get email notification settings",
+      description:
+        "Read your opt-in settings and recent email delivery status for runs you create in this workspace.",
+      inputSchema: z.object({}).strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true },
+      _meta: requiredScopeMetadata(["notifications:read"]),
+    },
+    () =>
+      callExtension(
+        RELAY_MCP_TOOL_NAMES.getNotifications,
+        false,
+        async () =>
+          await services.notifications?.get(identity) ?? { kind: "not_found" },
+      ),
+  );
+  server.registerTool(
+    RELAY_MCP_TOOL_NAMES.configureNotifications,
+    {
+      title: "Configure email notifications",
+      description:
+        "Only call after the user explicitly asks to change email notifications. Choose whether to email the user's verified sign-in address when their runs complete or fail. Both settings start off; set both false to opt out. Applies to future runs in this workspace. Emails contain a sign-in link to the run, never prompts or attachments.",
+      inputSchema: notificationSettingsSchema.extend({
+        confirm: z.literal(true),
+      }),
+      annotations: { readOnlyHint: false, idempotentHint: true },
+      _meta: requiredScopeMetadata(["notifications:write"]),
+    },
+    (args) =>
+      callExtension(
+        RELAY_MCP_TOOL_NAMES.configureNotifications,
+        false,
+        async () =>
+          await services.notifications?.update(identity, {
+            completed: args.completed,
+            failed: args.failed,
+          }) ?? { kind: "not_found" },
       ),
   );
 

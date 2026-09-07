@@ -1,23 +1,29 @@
 # Legal integration notes
 
 Status: architecture decision with product-specific legal work pending\
-Last verified against the public ZafTech website: 2026-07-28
+Last checked against the deployed ZafTech legal pages: 2026-09-07
 
 This document records technical integration requirements. It is not legal
 advice, and the final product-specific language should receive legal review.
 
 ## Canonical documents
 
-The company-wide legal documents remain canonical. The URLs below use a
-reserved example domain; actual policy URLs are configured outside Git.
+The company-wide documents on **zaftech.co** remain canonical, as requested by
+the owner. Relay links to them from its footer, sign-in, authorization, and
+workspace settings screens. It does not publish separate legal terms.
 
-| Document              | Example URL                         | Page metadata when verified              |
+Automated public requests returned Cloudflare 403 on this review date. The
+published HTML was read from the existing landing-page deployment and compared
+with the local landing-page source. No website or Cloudflare settings were
+changed.
+
+| Document              | Canonical URL                       | Page metadata when verified              |
 | --------------------- | ----------------------------------- | ---------------------------------------- |
-| Terms of Service      | <https://example.test/terms>          | Effective 2026-04-24; updated 2026-04-24 |
-| Privacy Policy        | <https://example.test/privacy>        | Effective 2026-04-24; updated 2026-07-17 |
-| Refund Policy         | <https://example.test/refunds>        | Effective 2026-04-24; updated 2026-04-24 |
-| Cookie Policy         | <https://example.test/cookies>        | Effective 2026-04-24; updated 2026-07-17 |
-| Acceptable Use Policy | <https://example.test/acceptable-use> | Effective 2026-04-24; updated 2026-04-24 |
+| Terms of Service      | <https://zaftech.co/terms>          | Effective 2026-04-24; updated 2026-04-24 |
+| Privacy Policy        | <https://zaftech.co/privacy>        | Effective 2026-04-24; updated 2026-07-17 |
+| Refund Policy         | <https://zaftech.co/refunds>        | Effective 2026-04-24; updated 2026-04-24 |
+| Cookie Policy         | <https://zaftech.co/cookies>        | Effective 2026-04-24; updated 2026-07-17 |
+| Acceptable Use Policy | <https://zaftech.co/acceptable-use> | Effective 2026-04-24; updated 2026-04-24 |
 
 The path `/privacy-policy` returned 404 when checked. The canonical privacy path
 is `/privacy`.
@@ -30,8 +36,8 @@ OAuth client metadata should use the externally configured canonical URLs.
 Example metadata:
 
 ```text
-tos: https://example.test/terms
-policy: https://example.test/privacy
+tos: https://zaftech.co/terms
+policy: https://zaftech.co/privacy
 ```
 
 ## Existing coverage
@@ -47,6 +53,23 @@ The current documents already provide a company-wide baseline for:
 - Consent-based analytics and cookies
 - Prohibited content, abuse, malware, unauthorized access, and service
   degradation
+
+## Relay behavior
+
+The source code and distributed binaries use the MIT license. MIT governs the
+software distribution; ZafTech's canonical policies govern use of its hosted
+service. Third-party licenses remain intact.
+
+Optional browser performance/error telemetry starts only after an explicit
+analytics choice. Relay uses the Cookie Policy's `zaf_consent` and
+`zaf_consent_at` keys with a 180-day lifetime on its own origin. Cookie settings
+can be reopened from the public footer or workspace settings. Withdrawal stops
+delivery and queued telemetry is rechecked before sending. There are no Google
+Analytics or advertising integrations in Relay.
+
+Run notification email is separately opt-in per user/workspace. Generated files
+and uploads are private by default. Permanent access URLs require an explicit
+share and remain revocable.
 
 ## Product-specific additions required
 

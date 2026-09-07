@@ -755,3 +755,65 @@ Deno.test("unexpected failures never disclose internal messages", async () => {
   assertEquals(text.includes(secret), false);
   assertMatch(text, /"code":"internal_error"/);
 });
+Deno.test("notification preferences require cookie identity, trusted origin and an exact opt-in body", async () => {
+  const writes: unknown[] = [];
+  const app = createV1Routes({
+    services: {
+      ...createStubServices(),
+      notifications: {
+        get: () =>
+          Promise.resolve({
+            kind: "ok",
+            notifications: {
+              configured: true,
+              completed: false,
+              failed: false,
+              deliveries: [],
+            },
+          }),
+        update: (identity, settings) => {
+          writes.push({ identity, settings });
+          return Promise.resolve({
+            kind: "ok",
+            notifications: { configured: true, ...settings, deliveries: [] },
+          });
+        },
+      },
+    },
+    resolveIdentity: AUTHENTICATED_IDENTITY,
+    allowedOrigins: ["https://relay.example.test"],
+  });
+  const request = (origin: string, body: unknown) =>
+    app.request("/api/v1/notifications", {
+      method: "PUT",
+      headers: { origin, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  assertEquals(
+    (await request("https://outside.example.test", {
+      completed: true,
+      failed: false,
+    })).status,
+    403,
+  );
+  assertEquals(
+    (await request("https://relay.example.test", {
+      completed: true,
+      failed: false,
+      to: "someone@example.test",
+    })).status,
+    400,
+  );
+  assertEquals(writes.length, 0);
+  assertEquals(
+    (await request("https://relay.example.test", {
+      completed: true,
+      failed: false,
+    })).status,
+    200,
+  );
+  assertEquals(writes, [{
+    identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+    settings: { completed: true, failed: false },
+  }]);
+});

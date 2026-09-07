@@ -72,3 +72,9 @@ export type {
   UsageApplicationService,
   WorkspaceEventApplicationService,
 } from "./services.ts";
+export {
+  contentAccessSchema,
+  createContentService,
+  MAX_INLINE_CONTENT_BYTES,
+  uploadContentSchema,
+} from "./content.ts";

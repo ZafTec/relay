@@ -73,27 +73,28 @@ fails before registry writes.
 
 ## Docker Hub publication
 
-Defaults are:
+The image namespace and registry login both use the repository secret
+`DOCKERHUB_USERNAME`. There is no separate namespace override or default account.
+Repository names default to:
 
 ```text
-DOCKERHUB_NAMESPACE=zaftec
 DOCKERHUB_BACKEND_REPOSITORY=relay-backend
 DOCKERHUB_WEB_REPOSITORY=relay-web
 ```
 
-Override them with GitHub environment variables of those names. Configure a
-protected GitHub environment named `release`, with required reviewers where the
-plan permits, and provide:
+Override repository names with repository variables of those names. Provide these
+repository Actions secrets so publication also works for private repositories:
 
-- `DOCKERHUB_TOKEN`: required environment secret containing a Docker Hub token
+- `DOCKERHUB_TOKEN`: required repository secret containing a Docker Hub token
   with Read & Write permissions for both repositories and no Delete permission;
   reads are required for conflict detection, verification, and rerun recovery;
-- `DOCKERHUB_USERNAME`: environment variable, or an environment secret when the
-  account name is intentionally hidden.
+- `DOCKERHUB_USERNAME`: the Docker Hub account that owns the image repositories.
 
-Enable GitHub artifact attestations for the repository/account plan and confirm
-both Docker Hub repositories accept OCI attestations/referrers. The workflow
-fails rather than publishing when either service rejects provenance.
+Both repositories must support OCI attestations. Public GitHub repositories also
+publish GitHub-signed provenance. Private repositories retain native BuildKit
+provenance; set `RELAY_GITHUB_ATTESTATIONS_ENABLED=true` only when Enterprise Cloud
+provides private-repository GitHub attestations. Native provenance is build
+metadata tied to the image digest, not a GitHub-signed identity claim.
 
 The workflow fails closed when credentials are absent or registry inspection
 cannot distinguish a missing tag from an authentication/network failure. Create
@@ -109,7 +110,7 @@ existing candidate digest instead of rebuilding it. The exact candidate digest
 receives:
 
 - native BuildKit maximum-mode provenance and SBOM attestations;
-- a GitHub build-provenance attestation pushed to the registry;
+- a GitHub build-provenance attestation where supported by the repository plan;
 - an SPDX JSON SBOM release asset; and
 - a blocking HIGH/CRITICAL fixed-vulnerability Trivy JSON report.
 

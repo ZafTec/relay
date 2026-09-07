@@ -11,6 +11,7 @@ import type {
   MeasurementEvent,
   Meta,
 } from "@grafana/faro-web-sdk";
+import { readAnalyticsChoice } from "../lib/analytics-consent";
 
 const version = import.meta.env.VITE_APP_VERSION ?? "development";
 const staticRoutes = new Set([
@@ -151,10 +152,19 @@ export const sanitizeBrowserTelemetry: BeforeSendHook = (item) => {
 };
 
 let started = false;
+let instance: ReturnType<typeof initializeFaro>;
+
+export function syncBrowserTelemetry(): void {
+  if (readAnalyticsChoice() !== "granted") {
+    instance?.pause();
+  } else if (started) {
+    if (instance?.transports.isPaused()) instance.unpause();
+  } else startBrowserTelemetry();
+}
 
 export function startBrowserTelemetry(): void {
   if (
-    started || !import.meta.env.PROD ||
+    started || readAnalyticsChoice() !== "granted" || !import.meta.env.PROD ||
     globalThis.location.origin !== import.meta.env.VITE_APP_ORIGIN ||
     !import.meta.env.VITE_FARO_COLLECTOR_URL
   ) {
@@ -167,7 +177,7 @@ export function startBrowserTelemetry(): void {
       collector.password
     ) return;
     started = true;
-    const faro = initializeFaro({
+    instance = initializeFaro({
       url: collector.href,
       app: { name: "relay-web", version, environment: "production" },
       instrumentations: [
@@ -177,8 +187,8 @@ export function startBrowserTelemetry(): void {
       sessionTracking: { enabled: false },
       trackGeolocation: false,
       preventGlobalExposure: true,
-      beforeSend: sanitizeBrowserTelemetry,
+      beforeSend: (item) => readAnalyticsChoice() === "granted" ? sanitizeBrowserTelemetry(item) : null,
     });
-    faro?.api.pushEvent("page_load");
+    instance?.api.pushEvent("page_load");
   } catch { /* Telemetry must not prevent the application from starting. */ }
 }

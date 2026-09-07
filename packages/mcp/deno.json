@@ -8,6 +8,7 @@
     "@modelcontextprotocol/client": "npm:@modelcontextprotocol/client@2.0.0",
     "@modelcontextprotocol/server": "npm:@modelcontextprotocol/server@2.0.0",
     "@relay/application/context": "../application/src/context.ts",
+    "@relay/application/content": "../application/src/content.ts",
     "@relay/application/services": "../application/src/services.ts",
     "@relay/contracts": "../contracts/src/index.ts",
     "@std/assert": "jsr:@std/assert@^1.0.19",

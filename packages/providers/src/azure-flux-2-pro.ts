@@ -116,7 +116,7 @@ function prepareRequest(
           config.maxBase64Bytes,
           PROVIDER,
           `input_images[${index}]`,
-        ).value
+        ).base64
       );
     }
     const seed = request.seed === undefined ? undefined : safeInteger(

@@ -10,6 +10,7 @@ export {
 } from "./azure-gpt-image-2.ts";
 export type {
   AzureGptImage2Background,
+  AzureGptImage2EditRequest,
   AzureGptImage2Moderation,
   AzureGptImage2OutputFormat,
   AzureGptImage2Quality,
@@ -54,6 +55,16 @@ export type {
 } from "./azure-mistral-ocr.ts";
 
 export { AzureProviderError } from "./errors.ts";
+export {
+  AZURE_MAI_IMAGE_MAX_PIXELS,
+  AzureMaiImageClient,
+  createAzureMaiImageClient,
+} from "./azure-mai-image.ts";
+export type {
+  AzureMaiImageEditRequest,
+  AzureMaiImageModel,
+  AzureMaiImageRequest,
+} from "./azure-mai-image.ts";
 export type { AzureProviderErrorClassification } from "./errors.ts";
 export type {
   GeneratedImage,

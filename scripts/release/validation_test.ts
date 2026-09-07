@@ -62,12 +62,12 @@ function fixture() {
     version: "0.1.0",
     tag: "v0.1.0",
     revision,
-    backendRepository: "zaftec/relay-backend",
+    backendRepository: "example/relay-backend",
     backendDigest,
-    backendCandidate: "zaftec/relay-backend:candidate-12345",
-    webRepository: "zaftec/relay-web",
+    backendCandidate: "example/relay-backend:candidate-12345",
+    webRepository: "example/relay-web",
     webDigest,
-    webCandidate: "zaftec/relay-web:candidate-12345",
+    webCandidate: "example/relay-web:candidate-12345",
     promoteLatest: true,
   });
 }
@@ -202,7 +202,7 @@ Deno.test("attested image validation reads direct Image labels", () => {
 });
 
 Deno.test("registry misses are exact and authorization failures fail closed", () => {
-  const reference = "zaftec/relay-backend:candidate-12345";
+  const reference = "example/relay-backend:candidate-12345";
   assertEquals(
     isMissingRegistryReferenceError(
       `ERROR: docker.io/${reference}: not found\n`,
@@ -239,15 +239,15 @@ Deno.test("release manifest generation is deterministic and digest pinned", () =
   const manifest = JSON.parse(first);
   assertEquals(
     manifest.images.backend.reference,
-    `zaftec/relay-backend@${backendDigest}`,
+    `example/relay-backend@${backendDigest}`,
   );
   assertEquals(
     manifest.images.web.tags.revision,
-    `zaftec/relay-web:git-${revision}`,
+    `example/relay-web:git-${revision}`,
   );
   assertEquals(
     manifest.images.backend.plannedLatestTag,
-    "zaftec/relay-backend:latest",
+    "example/relay-backend:latest",
   );
   assertEquals("latest" in manifest.images.backend.tags, false);
   assertEquals(validateReleaseManifest(manifest), manifest);
@@ -298,7 +298,7 @@ Deno.test("release manifest rejects mismatches and undeclared fields", () => {
 
   const claimedLatest = structuredClone(fixture());
   (claimedLatest.images.backend.tags as Record<string, string>).latest =
-    "zaftec/relay-backend:latest";
+    "example/relay-backend:latest";
   assertThrows(
     () => validateReleaseManifest(claimedLatest),
     Error,
@@ -331,12 +331,12 @@ Deno.test("planned latest promotion is represented for both images or neither", 
     version: "1.2.3",
     tag: "v1.2.3",
     revision,
-    backendRepository: "zaftec/relay-backend",
+    backendRepository: "example/relay-backend",
     backendDigest,
-    backendCandidate: "zaftec/relay-backend:candidate-7",
-    webRepository: "zaftec/relay-web",
+    backendCandidate: "example/relay-backend:candidate-7",
+    webRepository: "example/relay-web",
     webDigest,
-    webCandidate: "zaftec/relay-web:candidate-7",
+    webCandidate: "example/relay-web:candidate-7",
     promoteLatest: false,
   });
   assertEquals(manifest.images.backend.plannedLatestTag, null);

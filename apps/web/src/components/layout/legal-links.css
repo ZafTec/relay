@@ -1,0 +1,55 @@
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.legal-links a, .legal-links button {
+  color: var(--surface-muted);
+  text-underline-offset: 4px;
+}
+
+.legal-links button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.cookie-preferences {
+  position: fixed;
+  inset: auto 20px 20px auto;
+  z-index: 80;
+  width: min(460px, calc(100% - 40px));
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid var(--surface-border-strong);
+  background: var(--surface-panel);
+  color: var(--surface-ink);
+}
+
+.cookie-preferences h2 { margin: 0 0 12px; font-size: 1.05rem; }
+.cookie-preferences p { color: var(--surface-muted); font-size: 0.83rem; line-height: 1.65; }
+.cookie-preferences a { color: var(--surface-ink); text-underline-offset: 3px; }
+.cookie-preferences__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.cookie-preferences .cookie-preferences__note { font-size: 0.75rem; margin-bottom: 0; }
+
+.legal-links a:hover,
+.legal-links a:focus-visible {
+  color: var(--surface-ink);
+}
+
+.public-footer__policies {
+  display: grid;
+  gap: 24px;
+}
+
+.oauth-shell__footer {
+  flex-wrap: wrap;
+  gap: 16px;
+}

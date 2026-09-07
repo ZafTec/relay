@@ -104,7 +104,14 @@ Deno.test("migration manifest preserves the baseline before additive changes", (
   assertEquals(migration.transactional, true);
   assertEquals(
     MIGRATIONS.map((entry) => entry.id),
-    ["0001_relay_baseline", "0002_allowance_management"],
+    [
+      "0001_relay_baseline",
+      "0002_allowance_management",
+      "0003_oauth_client_audit",
+      "0004_image_generation_and_editing",
+      "0005_superadmin_invitations",
+      "0006_notifications",
+    ],
   );
   assertEquals(
     MIGRATIONS.filter((entry) => entry.id === migration.id).length,

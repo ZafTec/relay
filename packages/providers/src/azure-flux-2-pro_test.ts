@@ -32,8 +32,8 @@ Deno.test("FLUX.2 Pro sends fixed model/n and numbered input image fields", asyn
         n: 1,
         prompt: "A precise product photograph",
         disable_pup: true,
-        input_image: first,
-        input_image_2: second,
+        input_image: first.split(",")[1],
+        input_image_2: second.split(",")[1],
         seed: 42,
         width: 1600,
         height: 1024,
@@ -70,9 +70,9 @@ Deno.test("FLUX.2 Pro maps all eight trusted data URLs", async () => {
     apiKey: TEST_API_KEY,
     fetch: asFetch((_input, init) => {
       const body = requestBody(init) as Record<string, unknown>;
-      assert.equal(body.input_image, dataUrl);
+      assert.equal(body.input_image, dataUrl.split(",")[1]);
       for (let index = 2; index <= 8; index += 1) {
-        assert.equal(body[`input_image_${index}`], dataUrl);
+        assert.equal(body[`input_image_${index}`], dataUrl.split(",")[1]);
       }
       assert.equal("input_images" in body, false);
       return jsonResponse({

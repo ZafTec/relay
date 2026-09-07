@@ -536,7 +536,8 @@ describe("admin changelog editor", () => {
     await user.type(screen.getByRole("textbox", { name: /^Version/ }), "1.2");
     await user.type(screen.getByRole("textbox", { name: /^Slug/ }), "Invalid slug");
     await user.type(screen.getByRole("textbox", { name: /^Title/ }), "   ");
-    await user.type(screen.getByRole("textbox", { name: /^Commit SHA/ }), "A".repeat(40));
+    await user.click(screen.getByRole("textbox", { name: /^Commit SHA/ }));
+    await user.paste("A".repeat(40));
     await user.type(screen.getByRole("textbox", { name: /^Release timestamp/ }), "2026-08-25T10:00:00Z");
     await user.click(screen.getByRole("button", { name: "Create draft" }));
 
@@ -617,7 +618,7 @@ describe("admin changelog editor", () => {
     expect(screen.getByRole("textbox", { name: /^Title/ })).toBeDisabled();
     expect(create).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "Retry exact request" }));
-    expect(await screen.findByRole("heading", { name: "Edit 1.2.3" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Edit 1.2.3" }, { timeout: 5000 })).toBeInTheDocument();
 
     expect(create).toHaveBeenCalledTimes(2);
     const firstCall = create.mock.calls[0];

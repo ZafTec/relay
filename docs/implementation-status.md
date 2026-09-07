@@ -1,10 +1,42 @@
 # Relay implementation status
 
 Status: repository audit\
-Verified: 2026-08-21\
+Verified: 2026-09-07\
 Design baseline: `1eb7a3d` (`design/v3/` normalized and tracked)
 
-## PR #35 review update — 2026-09-06
+## Agent access and tools update â€” 2026-09-07
+
+This update supersedes the historical deployment and feature gaps below. Release
+`v0.1.1` has been published and deployed; the changes described here require the
+next reviewed release before they are available there.
+
+- Superadmins can register OAuth clients, copy one-time credentials, rotate
+  secrets, and delete clients. The native Better Auth authorization-code flow
+  was exercised through workspace selection, consent, PKCE, MCP authorization,
+  refresh, and revocation.
+- Superadmins can create revocable, email-bound invitations with explicit
+  acceptance and a seven-day expiry.
+- The catalog and dashboard expose generation/editing for GPT Image 2, FLUX.2
+  Pro, MAI Image 2.5, and MAI Image 2.5 Flash, plus OCR. Explicit execution and
+  metric allowances remain required. Real Azure calls returned valid outputs for
+  all nine tools; ordinary tests use provider fixtures.
+- MCP supports bounded content uploads and temporary or permanent revocable
+  artifact links. Outputs and uploaded files use the existing private storage.
+- Notifications are opt-in per user/workspace, use the existing SMTP relay,
+  and retry durably with fenced attempts. A compiled-binary smoke test delivered
+  to a local fake SMTP server; no user email was sent during testing.
+- Relay uses MIT licensing and links to ZafTech's canonical legal documents.
+  Optional browser telemetry requires analytics consent. Relay-specific policy
+  disclosures and acceptance versioning remain tracked in [legal notes](legal.md).
+
+The isolated PostgreSQL/Redis/MinIO suite passed 708 tests with none skipped.
+See [agent, storage, and notification usage](mcp-and-notifications.md) and the
+[release setup guide](release-please-setup.md). Host configuration, credentials,
+and operator assets remain outside this repository. Release automation publishes
+images into the account specified by `DOCKERHUB_USERNAME` and does not deploy the
+host. Live telemetry and recovery verification remain tracked in #9/#18/#28.
+
+## PR #35 review update â€” 2026-09-06
 
 Allowance management now has a superadmin dashboard at `/admin/allowances`:
 workspace search, explicit execution/image/OCR grants, current monthly usage,
@@ -63,7 +95,7 @@ prices and production deployment/rollback evidence remain tracked in #10/#28.
 The predeployment baseline must not be substituted into an already retained
 database without explicitly reconciling its existing checksum and grants.
 
-## Current branch update — 2026-08-24
+## Current branch update â€” 2026-08-24
 
 The implementation branch now includes hardened Google/GitHub-only Better Auth,
 atomic personal workspaces, durable audit boundaries, the tool/provider catalog,
@@ -80,12 +112,12 @@ that produced the baseline; they are no longer separate deployable migrations.
 After the first production deployment, the baseline becomes immutable and all
 changes append new migrations.
 
-### Release-policy update — 2026-08-25
+### Release-policy update â€” 2026-08-25
 
 The pre-1.0 release policy is approved in
 [`versioning.md`](versioning.md): one product version beginning at `0.1.0`,
 Release Please using a repository-scoped GitHub App, paired
-`zaftec/relay-backend` and `zaftec/relay-web` `linux/amd64` images, immutable
+`<username>/relay-backend` and `<username>/relay-web` `linux/amd64` images, immutable
 SemVer and full-SHA tags plus mutable `latest`, and digest-selected deployment
 from `release-manifest.json`. The workflow definitions are configured, but no
 product tag has been created and no hosted release has yet proven the external
@@ -99,13 +131,13 @@ production-complete: remaining HTTP/SSE/MCP integration, concrete image-provider
 handlers, and final telemetry/deployment wiring require implementation or
 validation.
 
-### Reconciliation update — 2026-09-04
+### Reconciliation update â€” 2026-09-04
 
 This pass verified the uncommitted working tree directly (live PostgreSQL/
 Redis/MinIO test run, a booted API/worker/web stack, and manual browser
 smoke-testing) rather than trusting this document's own prior claims. Several
 rows in the capability matrix and the HTTP surface table below were found
-stale — they describe an earlier state of the branch, not the code that is
+stale â€” they describe an earlier state of the branch, not the code that is
 actually sitting uncommitted today. Corrected facts, verified this pass:
 
 - **Worker process is no longer a placeholder.** `apps/worker/src/worker.ts`
@@ -138,7 +170,7 @@ actually sitting uncommitted today. Corrected facts, verified this pass:
   missing: `packages/artifacts` (idempotency, postgres-quota, share-tokens)
   backs the artifact/share routes above.
 - **Full live test suite is green.** `deno task check:live` (real PostgreSQL
-  18, Redis, MinIO): **617 passed, 0 ignored** — includes a fix to
+  18, Redis, MinIO): **617 passed, 0 ignored** â€” includes a fix to
   `packages/application/src/postgres/live_test.ts`, which had hardcoded a
   calendar-month usage-period assertion that broke once wall-clock time
   crossed a month boundary (it now derives the expected window from the real
@@ -149,7 +181,7 @@ actually sitting uncommitted today. Corrected facts, verified this pass:
   `redirect_uri`, GitHub's own consent screen rendered correctly) all work.
   Completing the consent click itself was not achievable via browser
   automation in this pass (GitHub's authorize page did not respond to
-  synthetic clicks) — that step needs a human click or a scripted OAuth test,
+  synthetic clicks) â€” that step needs a human click or a scripted OAuth test,
   not a code fix.
 
 None of the above changes what's still genuinely open: no production/hosted
@@ -359,14 +391,14 @@ explicitly. Repository-wide command:
 deno task check
 ```
 
-Result: passed — `deno fmt --check`, `deno lint`, `deno check src/main.ts`, and
+Result: passed â€” `deno fmt --check`, `deno lint`, `deno check src/main.ts`, and
 `deno test --allow-env` (3 passed, 0 failed) all succeeded against the scoped
 source tree, with no `design/` or `docs/` files touched.
 
 `Dockerfile:14-15` now reads `--output /out/relay \` followed by `src/main.ts`
 on its own continuation line. First checked with an equivalent
 `deno compile --allow-env --allow-net --output dist/relay src/main.ts` run
-outside Docker (no daemon available yet at that point) — produced a working
+outside Docker (no daemon available yet at that point) â€” produced a working
 binary serving `/health/live`, `/version`, `/api/v1`, and the `not_found`
 envelope correctly.
 
@@ -382,7 +414,7 @@ docker build --progress=plain -t relay:audit .
 This reached the `deno compile` build step (proving the earlier Dockerfile
 syntax fix correct) but failed there only because this sandbox's build
 containers cannot reach the outbound network proxy this session otherwise runs
-through — a documented environment limitation (`/root/.ccr/README.md`'s "docker
+through â€” a documented environment limitation (`/root/.ccr/README.md`'s "docker
 build / docker run" section), not a Dockerfile defect. Per that doc's own
 suggested workaround, a disposable Dockerfile copy (`--network host`, plus
 `DENO_CERT` pointed at the session's CA bundle) was built and discarded without
@@ -393,7 +425,7 @@ docker build --network host -f Dockerfile.spike -t relay:spike .
 docker run -d --name relay-spike -p 18080:8000 -e PORT=8000 relay:spike api
 ```
 
-Result: the full multi-stage build succeeded end-to-end — build stage compiled
+Result: the full multi-stage build succeeded end-to-end â€” build stage compiled
 the binary, runtime stage produced a `debian:bookworm-slim`-based, source-free
 image running as `65532:65532` (non-root). The running container served
 `/health/live`, `/version`, and the 404 envelope on the mapped port exactly as
@@ -403,18 +435,18 @@ repository.
 
 ## Known defects and risks
 
-### P0 — Container build is broken (fixed 2026-08-21)
+### P0 â€” Container build is broken (fixed 2026-08-21)
 
 `Dockerfile:14` was missing a line continuation before `src/main.ts`, so Docker
 parsed the source path as an unknown instruction. A trailing `\` was added after
 `--output /out/relay`. Verified two ways: `deno compile` with the same flags
-outside Docker, and — once a Docker daemon was available in this environment —
+outside Docker, and â€” once a Docker daemon was available in this environment â€”
 the real, unmodified `docker build` end to end (see Validation evidence). Both
 produce a binary/image that serves `/health/live`, `/version`, `/api/v1`, and
 the 404 envelope correctly; the image runs as non-root (`65532:65532`). Wave 0's
 runtime/container spike proof is satisfied for this defect.
 
-### P1 — Readiness can produce a false positive (database check fixed 2026-08-21)
+### P1 â€” Readiness can produce a false positive (database check fixed 2026-08-21)
 
 `/health/ready` now runs a real `select 1` against PostgreSQL via an injected
 `checkReadiness` function and returns `503` with a sanitized reason when it
@@ -424,19 +456,19 @@ and storage checks are not implemented yet -- add them as those packages land
 (Wave 3A/3B) so this defect isn't closed until all required dependencies are
 covered.
 
-### P1 — Configuration presents more capability than runtime supports
+### P1 â€” Configuration presents more capability than runtime supports
 
 The example environment file documents future integrations, while the runtime
 loader currently reads only application name, port, version, and revision. A
 misconfigured production process will not fail fast for missing durable services
 because those services are not wired at all.
 
-### P1 — No durability exists behind the worker contract
+### P1 â€” No durability exists behind the worker contract
 
 The worker's shutdown behavior is only a signal wait. There is no queue lease,
 checkpoint, heartbeat, or recovery behavior to make long-running work safe.
 
-### P2 — Repository quality command includes generated design material (fixed 2026-08-21)
+### P2 â€” Repository quality command includes generated design material (fixed 2026-08-21)
 
 `deno task check`, `fmt`, and `lint` now pass explicit `apps packages src` paths
 instead of scanning the repository root, so they no longer touch `design/`,
@@ -444,7 +476,7 @@ instead of scanning the repository root, so they no longer touch `design/`,
 check` passes
 cleanly (fmt, lint, type check, and all 3 tests) against this scoped target.
 
-### P2 — Test confidence is intentionally narrow
+### P2 â€” Test confidence is intentionally narrow
 
 The three tests cover liveness, version output, and 404 shape only. There are no
 configuration edge tests, readiness tests, process smoke tests, worker tests,
@@ -516,7 +548,7 @@ ledger-privilege item, then fixed for real rather than just theoretically.
   `getMembership` would never recognize them in. Every call now checks and, if
   needed, recreates that membership row, including the already-mapped fast path.
 
-### Investigated, found substantially mitigated by existing config — not changed
+### Investigated, found substantially mitigated by existing config â€” not changed
 
 - **OAuth does not enforce a currently verified provider email.** Traced through
   Better Auth 1.7.1's actual OAuth callback path (not just its docs):
@@ -526,7 +558,7 @@ ledger-privilege item, then fixed for real rather than just theoretically.
   `/user/emails`, matched to the specific email being used). Relay's own
   `account.accountLinking.enabled = false` (`packages/auth/src/auth.ts`)
   independently blocks every implicit-linking path in `oauth2/link-account.mjs`
-  regardless of `emailVerified` — a sign-in that matches an existing user's
+  regardless of `emailVerified` â€” a sign-in that matches an existing user's
   email returns `"account not linked"`, never a session for that user. A
   brand-new user created from an unverified provider email is stored with the
   correct `emailVerified: false`; nothing in Relay currently trusts a user's
@@ -538,21 +570,21 @@ ledger-privilege item, then fixed for real rather than just theoretically.
   `emailVerified` before honoring it.** Flag this explicitly in that feature's
   own review rather than treating today's OAuth config as needing a change.
 
-### Deferred — large enough to need their own implementation pass, not a patch
+### Deferred â€” large enough to need their own implementation pass, not a patch
 
 - **Better Auth's organization routes bypass audit coverage.** Member/role/
   invitation mutations reachable through the `organization` plugin's own routes
   (`/api/auth/organization/*`) don't go through `packages/audit`'s
   `recordAuditEvent`. Closing this needs Better Auth's hook surface
   (`databaseHooks`/plugin `after` hooks per mutation) wired per route, each
-  mapped to the right `AuditEventInput` shape and target type — real, scoped
+  mapped to the right `AuditEventInput` shape and target type â€” real, scoped
   work, not a one-line fix, and not started.
 - **Usage reservation is absent.** `admitToolRun`'s step 6 ("Reserve usage")
   stays deferred to metering, which doesn't exist as a package or schema yet.
   Nothing to wire it into until that lands.
 - **`apps/worker` is still a signal-waiting placeholder.** BullMQ consumption,
   cancellation, retries, graceful shutdown, reconciliation, and fair scheduling
-  are all unwired — this is the largest single gap left after this pass and the
+  are all unwired â€” this is the largest single gap left after this pass and the
   natural next-wave target, since `packages/queue`'s dispatch/outbox-relay and
   `packages/capacity`'s coordinator (both exercised end-to-end by tests, per
   Validation evidence) are exactly the pieces a real worker composes.
@@ -710,7 +742,7 @@ as real, matching round 1's discipline.
   allowlisted, structured snapshot fields rather than widening the regex, which
   is a design change bigger than this pass.
 
-### Deferred — unchanged from round 1, or newly confirmed to overlap with an existing deferral
+### Deferred â€” unchanged from round 1, or newly confirmed to overlap with an existing deferral
 
 - **Workspace creation is still not one atomic organization/member/mapping
   operation.** `ensurePersonalWorkspace` still creates the Better Auth
@@ -810,9 +842,9 @@ work.
 | ------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Approve a current design handoff      | Landing, IA, dashboard routes, artifact UI, and generator flow otherwise encode the wrong product. | Resolved: v3 is the implementation target; v2 stays a component/state reference, matching `design/README.md`. No change to the recorded manifest exceptions.                                                                                                                                                 |
 | Select database and migration tooling | Auth, catalog, jobs, artifacts, metering, audit, and changelog all need one migration owner.       | Resolved: PostgreSQL 18 per the runtime/database contract; `pg` + Kysely + Better Auth's `pg` adapter sharing one pool, as already recorded in `00-research-decisions.md`. Local dev/test infra runs via Docker Compose (Postgres 18, Redis, MinIO), not native installs.                                          |
-| Select MCP SDK/protocol version       | Determines the Streamable HTTP contract implemented in Wave 4B.                                    | Resolved: `@modelcontextprotocol/server@2.0.0`, protocol `2026-07-28` — confirmed still current against the npm registry on 2026-08-21.                                                                                                                                                                      |
-| Select MCP OAuth/auth mechanism       | Determines how both users and MCP clients authenticate.                                            | Resolved: [ADR 0001](adr/0001-mcp-auth-via-better-auth-mcp-plugin.md) — Better Auth's `@better-auth/mcp` + `jwt()` plugins for both user sessions and MCP client OAuth, superseding the hand-built provider `06-http-mcp-events.md` originally specified.                                                    |
-| Complete queue compatibility spike    | Job schema and shutdown semantics depend on what can run reliably in a compiled Deno image.        | Resolved: [ADR 0002](adr/0002-bullmq-redis-client-selection.md) — `bullmq@6.1.2` + `ioredis@5.11.1`, both cleared as a `deno compile` binary against live Redis. Note: npm now publishes BullMQ `6.2.0` and ioredis `6.0.0` (a major bump) past this pinned snapshot — re-verify before ever bumping either. |
+| Select MCP SDK/protocol version       | Determines the Streamable HTTP contract implemented in Wave 4B.                                    | Resolved: `@modelcontextprotocol/server@2.0.0`, protocol `2026-07-28` â€” confirmed still current against the npm registry on 2026-08-21.                                                                                                                                                                      |
+| Select MCP OAuth/auth mechanism       | Determines how both users and MCP clients authenticate.                                            | Resolved: [ADR 0001](adr/0001-mcp-auth-via-better-auth-mcp-plugin.md) â€” Better Auth's `@better-auth/mcp` + `jwt()` plugins for both user sessions and MCP client OAuth, superseding the hand-built provider `06-http-mcp-events.md` originally specified.                                                    |
+| Complete queue compatibility spike    | Job schema and shutdown semantics depend on what can run reliably in a compiled Deno image.        | Resolved: [ADR 0002](adr/0002-bullmq-redis-client-selection.md) â€” `bullmq@6.1.2` + `ioredis@5.11.1`, both cleared as a `deno compile` binary against live Redis. Note: npm now publishes BullMQ `6.2.0` and ioredis `6.0.0` (a major bump) past this pinned snapshot â€” re-verify before ever bumping either. |
 | Select first image provider/model     | Defines the first real input, output, error, safety, and usage contract.                           | Resolved (found already implemented, 2026-09-04): `packages/providers` has real Azure `flux-2-pro`/`gpt-image-2`/`mistral-ocr` adapters. See Reconciliation update above.                                                                                                                                   |
 | Approve initial meter policy          | Reservations and run receipts cannot be implemented from provider cost alone.                      | Open                                                                                                                                                                                                                                                                                                         |
 | Approve pre-1.0 release policy        | CI/CD tagging and changelog release creation need one source of release truth.                     | Resolved 2026-08-25: [`versioning.md`](versioning.md) approves the `0.1.0` baseline, Conventional-Commit/Release-Please SemVer mapping, repository-scoped GitHub App tag authority, paired backend/web publication, and digest-selected deployment. External setup and the first hosted release remain validation work, not policy decisions.                               |

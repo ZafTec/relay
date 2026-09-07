@@ -300,6 +300,11 @@ Deno.test("MVP worker composes without loading API-only secrets", async () => {
           GPT_IMAGE_2_HANDLER_KEY,
           FLUX_2_PRO_HANDLER_KEY,
           MISTRAL_OCR_HANDLER_KEY,
+          "image.edit.azure-flux.flux-2-pro.v1",
+          "image.generate.azure-mai.mai-image-2.5.v1",
+          "image.edit.azure-mai.mai-image-2.5.v1",
+          "image.generate.azure-mai.mai-image-2.5-flash.v1",
+          "image.edit.azure-mai.mai-image-2.5-flash.v1",
         ]);
         assertExists(options.artifactMaintenance);
         await options.artifactMaintenance.start();

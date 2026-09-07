@@ -855,6 +855,84 @@ export class ArtifactService {
     return result;
   }
 
+  /** Persists bounded caller content through the same quota and verification flow as direct uploads. */
+  async uploadContent(input: {
+    readonly workspaceId: string;
+    readonly actorUserId: string;
+    readonly name: string;
+    readonly mediaKind: string;
+    readonly mimeType: string;
+    readonly bytes: Uint8Array;
+    readonly metadata?: Readonly<Record<string, unknown>>;
+    readonly idempotencyKey: string;
+  }): Promise<
+    IdempotentCompleteUploadResult | {
+      readonly kind: "quota_exceeded" | "storage_error";
+    }
+  > {
+    if (
+      !(input.bytes instanceof Uint8Array) ||
+      input.bytes.byteLength > 4 * 1024 * 1024
+    ) {
+      throw new ArtifactInputError("content", "must contain at most 4 MiB");
+    }
+    const bytes = new Uint8Array(input.bytes);
+    const sha256 = await sha256Hex(bytes);
+    const contentMd5 = md5Base64(bytes);
+    const mimeType = validateMimeType(input.mimeType);
+    const stage = await this.beginDirectUpload({
+      workspaceId: input.workspaceId,
+      actorUserId: input.actorUserId,
+      idempotencyKey: input.idempotencyKey,
+      target: {
+        kind: "new_artifact",
+        name: input.name,
+        mediaKind: input.mediaKind,
+      },
+      sizeBytes: bytes.byteLength,
+      mimeType,
+      sha256,
+      contentMd5,
+      metadata: input.metadata,
+    });
+    if (stage.kind !== "created") return stage;
+    const complete = () =>
+      this.completeUpload({
+        workspaceId: input.workspaceId,
+        actorUserId: input.actorUserId,
+        uploadId: stage.value.uploadId,
+        idempotencyKey: input.idempotencyKey,
+      });
+    const { rows } = await this.#pool.query<{ object_key: string }>(
+      `select u.object_key from relay.artifact_uploads u
+       where u.workspace_id=$1 and u.id=$2 and u.status='pending' and u.expires_at>now()
+       and exists(select 1 from auth.member m where m."organizationId"=u.workspace_id and m."userId"=$3)`,
+      [input.workspaceId, stage.value.uploadId, input.actorUserId],
+    );
+    if (!rows[0]) return await complete();
+    try {
+      if (
+        await this.#storage.headObject({ key: rows[0].object_key }) === null
+      ) {
+        await this.#storage.putObject({
+          key: rows[0].object_key,
+          body: bytes,
+          sizeBytes: bytes.byteLength,
+          contentType: mimeType,
+          contentMd5,
+          sha256Hex: sha256,
+          metadata: {
+            "relay-upload-id": stage.value.uploadId,
+            "relay-sha256": sha256,
+          },
+        });
+      }
+    } catch {
+      return { kind: "storage_error" };
+    }
+    return await complete();
+  }
+
   async completeUpload(
     input: IdempotentInput<CompleteUploadInput>,
   ): Promise<IdempotentCompleteUploadResult>;

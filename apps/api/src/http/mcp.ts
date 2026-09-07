@@ -20,7 +20,8 @@ import {
   RELAY_MCP_SCOPES,
 } from "@relay/mcp";
 
-export const DEFAULT_MAX_MCP_BODY_BYTES = 64 * 1024;
+// Allows a 4 MiB file encoded as base64 plus bounded JSON metadata.
+export const DEFAULT_MAX_MCP_BODY_BYTES = 6 * 1024 * 1024;
 const PRINCIPAL_EXTRA_KEY = "io.relay/principal";
 
 export interface McpHttpAuth {
@@ -67,9 +68,10 @@ interface BoundedJsonRequest {
 function positiveBodyLimit(value: number | undefined): number {
   const selected = value ?? DEFAULT_MAX_MCP_BODY_BYTES;
   if (
-    !Number.isSafeInteger(selected) || selected < 1 || selected > 1024 * 1024
+    !Number.isSafeInteger(selected) || selected < 1 ||
+    selected > 8 * 1024 * 1024
   ) {
-    throw new TypeError("maxBodyBytes must be between 1 and 1048576");
+    throw new TypeError("maxBodyBytes must be between 1 and 8388608");
   }
   return selected;
 }
@@ -244,6 +246,22 @@ async function boundedJsonRequest(
     return jsonRpcError(400, PARSE_ERROR, "Malformed JSON body");
   }
 
+  const envelope = parsedBody as {
+    method?: unknown;
+    params?: { name?: unknown };
+  } | null;
+  if (
+    bytes.byteLength > 64 * 1024 &&
+    (envelope?.method !== "tools/call" ||
+      envelope?.params?.name !== "relay.artifacts.upload_content")
+  ) {
+    return jsonRpcError(
+      413,
+      INVALID_REQUEST,
+      "Only inline file uploads may exceed 64 KiB",
+    );
+  }
+
   const headers = new Headers(request.headers);
   headers.set("content-length", String(bytes.byteLength));
   return {
@@ -276,7 +294,18 @@ async function requiredScopesForBody(
   const management = RELAY_MCP_MANAGEMENT_TOOL_SCOPES[
     name as keyof typeof RELAY_MCP_MANAGEMENT_TOOL_SCOPES
   ];
-  if (management !== undefined) return management;
+  if (management !== undefined) {
+    const args = (params as Record<string, unknown>).arguments;
+    if (
+      (name === "relay.artifacts.upload_content" ||
+        name === "relay.artifacts.get_access") &&
+      typeof args === "object" && args !== null && "access" in args &&
+      args.access === "permanent"
+    ) {
+      return [...management, "artifacts:share"];
+    }
+    return management;
+  }
   if (name.length > 128 || !TOOL_KEY_PATTERN.test(name)) return [];
   try {
     const result = getToolResultSchema.parse(

@@ -188,6 +188,12 @@ Deno.test("MVP API registers exact handlers and never loads Azure config", async
     "api-runtime",
   ]);
   assertEquals([...createMvpApiHandlerRegistry().keys], [
+    "image.edit.azure-openai.gpt-image-2.v1",
+    "image.edit.azure-flux.flux-2-pro.v1",
+    "image.generate.azure-mai.mai-image-2.5.v1",
+    "image.edit.azure-mai.mai-image-2.5.v1",
+    "image.generate.azure-mai.mai-image-2.5-flash.v1",
+    "image.edit.azure-mai.mai-image-2.5-flash.v1",
     "image.generate.azure-openai.gpt-image-2.v1",
     "image.generate.azure-flux.flux-2-pro.v1",
     "document.ocr.azure-mistral.v1",

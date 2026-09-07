@@ -73,6 +73,7 @@ export function resolveAdmissionUsageMeasures(
   input: unknown,
 ): AdmissionUsageMeasures {
   switch (toolKey) {
+    case "image.edit.gpt-image-2":
     case GPT_IMAGE_TOOL_KEY: {
       const rawInput = inputObject(input);
       const requested = rawInput.n === undefined ? 1 : rawInput.n;
@@ -87,6 +88,11 @@ export function resolveAdmissionUsageMeasures(
       return measureRange(requested);
     }
     case FLUX_IMAGE_TOOL_KEY:
+    case "image.edit.flux-2-pro":
+    case "image.generate.mai-image-2.5":
+    case "image.edit.mai-image-2.5":
+    case "image.generate.mai-image-2.5-flash":
+    case "image.edit.mai-image-2.5-flash":
     case OCR_TOOL_KEY:
       return measureRange(1);
     default:

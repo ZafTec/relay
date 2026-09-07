@@ -69,6 +69,9 @@ const AdminCapacityPage = lazy(() => import("../features/admin-capacity").then((
 const AdminAllowancesPage = lazy(() => import("../features/admin-allowances/AdminAllowancesPage").then((module) => ({
   default: module.AdminAllowancesPage,
 })));
+const SuperadminsPage = lazy(() => import("../features/admin-access/SuperadminsPage").then((module) => ({ default: module.SuperadminsPage })));
+const AcceptSuperadminInvitationPage = lazy(() => import("../features/admin-access/AcceptSuperadminInvitationPage").then((module) => ({ default: module.AcceptSuperadminInvitationPage })));
+const OAuthClientsPage = lazy(() => import("../features/oauth-clients/OAuthClientsPage").then((module) => ({ default: module.OAuthClientsPage })));
 
 function productRoute(content: ReactNode, loadingLabel: string) {
   return (
@@ -127,6 +130,7 @@ export const relayRoutes = [
     element: <ProtectedRoute />,
     errorElement: <RouteErrorPage />,
     children: [
+      { path: "/superadmin-invitations/:id", element: protectedLazyRoute(<AcceptSuperadminInvitationPage />, "Loading invitation") },
       {
         path: "/dashboard",
         element: <ProductLayout />,
@@ -207,6 +211,8 @@ export const relayRoutes = [
                 path: "allowances",
                 element: productRoute(<AdminAllowancesPage />, "Loading allowances"),
               },
+              { path: "superadmins", element: protectedLazyRoute(<SuperadminsPage />, "Loading platform access") },
+          { path: "oauth-clients", element: productRoute(<OAuthClientsPage />, "Loading OAuth clients") },
             ],
           },
         ],

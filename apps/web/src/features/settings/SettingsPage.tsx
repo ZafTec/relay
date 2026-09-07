@@ -1,10 +1,12 @@
 import { usePageMetadata } from "../../app/usePageMetadata";
 import { useAuth, type WorkspaceState } from "../../auth/AuthProvider";
-import { Button } from "../../components/ui/Button";
+import { Button, LinkButton } from "../../components/ui/Button";
 import { InlineNotice } from "../../components/ui/InlineNotice";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import "./settings.css";
+import { NotificationSettings } from "./NotificationSettings";
+import { LegalLinks } from "../../components/layout/LegalLinks";
 
 const MCP_ENDPOINT = "/mcp";
 const MCP_RESOURCE_METADATA = "/.well-known/oauth-protected-resource/mcp";
@@ -18,6 +20,8 @@ const MCP_SCOPE_GUIDANCE = [
   ["artifacts:write", "Create an artifact upload."],
   ["artifacts:share", "Create or revoke a share link."],
   ["usage:read", "Authorize usage reads. No current MCP management tool uses this scope."],
+  ["notifications:read", "Read your email preferences and delivery status."],
+  ["notifications:write", "Change your email notification preferences."],
 ] as const;
 
 const sessionExpiryFormatter = new Intl.DateTimeFormat(undefined, {
@@ -161,11 +165,10 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
         <div>
           <h2 id="settings-mcp-title">MCP connection</h2>
           <p>
-            Relay defines an OAuth-protected Streamable HTTP adapter. This reference describes
-            its contract without claiming that every deployment has enabled the endpoint.
+            Connect Gemini or another AI agent, then sign in and approve access to your workspace.
           </p>
         </div>
-        <StatusBadge tone="pending">Contract defined</StatusBadge>
+        <LinkButton to="/admin/oauth-clients" variant="outline">Manage OAuth clients</LinkButton>
       </header>
 
       <ol className="settings-mcp__steps">
@@ -173,7 +176,7 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
           <span className="settings-step__number" aria-hidden="true">01</span>
           <div>
             <h3>Configure the endpoint</h3>
-            <p>When enabled, use the Relay service origin with the exact path below.</p>
+            <p>Paste this complete URL into your agent’s MCP or connected-app settings.</p>
             <dl className="settings-endpoint">
               <div>
                 <dt>Transport</dt>
@@ -181,7 +184,7 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
               </div>
               <div>
                 <dt>Request</dt>
-                <dd><code>POST {MCP_ENDPOINT}</code></dd>
+                <dd><code>{new URL(MCP_ENDPOINT, window.location.origin).href}</code></dd>
               </div>
               <div>
                 <dt>OAuth metadata</dt>
@@ -195,16 +198,16 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
           <div>
             <h3>Authorize with OAuth</h3>
             <p>
-              Use a registered OAuth client and an access token for the MCP resource. Browser
-              session cookies alone are rejected by this boundary.
+              If the agent asks for a client ID and secret, copy its redirect URI and create
+              a client in Manage OAuth clients. A superadmin account is required to register clients.
             </p>
           </div>
         </li>
         <li>
           <span className="settings-step__number" aria-hidden="true">03</span>
           <div>
-            <h3>Bind the workspace</h3>
-            <p>Request only the scopes the client needs for this workspace.</p>
+            <h3>Sign in and choose a workspace</h3>
+            <p>Approve the permissions you want the agent to use. Running tools also requires a usage allowance.</p>
             <AuthorizationWorkspace state={workspace} />
           </div>
         </li>
@@ -261,9 +264,8 @@ export function SettingsPage() {
       <header className="settings-page__header">
         <div>
           <h1>Workspace settings</h1>
-          <p>Verified workspace and session context, with the current MCP authorization contract.</p>
+          <p>Connect AI agents and review your workspace and sign-in details.</p>
         </div>
-        <span className="settings-page__mode">Read only</span>
       </header>
 
       <div className="settings-page__body">
@@ -314,7 +316,9 @@ export function SettingsPage() {
           </section>
         </div>
 
+        {workspace.status === "ready" ? <NotificationSettings key={`${session.identity.session.id}:${workspace.workspace.id}`} email={displayEmail} /> : null}
         <McpConnectionGuide workspace={workspace} />
+        <section className="settings-panel" aria-label="Legal and privacy"><header className="settings-panel__header"><h2>Legal and privacy</h2></header><div className="settings-panel__body"><LegalLinks /></div></section>
       </div>
     </div>
   );

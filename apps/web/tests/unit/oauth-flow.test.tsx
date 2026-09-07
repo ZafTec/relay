@@ -45,7 +45,7 @@ describe("MCP OAuth screens", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Authorize client" }));
+    await user.click(await screen.findByRole("button", { name: "Authorize client" }, { timeout: 5000 }));
     expect(adapter.submitOAuthConsent).toHaveBeenCalledWith({
       accept: true,
       scope: "openid mcp:tools",

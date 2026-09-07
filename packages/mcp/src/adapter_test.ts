@@ -203,6 +203,10 @@ Deno.test("management tool names and scopes are stable", () => {
     "relay.artifacts.complete_upload",
     "relay.artifacts.create_share_link",
     "relay.artifacts.revoke_share_link",
+    "relay.artifacts.upload_content",
+    "relay.artifacts.get_access",
+    "relay.notifications.get",
+    "relay.notifications.configure",
   ]);
   assertEquals(RELAY_MCP_MANAGEMENT_TOOL_SCOPES, {
     "relay.tools.list": ["tools:read"],
@@ -216,6 +220,10 @@ Deno.test("management tool names and scopes are stable", () => {
     "relay.artifacts.complete_upload": ["artifacts:write"],
     "relay.artifacts.create_share_link": ["artifacts:share"],
     "relay.artifacts.revoke_share_link": ["artifacts:share"],
+    "relay.artifacts.upload_content": ["artifacts:write", "artifacts:read"],
+    "relay.artifacts.get_access": ["artifacts:read"],
+    "relay.notifications.get": ["notifications:read"],
+    "relay.notifications.configure": ["notifications:write"],
   });
 });
 
@@ -720,6 +728,97 @@ Deno.test("unexpected service failures are sanitized", async () => {
     };
     assertEquals(structured.error.code, "internal_error");
     assertEquals(structured.error.details, {});
+  } finally {
+    await connection.close();
+  }
+});
+Deno.test("content and notification tools enforce sharing scope and explicit opt-in before side effects", async () => {
+  const writes: unknown[] = [];
+  const services: ApplicationServices = {
+    ...createServices(),
+    content: {
+      upload: (identity, request, key) => {
+        writes.push({ identity, request, key });
+        return Promise.resolve({
+          kind: "authorized",
+          artifactId: ARTIFACT_ID,
+          artifactVersionId: ARTIFACT_VERSION_ID,
+          access: "temporary",
+          expiresAt: NOW,
+          url: "https://storage.example.test/file",
+        });
+      },
+      access: () => {
+        throw new Error("No access call expected in this test");
+      },
+    },
+    notifications: {
+      get: () => Promise.resolve({ kind: "not_found" }),
+      update: (identity, settings) => {
+        writes.push({ identity, settings });
+        return Promise.resolve({
+          kind: "ok",
+          notifications: { configured: true, ...settings, deliveries: [] },
+        });
+      },
+    },
+  };
+  const server = await createRelayMcpServer({
+    services,
+    principal: {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      scopes: ["artifacts:read", "artifacts:write", "notifications:write"],
+    },
+  });
+  const connection = await connectClient(server);
+  const args = {
+    name: "chat.pdf",
+    encoding: "base64",
+    mimeType: "application/pdf",
+    content: "JVBERg==",
+  };
+  try {
+    const denied = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.uploadContent,
+      arguments: { ...args, access: "permanent" },
+      _meta: { [RELAY_MCP_IDEMPOTENCY_META_KEY]: "upload-fixture" },
+    });
+    assertEquals(denied.isError, true);
+    assertEquals(writes.length, 0);
+    const missingKey = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.uploadContent,
+      arguments: args,
+    });
+    assertEquals(missingKey.isError, true);
+    assertEquals(writes.length, 0);
+    const saved = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.uploadContent,
+      arguments: args,
+      _meta: { [RELAY_MCP_IDEMPOTENCY_META_KEY]: "upload-fixture" },
+    });
+    assertEquals(saved.isError, undefined);
+    assertEquals(writes.length, 1);
+    assertEquals(writes[0], {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      request: { ...args, access: "temporary" },
+      key: "upload-fixture",
+    });
+    const unconfirmed = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.configureNotifications,
+      arguments: { completed: true, failed: true },
+    });
+    assertEquals(unconfirmed.isError, true);
+    assertEquals(writes.length, 1);
+    const configured = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.configureNotifications,
+      arguments: { confirm: true, completed: true, failed: false },
+    });
+    assertEquals(configured.isError, undefined);
+    assertEquals(writes.length, 2);
+    assertEquals(writes[1], {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      settings: { completed: true, failed: false },
+    });
   } finally {
     await connection.close();
   }

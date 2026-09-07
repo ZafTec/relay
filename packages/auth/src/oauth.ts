@@ -1,5 +1,6 @@
 import type { McpOptions } from "@better-auth/mcp";
 import { APIError } from "better-auth/api";
+import { isSuperadmin } from "./system-roles.ts";
 import { createInsufficientScopeError } from "better-auth/oauth2";
 import { RELAY_MCP_RESOURCE_SCOPES } from "@relay/contracts";
 import { getMembership, type Queryable } from "./authorization.ts";
@@ -95,7 +96,7 @@ export async function authorizeMcpAccessTokenClaims(
          join auth."oauthClientResource" client_resource
            on client_resource."clientId" = client."clientId"
          join auth."oauthResource" resource
-           on resource.id = client_resource."resourceId"
+           on resource.identifier = client_resource."resourceId"
          join auth.member member
            on member."organizationId" = $2 and member."userId" = $3
         where client."clientId" = $1
@@ -211,10 +212,34 @@ export function createMcpOAuthOptions(
     grantTypes: ["authorization_code", "refresh_token"],
     allowDynamicClientRegistration: false,
     allowUnauthenticatedClientRegistration: false,
+    storeClientSecret: "hashed",
+    clientPrivileges: async ({ user, session, action }) => {
+      if (!user || !session) return false;
+      if (!await isSuperadmin(queryable, user.id)) return false;
+      if (action === "read" || action === "list") return true;
+      // MCP integrations act through user consent, never a machine-only grant.
+      if (action === "configure-client-credentials-scopes") return false;
+      const age = Date.now() - new Date(session.createdAt).getTime();
+      if (!Number.isFinite(age) || age < 0 || age > 15 * 60_000) {
+        throw new APIError("FORBIDDEN", {
+          code: "SESSION_TOO_OLD",
+          message: "Sign in again before changing an OAuth client.",
+        });
+      }
+      return true;
+    },
+    resourcePrivileges: () => Promise.resolve(false),
     refreshTokenReuseInterval: 30,
     postLogin: {
       page: "/oauth/workspace",
-      shouldRedirect: ({ scopes }) => requestsRelayResource(scopes),
+      // The provider re-evaluates this predicate on /oauth2/continue. Once a
+      // current workspace is selected, continuing must be allowed to reach consent.
+      shouldRedirect: async ({ scopes, user, session }) => {
+        if (!requestsRelayResource(scopes)) return false;
+        const workspaceId = session.activeOrganizationId;
+        return typeof workspaceId !== "string" || !workspaceId ||
+          await getMembership(queryable, workspaceId, user.id) === null;
+      },
       consentReferenceId: async ({ user, session, scopes }) => {
         if (!requestsRelayResource(scopes)) return undefined;
         return await requireCurrentWorkspace(

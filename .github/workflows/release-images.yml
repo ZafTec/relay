@@ -24,29 +24,28 @@ jobs:
       release_id: ${{ steps.identity.outputs.release_id }}
       promote_latest: ${{ steps.identity.outputs.promote_latest }}
     timeout-minutes: 90
-    environment: release
     permissions:
       attestations: write
       contents: write
       id-token: write
     env:
-      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || 'zaftec' }}
+      DOCKERHUB_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_BACKEND_REPOSITORY: ${{ vars.DOCKERHUB_BACKEND_REPOSITORY || 'relay-backend' }}
       DOCKERHUB_WEB_REPOSITORY: ${{ vars.DOCKERHUB_WEB_REPOSITORY || 'relay-web' }}
-      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
-      - name: Require protected registry credentials
+      - name: Require registry credentials
         shell: bash
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
           if [[ -z "$DOCKERHUB_USERNAME" ]]; then
-            echo "::error::Set the release environment variable DOCKERHUB_USERNAME (or environment secret of the same name)." >&2
+            echo "::error::Set repository secret DOCKERHUB_USERNAME; it controls both login and the image namespace." >&2
             exit 1
           fi
           if [[ -z "$DOCKERHUB_TOKEN" ]]; then
-            echo "::error::Set protected release environment secret DOCKERHUB_TOKEN to a read/write token; verification reads and publication writes both repositories." >&2
+            echo "::error::Set repository secret DOCKERHUB_TOKEN to a read/write token; verification reads and publication writes both repositories." >&2
             exit 1
           fi
           if [[ ! "$DOCKERHUB_NAMESPACE" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]]; then
@@ -304,6 +303,7 @@ jobs:
           upload-release-assets: false
 
       - name: Generate backend GitHub provenance
+        if: github.event.repository.private == false || vars.RELAY_GITHUB_ATTESTATIONS_ENABLED == 'true'
         id: backend-provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -312,6 +312,7 @@ jobs:
           push-to-registry: true
 
       - name: Generate web GitHub provenance
+        if: github.event.repository.private == false || vars.RELAY_GITHUB_ATTESTATIONS_ENABLED == 'true'
         id: web-provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -320,6 +321,7 @@ jobs:
           push-to-registry: true
 
       - name: Collect provenance bundles
+        if: github.event.repository.private == false || vars.RELAY_GITHUB_ATTESTATIONS_ENABLED == 'true'
         shell: bash
         env:
           BACKEND_BUNDLE: ${{ steps.backend-provenance.outputs.bundle-path }}
@@ -331,6 +333,34 @@ jobs:
           test -s "$WEB_BUNDLE"
           cp -- "$BACKEND_BUNDLE" "evidence/relay-backend-$VERSION.provenance.json"
           cp -- "$WEB_BUNDLE" "evidence/relay-web-$VERSION.provenance.json"
+
+      # GitHub attestations require Enterprise Cloud for private repositories.
+      # The image's native BuildKit attestations are available on every plan.
+      - name: Collect native provenance for private repositories
+        if: github.event.repository.private == true && vars.RELAY_GITHUB_ATTESTATIONS_ENABLED != 'true'
+        shell: bash
+        env:
+          BACKEND_REFERENCE: ${{ steps.identity.outputs.backend_candidate }}@${{ steps.digests.outputs.backend }}
+          WEB_REFERENCE: ${{ steps.identity.outputs.web_candidate }}@${{ steps.digests.outputs.web }}
+          VERSION: ${{ steps.identity.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          for component in backend web; do
+            if [[ "$component" == backend ]]; then
+              reference="$BACKEND_REFERENCE"
+            else
+              reference="$WEB_REFERENCE"
+            fi
+            docker buildx imagetools inspect "$reference" \
+              --format '{{json .Provenance.SLSA}}' > "$RUNNER_TEMP/buildkit-provenance.json"
+            jq -e --arg reference "$reference" '
+              select(type == "object") |
+              select(.buildType == "https://mobyproject.org/buildkit@v1" or
+                     .buildDefinition.buildType == "https://mobyproject.org/buildkit@v1") |
+              {source: "buildkit", image: $reference, predicate: .}
+            ' "$RUNNER_TEMP/buildkit-provenance.json" \
+              > "evidence/relay-$component-$VERSION.provenance.json"
+          done
 
       - name: Scan exact backend candidate
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

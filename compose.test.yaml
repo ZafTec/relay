@@ -25,7 +25,11 @@ x-runtime-environment: &runtime-environment
   REDIS_URL: redis://:relay_dev_only@redis:6379
   APP_VERSION: 0.0.0-ci
   GIT_SHA: ${RELAY_CI_GIT_SHA:-ci-local}
-  OTEL_DENO: "false"
+  OTEL_DENO: "true"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://telemetry:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_PROPAGATORS: tracecontext
+  OTEL_METRIC_EXPORT_INTERVAL: "1000"
   APP_ENV: test
   DEPLOYMENT_ENVIRONMENT_NAME: ci
   S3_ENDPOINT: http://minio:9000
@@ -38,6 +42,16 @@ x-runtime-environment: &runtime-environment
   ARTIFACT_MAX_UPLOAD_BYTES: "104857600"
 
 services:
+  telemetry:
+    <<: [*test-image, *hardened-process]
+    entrypoint: ["deno"]
+    command: ["run", "--allow-net", "scripts/ci/telemetry-container-smoke.ts", "serve"]
+    healthcheck:
+      test: ["CMD", "deno", "eval", "const r = await fetch('http://127.0.0.1:4318/status'); if (!r.ok) Deno.exit(1)"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
   postgres:
     image: postgres@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941
     environment:
@@ -136,6 +150,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      telemetry:
+        condition: service_healthy
 
   api:
     <<: [*backend-image, *hardened-process]
@@ -199,6 +215,11 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+  telemetry-probe:
+    <<: [*test-image, *hardened-process]
+    entrypoint: ["deno"]
+    command: ["run", "--allow-env", "--allow-net", "scripts/ci/telemetry-container-smoke.ts"]
 
   web:
     image: ${RELAY_CI_WEB_IMAGE:-relay-ci-web:local}
