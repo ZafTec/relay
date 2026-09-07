@@ -1,19 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
-import {
-  type AdminChangelogAdapter,
-  httpAdminChangelogAdapter,
-} from "../../lib/api/admin-changelog";
+import { checkAdminAccess, type CheckAdminAccess } from "../../lib/api/admin-access";
 import { isAbortError } from "./model";
 
 interface AdminAccessLinkProps {
-  readonly adapter?: AdminChangelogAdapter;
+  readonly checkAccess?: CheckAdminAccess;
   readonly className?: string;
 }
 
 export function AdminAccessLink({
-  adapter = httpAdminChangelogAdapter,
+  checkAccess = checkAdminAccess,
   className,
 }: AdminAccessLinkProps) {
   const { session, expireSession } = useAuth();
@@ -35,7 +32,7 @@ export function AdminAccessLink({
     const controller = new AbortController();
     setConfirmedSessionId(null);
 
-    void adapter.list({ limit: 1 }, controller.signal).then((result) => {
+    void checkAccess(controller.signal).then((result) => {
       if (result.kind === "auth-expired") {
         expireSession(expectedSessionId);
         return;
@@ -56,7 +53,7 @@ export function AdminAccessLink({
     });
 
     return () => controller.abort();
-  }, [adapter, expireSession, sessionId]);
+  }, [checkAccess, expireSession, sessionId]);
 
   useEffect(() => () => {
     generationRef.current += 1;
@@ -66,9 +63,9 @@ export function AdminAccessLink({
   return (
     <Link
       className={["admin-access-link", className].filter(Boolean).join(" ")}
-      to="/admin/changelog"
+      to="/admin/allowances"
     >
-      Admin changelog
+      Platform admin
     </Link>
   );
 }

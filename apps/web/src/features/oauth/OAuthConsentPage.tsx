@@ -28,6 +28,7 @@ export function OAuthConsentPage() {
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState<"approve" | "deny" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -36,6 +37,9 @@ export function OAuthConsentPage() {
       return () => { active = false; };
     }
     setLoading(true);
+    setSelectedScopes(request.scopes.filter((scope) => !scope.startsWith("admin:")));
+    setClient(null);
+    setError(null);
     void adapter.getOAuthClient(request.clientId).then((value) => {
       if (!active) return;
       setClient(value);
@@ -49,13 +53,13 @@ export function OAuthConsentPage() {
   }, [adapter, request]);
 
   async function submit(accept: boolean) {
-    if (!request) return;
+    if (!request || (accept && selectedScopes.length === 0)) return;
     setError(null);
     setAction(accept ? "approve" : "deny");
     try {
       await adapter.submitOAuthConsent({
         accept,
-        ...(request.scopeValue ? { scope: request.scopeValue } : {}),
+        ...(accept ? { scope: selectedScopes.join(" ") } : {}),
         ...(request.claims ? { claims: request.claims } : {}),
       });
       setAction(null);
@@ -92,14 +96,24 @@ export function OAuthConsentPage() {
 
             <div className="oauth-scopes" aria-labelledby="oauth-scopes-title">
               <h2 id="oauth-scopes-title">Requested access</h2>
+              <p>Choose the permissions this connection can use. You can leave permissions unchecked.</p>
+              {request.scopes.some((scope) => scope.startsWith("admin:")) ? (
+                <InlineNotice title="Platform administration" tone="warning">
+                  <p>Admin permissions affect the whole platform. They start unchecked and require a current superadmin role and a recent sign-in. Workspace allowances still apply to tool runs.</p>
+                </InlineNotice>
+              ) : null}
               {request.scopes.length > 0 ? (
                 <ul>
                   {request.scopes.map((scope) => {
                     const details = describeScope(scope);
                     return (
                       <li key={scope}>
-                        <span className="oauth-scope__glyph" aria-hidden="true">□</span>
-                        <div><strong>{details.title}</strong><p>{details.description}</p><code>{scope}</code></div>
+                        <label className="oauth-scope-choice">
+                          <input type="checkbox" checked={selectedScopes.includes(scope)} disabled={action !== null}
+                            onChange={(event) => setSelectedScopes((current) => event.target.checked
+                              ? [...current, scope] : current.filter((value) => value !== scope))} />
+                          <span><strong>{details.title}</strong><span className="oauth-scope-description">{details.description}</span><code>{scope}</code></span>
+                        </label>
                       </li>
                     );
                   })}
@@ -120,7 +134,7 @@ export function OAuthConsentPage() {
               <Button
                 pending={action === "approve"}
                 pendingLabel="Authorizing client"
-                disabled={action !== null || request.scopes.length === 0}
+                disabled={action !== null || selectedScopes.length === 0}
                 onClick={() => void submit(true)}
               >
                 Authorize client

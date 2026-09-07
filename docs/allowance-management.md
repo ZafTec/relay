@@ -20,7 +20,8 @@ Workspace owners cannot grant themselves usage.
    Keep migrator credentials out of the API and web runtime.
 3. Sign in again and open **Superadmin → Allowances**. Reads and changes require
    a session created within the last 15 minutes and a current superadmin role.
-4. Search by workspace name, slug, or exact ID, then select the target workspace.
+4. Search by workspace name, memorable slug, exact ID, or owner name/email, then
+   select the target workspace.
    This is a platform operation; the user's active workspace is not the target.
 
 ## Assign an allowance

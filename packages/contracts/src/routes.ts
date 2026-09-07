@@ -21,6 +21,7 @@ export const HTTP_PATHS: Readonly<{
   artifactShareLinks: "/api/v1/artifacts/:artifactId/share-links";
   artifactShareLink: "/api/v1/artifacts/:artifactId/share-links/:shareLinkId";
   usage: "/api/v1/usage";
+  storageUsage: "/api/v1/usage/storage";
   events: "/api/v1/events";
   changelog: "/api/v1/changelog";
   changelogEntry: "/api/v1/changelog/:slug";
@@ -41,6 +42,7 @@ export const HTTP_PATHS: Readonly<{
   artifactShareLinks: "/api/v1/artifacts/:artifactId/share-links",
   artifactShareLink: "/api/v1/artifacts/:artifactId/share-links/:shareLinkId",
   usage: "/api/v1/usage",
+  storageUsage: "/api/v1/usage/storage",
   events: "/api/v1/events",
   changelog: "/api/v1/changelog",
   changelogEntry: "/api/v1/changelog/:slug",

@@ -13,11 +13,16 @@ import type {
   ProtectMcpOptions,
 } from "@relay/auth";
 import type { ApplicationServices } from "@relay/application";
-import { getToolResultSchema, TOOL_KEY_PATTERN } from "@relay/contracts";
+import {
+  getToolResultSchema,
+  RELAY_MCP_WORKSPACE_SCOPES,
+  TOOL_KEY_PATTERN,
+} from "@relay/contracts";
 import {
   createRelayMcpServer,
+  RELAY_MCP_ADMIN_TOOL_SCOPES,
   RELAY_MCP_MANAGEMENT_TOOL_SCOPES,
-  RELAY_MCP_SCOPES,
+  type RelayMcpAdminServices,
 } from "@relay/mcp";
 
 // Allows a 4 MiB file encoded as base64 plus bounded JSON metadata.
@@ -45,6 +50,7 @@ export interface McpHttpAuth {
 export interface RelayMcpHttpHandlerOptions {
   readonly auth: McpHttpAuth;
   readonly services: ApplicationServices;
+  readonly adminServices?: RelayMcpAdminServices;
   readonly allowedHostnames?: readonly string[];
   readonly allowedOrigins?: readonly string[];
   readonly maxBodyBytes?: number;
@@ -291,6 +297,10 @@ async function requiredScopesForBody(
   }
   const name = (params as Record<string, unknown>).name;
   if (typeof name !== "string") return [];
+  const admin = RELAY_MCP_ADMIN_TOOL_SCOPES[
+    name as keyof typeof RELAY_MCP_ADMIN_TOOL_SCOPES
+  ];
+  if (admin !== undefined) return admin;
   const management = RELAY_MCP_MANAGEMENT_TOOL_SCOPES[
     name as keyof typeof RELAY_MCP_MANAGEMENT_TOOL_SCOPES
   ];
@@ -370,12 +380,14 @@ export function createRelayMcpHttpHandler(
       const principal = principalFromAuthInfo(context.authInfo);
       return createRelayMcpServer({
         services: options.services,
+        adminServices: options.adminServices,
         principal: {
           identity: {
             workspaceId: principal.workspaceId,
             actorUserId: principal.actorUserId,
           },
           clientId: principal.clientId,
+          adminSessionId: principal.adminSessionId,
           scopes: principal.scopes,
         },
         serverInfo: options.serverInfo,
@@ -439,7 +451,7 @@ export function createRelayMcpHttpHandler(
             },
           });
         },
-        { challengeScopes: RELAY_MCP_SCOPES },
+        { challengeScopes: RELAY_MCP_WORKSPACE_SCOPES },
       );
       return await protectedHandler(bounded.request, connection);
     },

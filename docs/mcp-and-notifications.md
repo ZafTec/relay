@@ -2,12 +2,21 @@
 
 ## OAuth clients
 
-Sign in, open **Workspace settings**, and copy the MCP URL. A superadmin can
-open **Manage OAuth clients** (`/admin/oauth-clients`) to register the exact
-redirect URI supplied by an agent. Choose its permissions and authentication
-method. Copy the client ID and the one-time secret into the agent. Public
-clients use PKCE without a secret. All authorization-code clients require PKCE
-with S256.
+Sign in, open **Workspace settings**, and copy the MCP URL into your agent's
+connection settings. Compatible agents register automatically, open Relay for
+sign-in, and let you choose a workspace and approve individual permissions.
+Removing a permission from consent leaves that capability unavailable to the
+agent. Public clients use PKCE without a secret; confidential clients receive
+credentials during registration. All authorization-code clients require S256
+PKCE and exact callback URLs. HTTPS callbacks and local loopback callbacks are
+supported; wildcard callbacks are rejected.
+
+For agents that ask you to supply a client ID, a superadmin can open **Manage
+OAuth clients** (`/admin/oauth-clients`) from Settings. Create a client with the
+exact callback URL supplied by the agent, choose its permissions and
+authentication method, and copy the client ID and one-time secret into the
+agent. Public clients do not have a secret. Manual registration still leads to
+the same workspace selection and permission approval flow.
 
 The endpoint accepts the SDK's stateless 2025-03-26, 2025-06-18 and 2025-11-25
 compatibility flows as well as the 2026-07-28 protocol. Agents can use normal
@@ -15,16 +24,73 @@ initialization without forcing a protocol revision. Both paths revalidate OAuth
 scopes and workspace membership for each request; Relay does not issue MCP
 session IDs.
 
-The agent sends you to Relay to sign in, select a workspace, and approve access.
 Registration does not grant usage allowances. Execution still needs an explicit
 `tools.execute` capability and the applicable image or OCR allowance. Client
 creation, rotation, and deletion require a recently authenticated superadmin
-session. Clients are managed by the superadmin who registered them. Dynamic
-registration and client-credentials grants are disabled.
+session when managed manually. Managed clients belong to the superadmin who
+registered them. Client-credentials grants are disabled.
 
 Rotating a secret requires updating the agent. Deleting a client invalidates its
 authorizations. If a creation response is lost, refresh the list and rotate the
 client's secret to obtain a new copy.
+
+## Workspaces and storage usage
+
+Workspaces have a readable name and a memorable slug, such as **Calm Cedar** and
+`calm-cedar-4821`. In **Workspace settings**, create a workspace, edit the proposed
+name and slug before saving, switch between your workspaces, or rename one you
+own. Each account can own up to 20 workspaces. Creating a workspace grants
+ownership; it does not grant execution access or usage allowances.
+
+Existing generated personal workspace labels are upgraded during migration.
+Custom names and slugs are preserved. Workspace IDs, memberships, files, tokens,
+and allowances remain attached to the same workspace.
+
+The **Usage** page shows storage separately from tool activity. Stored bytes
+include retained versions and files waiting for physical deletion. Upload
+reservations include abandoned uploads waiting for cleanup; that cleanup amount
+is shown separately and counted only once. Available space uses the same limit
+as upload enforcement. A failed capacity lookup is shown as unavailable.
+
+Agents with `usage:read` can call `relay.usage.storage` without arguments. The
+HTTP equivalent is `GET /api/v1/usage/storage`. Both use the current workspace
+and return exact decimal byte strings, including stored, reserved, cleanup,
+limit, and available bytes. A null limit means explicitly unlimited storage.
+
+## Administration through MCP
+
+Superadmins can explicitly approve administration scopes during connection.
+These permissions are excluded from default access; workspace ownership alone
+does not grant them. Each call rechecks the current verified account, browser
+session, and superadmin role. Administrative mutations also require recent
+authentication; sign in again and reconnect when prompted.
+
+| Scope family | Available operations |
+| --- | --- |
+| `admin:allowances:read` / `write` | Find workspaces, inspect allowances and audit history, grant and revoke allowances |
+| `admin:capacity:read` / `write` | Inspect and revise execution capacity policies |
+| `admin:superadmins:read` / `write` | List administrators, create and revoke invitation links |
+| `admin:changelog:read` / `write` | Inspect, draft, revise, publish and unpublish releases |
+| `admin:oauth:read` / `write` | List, inspect, create, update, rotate and delete owned OAuth clients |
+
+Tools use the `relay.admin.` prefix, for example
+`relay.admin.allowances.workspaces` and `relay.admin.oauth.create`. The agent
+discovers only administrative operations covered by its consented scopes.
+Writes require a stable 16–128 character `io.relay/idempotency-key` in call
+metadata. Allowance, capacity, changelog, and invitation mutations retain their
+existing replay protection and audit boundaries.
+
+OAuth client operations use Better Auth's native management endpoints, which
+do not deduplicate requests using that metadata key. Creation and secret rotation
+return a secret once. Never automatically retry an uncertain creation or
+rotation: inspect the client list and obtain the user's instruction before
+creating another client or rotating again. OAuth tools are marked
+non-idempotent. Changing a client's authentication method requires a new client.
+Native OAuth administrative writes need at least two database connections
+(`DATABASE_POOL_MAX` is 10 by default); a pool of one is rejected explicitly.
+
+Creating a superadmin invitation returns its acceptance URL without sending
+email. The recipient must sign in with the invited verified address and accept.
 
 ## Superadmin invitations
 
@@ -46,7 +112,10 @@ are pinned to verified artifact versions in the current workspace.
   fidelity. The mask must match the first reference's dimensions.
 - FLUX editing accepts up to eight references.
 - MAI generation produces one PNG. Each edge is 768–1,365 pixels and total area
-  cannot exceed 1,048,576 pixels. Editing accepts one PNG or JPEG.
+  cannot exceed 1,048,576 pixels. Editing accepts one PNG or JPEG. Valid provider
+  outputs may exceed that area slightly because of tile rounding; Relay allows
+  at most 5% response tolerance while retaining dimension, file-size and format
+  checks. The generation input budget is unchanged.
 
 Provider calls with an ambiguous result are not automatically resubmitted. Every
 output is stored as an artifact; its run exposes the artifact/version IDs.
@@ -82,6 +151,11 @@ or tool output. Temporary URLs last 1–3,600 seconds, defaulting to 300. Choose
 `expiresInSeconds`. Permanent access additionally requires `artifacts:share` and
 an idempotency key. Anyone holding a share link can read that version while the
 file is retained and the link remains active. Files stay private by default.
+
+In the file's **Create share link** dialog, the default is anyone with the link,
+the latest version, no expiry, unlimited opens, and inline viewing. Create the
+link and copy its visible URL. **Advanced options** contains restrictions and
+version choices. Revoke the link to stop future access.
 
 ## Email notifications
 

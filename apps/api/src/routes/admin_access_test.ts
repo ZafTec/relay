@@ -4,7 +4,7 @@ import { createSuperadminAccessRoutes } from "./admin_access.ts";
 
 const origin = "https://relay.test";
 const root = "/api/v1/admin/superadmins";
-function fixture(authenticated = true) {
+function fixture(authenticated = true, allowed = true) {
   const calls: unknown[][] = [];
   const invoke = (...args: unknown[]) => {
     calls.push(args);
@@ -28,10 +28,35 @@ function fixture(authenticated = true) {
     app: createSuperadminAccessRoutes({
       auth,
       allowedOrigins: [origin],
-      service: { list: invoke, invite: invoke, revoke: invoke, accept: invoke },
+      service: {
+        access: (session) => {
+          calls.push(["access", session]);
+          return Promise.resolve(allowed);
+        },
+        list: invoke,
+        invite: invoke,
+        revoke: invoke,
+        accept: invoke,
+      },
     }),
   };
 }
+Deno.test("platform access uses the authenticated session and current role without changelog data", async () => {
+  const anonymous = fixture(false);
+  assertEquals(
+    (await anonymous.app.request("/api/v1/admin/access")).status,
+    401,
+  );
+  assertEquals(anonymous.calls, []);
+  const denied = fixture(true, false);
+  assertEquals((await denied.app.request("/api/v1/admin/access")).status, 403);
+  const { app, calls } = fixture();
+  const response = await app.request("/api/v1/admin/access");
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), { allowed: true });
+  assertEquals(response.headers.get("cache-control"), "no-store");
+  assertEquals(calls, [["access", "trusted-session"]]);
+});
 Deno.test("superadmin invitation endpoints require cookies, trusted origin and explicit acceptance", async () => {
   const anonymous = fixture(false);
   assertEquals((await anonymous.app.request(root)).status, 401);

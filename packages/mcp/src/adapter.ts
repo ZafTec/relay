@@ -18,6 +18,11 @@ import {
 import { notificationSettingsSchema } from "@relay/notifications";
 import { z } from "zod/v4";
 import {
+  registerRelayAdminTools,
+  RELAY_MCP_ADMIN_TOOL_SCOPES,
+  type RelayMcpAdminServices,
+} from "./admin-tools.ts";
+import {
   cancelRunResultSchema,
   completeArtifactUploadResultSchema,
   type ContractSchema,
@@ -32,6 +37,7 @@ import {
   errorEnvelopeSchema,
   getArtifactResultSchema,
   getRunResultSchema,
+  getStorageUsageResultSchema,
   getToolResultSchema,
   listArtifactsRequestSchema,
   listArtifactsResultSchema,
@@ -76,6 +82,7 @@ export const RELAY_MCP_TOOL_NAMES: Readonly<{
   getAccess: "relay.artifacts.get_access";
   getNotifications: "relay.notifications.get";
   configureNotifications: "relay.notifications.configure";
+  getStorageUsage: "relay.usage.storage";
 }> = Object.freeze({
   listTools: "relay.tools.list",
   getTool: "relay.tools.get",
@@ -92,6 +99,7 @@ export const RELAY_MCP_TOOL_NAMES: Readonly<{
   getAccess: "relay.artifacts.get_access",
   getNotifications: "relay.notifications.get",
   configureNotifications: "relay.notifications.configure",
+  getStorageUsage: "relay.usage.storage",
 });
 
 export type RelayMcpManagementToolName =
@@ -119,6 +127,7 @@ export const RELAY_MCP_MANAGEMENT_TOOL_SCOPES: Readonly<
   [RELAY_MCP_TOOL_NAMES.getAccess]: ["artifacts:read"],
   [RELAY_MCP_TOOL_NAMES.getNotifications]: ["notifications:read"],
   [RELAY_MCP_TOOL_NAMES.configureNotifications]: ["notifications:write"],
+  [RELAY_MCP_TOOL_NAMES.getStorageUsage]: ["usage:read"],
 });
 
 export const RELAY_MCP_PROTOCOL_VERSION = "2026-07-28" as const;
@@ -126,7 +135,10 @@ export const RELAY_MCP_IDEMPOTENCY_META_KEY =
   "io.relay/idempotency-key" as const;
 
 const MANAGEMENT_TOOL_NAME_SET: ReadonlySet<string> = new Set(
-  Object.values(RELAY_MCP_TOOL_NAMES),
+  [
+    ...Object.values(RELAY_MCP_TOOL_NAMES),
+    ...Object.keys(RELAY_MCP_ADMIN_TOOL_SCOPES),
+  ],
 );
 const MAX_CATALOG_PAGES = 100;
 const CATALOG_PAGE_SIZE = 100;
@@ -135,6 +147,7 @@ export interface RelayMcpPrincipal {
   readonly identity: WorkspaceActorContext;
   readonly scopes: readonly string[];
   readonly clientId?: string;
+  readonly adminSessionId?: string;
 }
 
 export interface McpIdempotencyContext {
@@ -152,6 +165,7 @@ export type McpIdempotencyKeyFactory = (
 
 export interface CreateRelayMcpServerOptions {
   readonly services: ApplicationServices;
+  readonly adminServices?: RelayMcpAdminServices;
   readonly principal: RelayMcpPrincipal;
   readonly serverInfo?: {
     readonly name: string;
@@ -240,6 +254,25 @@ function resultOutcome(
     };
   }
   switch (toolName) {
+    case RELAY_MCP_TOOL_NAMES.getStorageUsage:
+      return kind === "ok"
+        ? {
+          success: true,
+          text: "Current workspace storage usage and capacity.",
+        }
+        : kind === "not_found"
+        ? {
+          success: false,
+          text: "The workspace was not found.",
+          code: "not_found",
+          details: { resource: "workspace" },
+        }
+        : {
+          success: false,
+          text: "Storage usage is temporarily unavailable.",
+          code: "dependency_unavailable",
+          retryable: true,
+        };
     case RELAY_MCP_TOOL_NAMES.listTools:
       return kind === "ok"
         ? {
@@ -1166,5 +1199,26 @@ export async function createRelayMcpServer(
     }
   }
 
+  server.registerTool(RELAY_MCP_TOOL_NAMES.getStorageUsage, {
+    title: "Get workspace storage usage",
+    description:
+      "Read stored bytes, upload reservations, cleanup debt, effective capacity and available space for the current workspace. Storage occupancy is distinct from billed tool usage.",
+    inputSchema: z.object({}).strict(),
+    outputSchema: fromJsonSchema(getStorageUsageResultSchema.jsonSchema),
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    _meta: requiredScopeMetadata(["usage:read"]),
+  }, () =>
+    callManagementTool(
+      grantedScopes,
+      ["usage:read"],
+      RELAY_MCP_TOOL_NAMES.getStorageUsage,
+      getStorageUsageResultSchema,
+      () => services.usage.getStorageSummary(identity),
+    ));
+  registerRelayAdminTools(server, options.adminServices, {
+    adminSessionId: options.principal.adminSessionId,
+    actorUserId: identity.actorUserId,
+    scopes: options.principal.scopes,
+  });
   return server;
 }

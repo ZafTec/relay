@@ -2,13 +2,15 @@ import axe from "axe-core";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../../src/auth/AuthProvider";
 import { ProtectedRoute } from "../../src/auth/ProtectedRoute";
 import { createTestAuthAdapter } from "../../src/auth/test-adapter";
 import type { AuthAdapter, RelayIdentity, RelayWorkspace } from "../../src/auth/types";
 import { SettingsPage } from "../../src/features/settings/SettingsPage";
+import { httpWorkspaceAdapter } from "../../src/lib/api/workspaces";
 vi.mock("../../src/lib/api/notifications", () => ({ notificationsApi: { get: vi.fn(async () => ({ configured: false, completed: false, failed: false, deliveries: [] })) } }));
+vi.mock("../../src/lib/api/workspaces", () => ({ httpWorkspaceAdapter: { list: vi.fn() } }));
 
 const SETTINGS_IDENTITY_FIXTURE: RelayIdentity = {
   session: {
@@ -30,6 +32,13 @@ const SETTINGS_WORKSPACE_FIXTURE: RelayWorkspace = {
   name: "Northstar fixture workspace",
   slug: "northstar-fixture",
 };
+
+beforeEach(() => {
+  vi.mocked(httpWorkspaceAdapter.list).mockResolvedValue({
+    items: [{ ...SETTINGS_WORKSPACE_FIXTURE, role: "owner", personal: true }],
+    maxOwnedWorkspaces: 20,
+  });
+});
 
 function renderSettings(adapter: AuthAdapter) {
   return render(
@@ -53,7 +62,7 @@ function renderSettings(adapter: AuthAdapter) {
 }
 
 describe("workspace settings page", () => {
-  it("renders real ready-state facts and the implemented MCP contract without editable data", async () => {
+  it("renders workspace controls, session facts and the implemented MCP contract", async () => {
     const { container } = renderSettings(createTestAuthAdapter({
       identity: SETTINGS_IDENTITY_FIXTURE,
       activeWorkspace: SETTINGS_WORKSPACE_FIXTURE,
@@ -63,15 +72,20 @@ describe("workspace settings page", () => {
       .toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
 
-    const workspaceSection = screen.getByRole("region", { name: "Active workspace" });
-    expect(within(workspaceSection).getByText("Northstar fixture workspace")).toBeInTheDocument();
-    expect(within(workspaceSection).getByText("northstar-fixture")).toBeInTheDocument();
+    const workspaceSection = screen.getByRole("region", { name: "Your workspaces" });
+    expect(await within(workspaceSection).findByRole("combobox", { name: "Active workspace" }))
+      .toHaveValue(SETTINGS_WORKSPACE_FIXTURE.id);
+    expect(within(workspaceSection).getByRole("option", { name: /Northstar fixture workspace/ })).toBeInTheDocument();
+    expect(within(workspaceSection).getByText("@northstar-fixture")).toBeInTheDocument();
     expect(within(workspaceSection).getByText("workspace-northstar-fixture")).toBeInTheDocument();
     expect(within(workspaceSection).getByText("Current")).toBeInTheDocument();
 
     const sessionSection = screen.getByRole("region", { name: "Current session" });
     expect(within(sessionSection).getByText("Morgan Lee")).toBeInTheDocument();
     expect(within(sessionSection).getByText("morgan@example.test")).toBeInTheDocument();
+    expect(within(sessionSection).getByText("Northstar fixture workspace")).toBeInTheDocument();
+    expect(within(sessionSection).getByText("@northstar-fixture")).toBeInTheDocument();
+    expect(within(sessionSection).queryByText(SETTINGS_WORKSPACE_FIXTURE.id)).not.toBeInTheDocument();
     expect(sessionSection.querySelector('time[datetime="2031-04-12T15:30:00.000Z"]'))
       .toBeInTheDocument();
 
@@ -81,6 +95,8 @@ describe("workspace settings page", () => {
       .toBeInTheDocument();
     expect(within(mcpSection).getByRole("link", { name: "Manage OAuth clients" })).toHaveAttribute("href", "/admin/oauth-clients");
     expect(within(mcpSection).getByText(/Running tools also requires a usage allowance/i)).toBeInTheDocument();
+    expect(within(mcpSection).getByText("@northstar-fixture")).toBeInTheDocument();
+    expect(within(mcpSection).getByText("Read tool usage and workspace storage usage.")).toBeInTheDocument();
     const scopeTable = within(mcpSection).getByRole("table", {
       name: "Supported MCP authorization scopes",
     });
@@ -99,7 +115,9 @@ describe("workspace settings page", () => {
       expect(within(scopeTable).getByText(scope)).toBeInTheDocument();
     }
 
-    expect(workspaceSection.querySelector("input, select, textarea")).not.toBeInTheDocument();
+    expect(within(workspaceSection).getByRole("button", { name: "Edit details" })).toBeEnabled();
+    expect(within(workspaceSection).getByRole("button", { name: "New workspace" })).toBeEnabled();
+    expect(workspaceSection.querySelector("input, textarea")).not.toBeInTheDocument();
     expect(screen.queryByText(/Halide XL|Aurora Fast|Claude MCP client|CI pipeline/i))
       .not.toBeInTheDocument();
     expect(screen.queryByText(/API key|billing plan|member count/i)).not.toBeInTheDocument();
@@ -131,7 +149,7 @@ describe("workspace settings page", () => {
       await pendingWorkspace;
     });
 
-    expect(await screen.findByText("Northstar fixture workspace")).toBeInTheDocument();
+    expect(await within(screen.getByRole("region", { name: "Your workspaces" })).findByText("@northstar-fixture")).toBeInTheDocument();
     expect(adapter.getActiveWorkspace).toHaveBeenCalledTimes(1);
   });
 
@@ -149,7 +167,7 @@ describe("workspace settings page", () => {
       activeWorkspace: null,
     }));
 
-    expect(await screen.findByText("No active workspace is attached to this session.", {
+    expect(await screen.findByText("No active workspace. Choose one above or create a new one.", {
       exact: false,
     })).toBeInTheDocument();
     expect(screen.getByText("No active workspace selected")).toBeInTheDocument();
@@ -177,7 +195,7 @@ describe("workspace settings page", () => {
 
     await user.click(screen.getByRole("button", { name: "Retry workspace" }));
 
-    expect(await screen.findByText("Northstar fixture workspace")).toBeInTheDocument();
+    expect(await within(screen.getByRole("region", { name: "Your workspaces" })).findByText("@northstar-fixture")).toBeInTheDocument();
     expect(adapter.getActiveWorkspace).toHaveBeenCalledTimes(2);
   });
 });

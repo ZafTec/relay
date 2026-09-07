@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../auth/AuthProvider";
+import { describeScope } from "../../auth/oauth-request";
 import { usePageMetadata } from "../../app/usePageMetadata";
 import { Button } from "../../components/ui/Button";
 import { InlineNotice } from "../../components/ui/InlineNotice";
@@ -72,7 +73,8 @@ function ClientManager() {
   function showFailure(failure: unknown) {
     if (failure instanceof ApiError && [401, 403].includes(failure.status)) {
       setCredentials(null);
-      reportAccessFailure({ kind: "reauthentication-required" }, sessionId);
+      const fresh = failure.code === "SESSION_TOO_OLD" || failure.code === "reauthentication_required";
+      reportAccessFailure({ kind: fresh ? "reauthentication-required" : failure.status === 401 ? "auth-expired" : "denied" }, sessionId);
     } else setError(oauthClientError(failure));
   }
 
@@ -127,7 +129,7 @@ function ClientManager() {
     </header>
     <section className="oauth-connection" aria-label="MCP connection address">
       <CopyValue label="MCP URL" value={endpoint} />
-      <p>Add this URL in your agent’s connected-app settings. Create a client below if it asks for a client ID and secret. Then sign in to Relay, choose your workspace, and approve access.</p>
+      <p>Add this URL in your agent’s connected-app settings and choose Connect. Compatible agents register automatically, then open Relay for sign-in, workspace selection, and permissions. If your agent asks for a client ID and secret, create a client below using its callback URL.</p>
     </section>
     {error ? <InlineNotice title="Action needs attention" tone="error"><p>{error}</p><Button variant="quiet" disabled={busy} onClick={() => void refresh()}>Refresh clients</Button></InlineNotice> : null}
     {credentials ? <section className="oauth-credentials" aria-labelledby="credentials-heading">
@@ -143,13 +145,14 @@ function ClientManager() {
       <label>Redirect URLs<textarea required rows={3} value={redirects} onChange={(event) => setRedirects(event.target.value)} aria-describedby="redirect-help" placeholder="https://agent.example.com/oauth/callback" /></label>
       <p id="redirect-help">Copy the redirect URI from your agent’s setup screen. Enter one exact URL per line.</p>
       <fieldset><legend>Allowed permissions</legend><p>The agent still needs your consent. Running tools also requires a workspace usage allowance.</p><div className="oauth-permissions">{permissions.map(([scope, label]) => <label key={scope}><input type="checkbox" checked={scopes.includes(scope)} onChange={(event) => setScopes((current) => event.target.checked ? [...current, scope] : current.filter((value) => value !== scope))} />{label}</label>)}</div></fieldset>
+      <details><summary>Platform admin permissions</summary><p>These permissions require a current superadmin to opt in during consent. They never bypass workspace usage allowances.</p><div className="oauth-permissions">{["allowances", "capacity", "superadmins", "changelog", "oauth"].flatMap((area) => ["read", "write"].map((action) => { const scope = `admin:${area}:${action}`; return <label key={scope}><input type="checkbox" checked={scopes.includes(scope)} onChange={(event) => setScopes((current) => event.target.checked ? [...current, scope] : current.filter((value) => value !== scope))} />{describeScope(scope).title}</label>; }))}</div></details>
       <details><summary>Client authentication</summary><label>Token authentication<select value={authMethod} onChange={(event) => setAuthMethod(event.target.value as typeof authMethod)}><option value="client_secret_post">Client secret in request body</option><option value="client_secret_basic">Client secret with HTTP Basic</option><option value="none">Public client — PKCE, no secret</option></select></label><p>Use the method your agent supports. All clients must use PKCE with S256.</p></details>
       <div className="oauth-form-actions"><Button type="submit" disabled={mustRefresh} pending={busy} pendingLabel="Creating client">Create client</Button><Button variant="quiet" disabled={busy} onClick={() => setEditing(false)}>Cancel</Button></div>
     </form> : null}
     <section className="oauth-client-list" aria-labelledby="registered-clients-heading">
       <h2 id="registered-clients-heading">Your registered clients</h2>
       {clients === null && !error ? <Skeleton label="Loading OAuth clients" lines={3} /> : null}
-      {clients?.length === 0 ? <div className="oauth-clients-empty"><h3>Connect your first agent</h3><p>Create a client using the redirect URI from Gemini or your preferred agent. You’ll receive credentials to finish its setup.</p></div> : null}
+      {clients?.length === 0 ? <div className="oauth-clients-empty"><h3>No registered clients</h3><p>For automatic setup, add the MCP URL above in your agent. Create a client here only if your agent asks for a client ID and secret.</p></div> : null}
       {clients?.map((client) => <article className="oauth-client-row" key={client.client_id}>
         <div><h3>{client.client_name || "Unnamed client"}</h3><code>{client.client_id}</code><ul>{client.redirect_uris.map((url) => <li key={url}>{url}</li>)}</ul><p>{client.token_endpoint_auth_method === "none" ? "Public client · PKCE" : "Confidential client · PKCE"}</p></div>
         <div className="oauth-client-actions">

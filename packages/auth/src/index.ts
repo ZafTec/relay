@@ -15,7 +15,19 @@ export type { AuthorizedMcpPrincipal } from "./oauth.ts";
 export {
   ensurePersonalWorkspace,
   personalWorkspaceSlug,
+  suggestWorkspaceDetails,
 } from "./workspaces.ts";
+export type { WorkspaceDetails } from "./workspaces.ts";
+export {
+  createManagedWorkspace,
+  listManagedWorkspaces,
+  MAX_OWNED_WORKSPACES,
+  parseWorkspaceDetails,
+  proposeWorkspaceDetails,
+  updateManagedWorkspace,
+  WorkspaceManagementError,
+} from "./workspace-management.ts";
+export type { ManagedWorkspace } from "./workspace-management.ts";
 
 export { canRemoveMember, getMembership } from "./authorization.ts";
 export type { Queryable, WorkspaceRole } from "./authorization.ts";

@@ -75,6 +75,55 @@ for (const model of ["MAI-Image-2.5", "MAI-Image-2.5-Flash"] as const) {
     });
     assertEquals(calls, 1);
   });
+
+  Deno.test(`${model} accepts Azure's rounded 4:5 edit output while keeping generation request limits strict`, async () => {
+    let calls = 0;
+    const client = createAzureMaiImageClient({
+      baseUrl: TEST_AZURE_BASE_URL,
+      apiKey: TEST_API_KEY,
+      fetch: asFetch(() => {
+        calls++;
+        return Response.json({
+          data: [{ b64_json: base64(pngBytes(912, 1152)) }],
+        });
+      }),
+    }, model);
+    // This exact output geometry was reproduced with a synthetic 1200x1500
+    // JPEG. The image is valid but 0.2% above the nominal generation budget.
+    const result = await client.edit({
+      prompt: "Change the blue square to green",
+      image: `data:image/jpeg;base64,${base64(jpegBytes(1200, 1500))}`,
+    });
+    assertEquals(result.images[0].width, 912);
+    assertEquals(result.images[0].height, 1152);
+    assertEquals(result.images[0].mediaType, "image/png");
+    await expectProviderError(
+      () => client.generate({ prompt: "fixture", width: 912, height: 1152 }),
+      "invalid_input",
+    );
+    assertEquals(calls, 1);
+  });
+
+  Deno.test(`${model} rejects response dimensions beyond the small rounding allowance`, async () => {
+    const client = createAzureMaiImageClient({
+      baseUrl: TEST_AZURE_BASE_URL,
+      apiKey: TEST_API_KEY,
+      fetch: asFetch(() =>
+        Response.json({
+          data: [{ b64_json: base64(pngBytes(1056, 1056)) }],
+        })
+      ),
+    }, model);
+    const error = await expectProviderError(
+      () =>
+        client.edit({
+          prompt: "fixture",
+          image: `data:image/jpeg;base64,${base64(jpegBytes(1200, 1500))}`,
+        }),
+      "invalid_response",
+    );
+    assertEquals(error.field, "response.data[0].b64_json");
+  });
 }
 
 Deno.test("GPT Image edits preserve multiple source images, a mask, and generation controls", async () => {

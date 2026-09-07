@@ -101,7 +101,7 @@ export function OAuthWorkspacePage() {
 
         {!loading && workspaces.length > 0 ? (
           <>
-            <fieldset className="workspace-options">
+            <fieldset className="workspace-options" disabled={continuing}>
               <legend>Eligible workspaces</legend>
               {workspaces.map((item) => (
                 <RadioCard
@@ -110,7 +110,7 @@ export function OAuthWorkspacePage() {
                   name="workspace"
                   value={item.id}
                   title={item.name}
-                  metadata={`${item.id}${item.id === activeWorkspaceId ? " / active" : ""}`}
+                  metadata={`@${item.slug}${item.id === activeWorkspaceId ? " / active" : ""}`}
                   checked={selectedId === item.id}
                   onChange={() => setSelectedId(item.id)}
                 />
@@ -132,7 +132,7 @@ export function OAuthWorkspacePage() {
               </Button>
               <LinkButton to="/dashboard" variant="outline">Cancel</LinkButton>
             </div>
-            <p className="oauth-panel__escape">The dashboard keeps a non-interactive workspace label in this single-workspace release. <Link to="/dashboard">Review it</Link>.</p>
+            <p className="oauth-panel__escape">This connection stays bound to the workspace you choose. <Link to="/dashboard/settings#workspaces">Manage your workspaces</Link>.</p>
           </>
         ) : null}
       </section>

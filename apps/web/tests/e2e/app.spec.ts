@@ -198,6 +198,10 @@ async function mockAuthenticatedWorkspace(
   await page.route("**/api/v1/notifications", (route) => route.fulfill({
     json: { notifications: { configured: false, completed: false, failed: false, deliveries: [] } },
   }));
+  await page.route("**/api/v1/admin/access", (route) => route.fulfill({
+    status: options.adminAccess ? 200 : 403,
+    json: options.adminAccess ? { allowed: true } : { error: { code: "authorization_denied" } },
+  }));
   await page.route("**/api/v1/admin/changelog**", async (route) => {
     if (!options.adminAccess) {
       await route.fulfill({
@@ -257,6 +261,12 @@ async function mockAuthenticatedWorkspace(
   await page.route("**/api/auth/organization/list**", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([workspace]) });
   });
+  await page.route("**/api/v1/workspaces", (route) => route.fulfill({
+    json: { items: [{ ...workspace, role: "owner", personal: true }], maxOwnedWorkspaces: 20 },
+  }));
+  await page.route("**/api/v1/notifications", (route) => route.fulfill({
+    json: { notifications: { configured: true, completed: false, failed: false, deliveries: [] } },
+  }));
 }
 
 async function mockRegistryResources(page: Page) {
@@ -306,6 +316,13 @@ async function mockRegistryResources(page: Page) {
     });
   });
   await page.route("**/api/v1/usage**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/v1/usage/storage") {
+      await route.fulfill({ json: { kind: "ok", storage: {
+        generatedAt: browserUsage.generatedAt, storedBytes: "1073741824", reservedBytes: "0",
+        cleanupPendingBytes: "0", limitBytes: "2147483648", availableBytes: "1073741824",
+      } } });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -643,14 +660,14 @@ test("product resource routes expose real contract data across required widths",
     await expect(page.getByRole("heading", { level: 1, name: "Usage" })).toBeVisible();
     await expect(page.getByRole("table", { name: /Current consumed and reserved usage/ }))
       .toBeVisible();
-    await expect(page.getByText("Receipt and breakdown data is not exposed by the current contract."))
+    await expect(page.getByText("Usage already recorded for this period."))
       .toBeVisible();
     await expectNoPageOverflow(page);
 
     await page.goto("/dashboard/settings");
     await expect(page.getByRole("heading", { level: 1, name: "Workspace settings" })).toBeVisible();
     await expect(
-      page.getByRole("region", { name: "Active workspace" }).getByText("Browser workspace"),
+      page.getByRole("region", { name: "Your workspaces" }).getByText("@browser-workspace"),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Manage OAuth clients" })).toBeVisible();
     await expectNoPageOverflow(page);

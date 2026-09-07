@@ -68,9 +68,19 @@ const SCOPE_COPY: Record<string, Omit<ScopeDescription, "scope">> = {
   "artifacts:read": { title: "Read and download files", description: "Read stored file details and create temporary download links." },
   "artifacts:write": { title: "Upload files", description: "Save file content and new versions in workspace storage." },
   "artifacts:share": { title: "Share stored files", description: "Create or revoke share links. Permanent links can let anyone who has the link download a file." },
-  "usage:read": { title: "Read usage", description: "Read usage records for this workspace." },
+  "usage:read": { title: "Read usage", description: "Read tool usage and storage usage for this workspace." },
   "notifications:read": { title: "Read email preferences", description: "Read your notification preferences and recent delivery status." },
   "notifications:write": { title: "Change email preferences", description: "Enable or disable emails to your verified address when your runs complete or fail." },
+  "admin:allowances:read": { title: "Read usage allowances", description: "Read usage allowances across the platform. Requires a current superadmin role." },
+  "admin:allowances:write": { title: "Manage usage allowance grants and revocations", description: "Change usage allowance grants and revocations across the platform. Requires explicit confirmation and a recent superadmin sign-in." },
+  "admin:capacity:read": { title: "Read provider capacity", description: "Read provider capacity across the platform. Requires a current superadmin role." },
+  "admin:capacity:write": { title: "Manage capacity policies and limits", description: "Change capacity policies and limits across the platform. Requires explicit confirmation and a recent superadmin sign-in." },
+  "admin:superadmins:read": { title: "Read superadmin access", description: "Read superadmin access across the platform. Requires a current superadmin role." },
+  "admin:superadmins:write": { title: "Manage superadmin invitations", description: "Change superadmin invitations across the platform. Requires explicit confirmation and a recent superadmin sign-in." },
+  "admin:changelog:read": { title: "Read platform changelog", description: "Read platform changelog across the platform. Requires a current superadmin role." },
+  "admin:changelog:write": { title: "Manage changelog drafts and publication", description: "Change changelog drafts and publication across the platform. Requires explicit confirmation and a recent superadmin sign-in." },
+  "admin:oauth:read": { title: "Read OAuth clients", description: "Read OAuth clients across the platform. Requires a current superadmin role." },
+  "admin:oauth:write": { title: "Manage OAuth client credentials and settings", description: "Change OAuth client credentials and settings across the platform. Requires explicit confirmation and a recent superadmin sign-in." },
 };
 
 export function describeScope(scope: string): ScopeDescription {

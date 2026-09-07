@@ -4,6 +4,12 @@ import {
   type RequireMcpAuthOptions,
 } from "@better-auth/mcp";
 import { betterAuth } from "better-auth";
+import { createAuthMiddleware } from "better-auth/api";
+import { RELAY_MCP_WORKSPACE_SCOPES } from "@relay/contracts";
+import {
+  requireS256Authorization,
+  validateRelayClientMetadata,
+} from "./oauth-client-policy.ts";
 import { jwt } from "better-auth/plugins/jwt";
 // Better Auth exposes these tree-shakeable entry points only as npm package
 // subpaths; keep them pinned to the same version as the root import map.
@@ -17,7 +23,7 @@ import {
   type AuthorizedMcpPrincipal,
   authorizeMcpAccessTokenClaims,
   createMcpOAuthOptions,
-  RELAY_MCP_RESOURCE_SCOPES,
+  RELAY_AUTHORIZATION_SCOPES,
   relayMcpResource,
   requireCurrentVerifiedEmail,
   requireMcpScopes,
@@ -28,6 +34,10 @@ import {
   RELAY_CLIENT_IP_HEADER,
 } from "./proxy.ts";
 import { ensurePersonalWorkspace } from "./workspaces.ts";
+import {
+  createMcpOAuthClientManager,
+  type ManageMcpOAuthClient,
+} from "./oauth-management.ts";
 
 const HIGH_RISK_SESSION_FRESHNESS_SECONDS = 15 * 60;
 
@@ -77,6 +87,7 @@ export interface Auth {
     ): Promise<{ session: AuthSession; user: AuthUser } | null>;
   };
   readonly mcpResource: string;
+  readonly manageMcpOAuthClient: ManageMcpOAuthClient;
   readonly authorizeMcpClaims: (
     claims: unknown,
   ) => Promise<AuthorizedMcpPrincipal | null>;
@@ -116,6 +127,7 @@ function deferredOrganizationMutationResponse(): Response {
  * direct module export, not part of `@relay/auth`'s public package surface.
  */
 export function createAuthOptions(pool: DatabasePool, config: AuthConfig) {
+  const workspaceContinuations = new WeakSet<Headers>();
   const googleOptions = {
     clientId: config.google.clientId,
     clientSecret: config.google.clientSecret,
@@ -170,6 +182,56 @@ export function createAuthOptions(pool: DatabasePool, config: AuthConfig) {
     rateLimit: {
       enabled: true,
       storage: "database" as const,
+      customRules: {
+        "/oauth2/register": { window: 60, max: 10 },
+        "/oauth2/create-client": { window: 60, max: 10 },
+      },
+    },
+
+    hooks: {
+      // Better Auth requires an asynchronous middleware signature.
+      // deno-lint-ignore require-await
+      before: createAuthMiddleware(async (context) => {
+        if (
+          ["/oauth2/register", "/oauth2/create-client", "/oauth2/update-client"]
+            .includes(context.path)
+        ) {
+          const metadata = context.path === "/oauth2/update-client"
+            ? context.body?.update
+            : context.body;
+          validateRelayClientMetadata(metadata);
+          if (
+            metadata.application_type === undefined &&
+            metadata.redirect_uris?.some((uri: string) =>
+              uri.startsWith("http://")
+            )
+          ) {
+            metadata.application_type = "native";
+          }
+        }
+        if (context.path === "/oauth2/authorize") {
+          requireS256Authorization(context.query);
+          if (!context.query?.scope) {
+            return {
+              context: {
+                query: {
+                  ...context.query,
+                  scope: [
+                    ...RELAY_AUTHORIZATION_SCOPES,
+                    ...RELAY_MCP_WORKSPACE_SCOPES,
+                  ].join(" "),
+                },
+              },
+            };
+          }
+        }
+        if (
+          context.path === "/oauth2/continue" &&
+          context.body?.postLogin === true && context.request
+        ) {
+          workspaceContinuations.add(context.request.headers);
+        }
+      }),
     },
 
     advanced: {
@@ -199,7 +261,10 @@ export function createAuthOptions(pool: DatabasePool, config: AuthConfig) {
         dynamicAccessControl: { enabled: false },
       }),
       jwt({ disableSettingJwtHeader: true }),
-      mcp(createMcpOAuthOptions(pool, config.baseUrl)),
+      mcp(createMcpOAuthOptions(pool, config.baseUrl, {
+        isWorkspaceContinuation: (headers) =>
+          workspaceContinuations.has(headers),
+      })),
     ],
 
     databaseHooks: {
@@ -251,6 +316,7 @@ export function createAuth(pool: DatabasePool, config: AuthConfig): Auth {
       getSession: (args) => auth.api.getSession(args),
     },
     mcpResource,
+    manageMcpOAuthClient: createMcpOAuthClientManager(pool, auth),
     authorizeMcpClaims: (claims) =>
       authorizeMcpAccessTokenClaims(pool, mcpResource, claims),
     requireMcpScopes,
@@ -258,7 +324,7 @@ export function createAuth(pool: DatabasePool, config: AuthConfig): Auth {
       const protectedHandler = requireMcpAuth(auth, handler, {
         ...options,
         resource: mcpResource,
-        challengeScopes: options?.challengeScopes ?? RELAY_MCP_RESOURCE_SCOPES,
+        challengeScopes: options?.challengeScopes ?? RELAY_MCP_WORKSPACE_SCOPES,
       });
       return (request, connection) => {
         const prepared = prepareAuthRequest(request, connection);

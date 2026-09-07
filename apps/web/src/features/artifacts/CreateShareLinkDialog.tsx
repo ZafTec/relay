@@ -27,21 +27,13 @@ interface CreateShareLinkDialogProps {
 }
 
 interface SharePolicyErrors {
-  versionPolicy?: string;
   pinnedVersion?: string;
-  expiryPolicy?: string;
   expiresAt?: string;
-  resolutionPolicy?: string;
-  maxResolutions?: string;
-  accessPolicy?: string;
-  contentDisposition?: string;
 }
 
-type VersionPolicy = "" | "follow" | "pinned";
-type ExpiryPolicy = "" | "never" | "custom";
-type ResolutionPolicy = "" | "unlimited" | "limited";
-type AccessPolicy = "" | "public";
-type ContentDisposition = "" | "inline" | "attachment";
+type VersionPolicy = "follow" | "pinned";
+type ExpiryPolicy = "never" | "custom";
+type ContentDisposition = "inline" | "attachment";
 
 type CreatedSecret = Extract<CreateShareLinkAdapterResult, { kind: "created" }>;
 
@@ -52,8 +44,12 @@ interface FrozenShareCreate {
 
 function focusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(
-    "button:not(:disabled), input:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex='-1'])",
-  )).filter((element) => !element.hasAttribute("hidden"));
+    "button:not(:disabled), input:not(:disabled), select:not(:disabled), summary:not([aria-disabled='true']), [href], [tabindex]:not([tabindex='-1'])",
+  )).filter((element) => {
+    if (element.closest("[hidden]") !== null) return false;
+    const closedDetails = element.closest("details:not([open])");
+    return closedDetails === null || element === closedDetails.querySelector("summary");
+  });
 }
 
 export function CreateShareLinkDialog({
@@ -66,28 +62,26 @@ export function CreateShareLinkDialog({
 }: CreateShareLinkDialogProps) {
   const id = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
-  const firstFieldRef = useRef<HTMLSelectElement>(null);
   const outcomeHeadingRef = useRef<HTMLHeadingElement>(null);
+  const shareUrlRef = useRef<HTMLInputElement>(null);
+  const tokenRef = useRef<HTMLInputElement>(null);
   const mutationStatusRef = useRef<HTMLDivElement>(null);
   const unknownStatusRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef(false);
   const createGenerationRef = useRef(0);
   const frozenCreateRef = useRef<FrozenShareCreate | null>(null);
-  const [versionPolicy, setVersionPolicy] = useState<VersionPolicy>("");
-  const [pinnedVersionId, setPinnedVersionId] = useState("");
-  const [expiryPolicy, setExpiryPolicy] = useState<ExpiryPolicy>("");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [versionPolicy, setVersionPolicy] = useState<VersionPolicy>("follow");
+  const [pinnedVersionId, setPinnedVersionId] = useState(artifact.currentVersion?.id ?? "");
+  const [expiryPolicy, setExpiryPolicy] = useState<ExpiryPolicy>("never");
   const [expiresAt, setExpiresAt] = useState("");
-  const [resolutionPolicy, setResolutionPolicy] = useState<ResolutionPolicy>("");
-  const [maxResolutions, setMaxResolutions] = useState("");
-  const [accessPolicy, setAccessPolicy] = useState<AccessPolicy>("");
-  const [contentDisposition, setContentDisposition] = useState<ContentDisposition>("");
+  const [contentDisposition, setContentDisposition] = useState<ContentDisposition>("inline");
   const [errors, setErrors] = useState<SharePolicyErrors>({});
   const [pending, setPending] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [refreshRequired, setRefreshRequired] = useState(false);
   const [unknownOutcome, setUnknownOutcome] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedSecret | null>(null);
-  const [revealed, setRevealed] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
 
   useEffect(() => {
@@ -97,7 +91,7 @@ export function CreateShareLinkDialog({
       : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const timer = window.setTimeout(() => firstFieldRef.current?.focus(), 0);
+    const timer = window.setTimeout(() => outcomeHeadingRef.current?.focus(), 0);
 
     return () => {
       activeRef.current = false;
@@ -123,6 +117,12 @@ export function CreateShareLinkDialog({
   useEffect(() => {
     if (pending) dialogRef.current?.focus();
   }, [pending]);
+
+  useEffect(() => {
+    if (Object.keys(errors).length > 0) {
+      dialogRef.current?.querySelector<HTMLElement>("[aria-invalid='true']")?.focus();
+    }
+  }, [errors]);
 
   function closeDialog(discardFrozen = false) {
     if (pending || (unknownOutcome !== null && !discardFrozen)) return;
@@ -163,11 +163,9 @@ export function CreateShareLinkDialog({
 
   function validate(): SharePolicyErrors {
     const next: SharePolicyErrors = {};
-    if (versionPolicy === "") next.versionPolicy = "Choose whether this link follows the current version or stays pinned.";
     if (versionPolicy === "pinned" && !artifact.versions.some((version) => version.id === pinnedVersionId)) {
       next.pinnedVersion = "Choose the artifact version this link should use.";
     }
-    if (expiryPolicy === "") next.expiryPolicy = "Choose an explicit expiry policy.";
     if (expiryPolicy === "custom") {
       const parsedExpiry = Date.parse(expiresAt);
       if (expiresAt.length === 0 || !Number.isFinite(parsedExpiry)) {
@@ -175,19 +173,6 @@ export function CreateShareLinkDialog({
       } else if (parsedExpiry <= Date.now()) {
         next.expiresAt = "Expiry must be in the future.";
       }
-    }
-    if (resolutionPolicy === "") next.resolutionPolicy = "Choose an explicit resolution limit policy.";
-    if (resolutionPolicy === "limited") {
-      const parsedLimit = Number(maxResolutions);
-      if (!Number.isSafeInteger(parsedLimit) || parsedLimit < 1) {
-        next.maxResolutions = "Resolution limit must be a whole number greater than zero.";
-      }
-    }
-    if (accessPolicy !== "public") {
-      next.accessPolicy = "Choose public bearer access to create this share link.";
-    }
-    if (contentDisposition === "") {
-      next.contentDisposition = "Choose whether Relay opens the artifact inline or downloads it.";
     }
     return next;
   }
@@ -253,7 +238,10 @@ export function CreateShareLinkDialog({
     setErrors(nextErrors);
     setMutationError(null);
     setRefreshRequired(false);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.keys(nextErrors).length > 0) {
+      setAdvancedOpen(true);
+      return;
+    }
 
     try {
       const request = Object.freeze<CreateShareLinkRequest>({
@@ -261,9 +249,9 @@ export function CreateShareLinkDialog({
         followCurrent: versionPolicy === "follow",
         ...(versionPolicy === "pinned" ? { artifactVersionId: pinnedVersionId } : {}),
         expiresAt: expiryPolicy === "never" ? null : new Date(expiresAt).toISOString(),
-        maxResolutions: resolutionPolicy === "unlimited" ? null : Number(maxResolutions),
+        maxResolutions: null,
         requireAuth: false,
-        contentDisposition: contentDisposition as "inline" | "attachment",
+        contentDisposition,
       });
       const operation = Object.freeze({
         request,
@@ -291,8 +279,10 @@ export function CreateShareLinkDialog({
       if (activeRef.current) setCopyStatus(`${label} copied.`);
     } catch {
       if (!activeRef.current) return;
-      setRevealed(true);
-      setCopyStatus(`Copy failed. ${label} is now visible so you can select it manually.`);
+      const field = label === "Token" ? tokenRef.current : shareUrlRef.current;
+      field?.focus();
+      field?.select();
+      setCopyStatus(`Copy failed. ${label} is selected so you can copy it manually.`);
     }
   }
 
@@ -304,6 +294,7 @@ export function CreateShareLinkDialog({
     : unknownOutcome !== null
       ? `${id}-unknown-description`
       : `${id}-description`;
+  const policyLocked = pending || unknownOutcome !== null || refreshRequired;
 
   return (
     <div
@@ -314,7 +305,7 @@ export function CreateShareLinkDialog({
     >
       <div
         ref={dialogRef}
-        className="share-dialog"
+        className="share-dialog share-link-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-title`}
@@ -325,14 +316,14 @@ export function CreateShareLinkDialog({
       >
         <div className="share-dialog__header">
           <div>
-            <p className="mono-label">Managed share</p>
-            <h2 id={`${id}-title`} ref={outcomeHeadingRef} tabIndex={created === null ? undefined : -1}>
+            <h2 id={`${id}-title`} ref={outcomeHeadingRef} tabIndex={-1}>
               {created !== null
                 ? "Share link created"
                 : unknownOutcome !== null
                   ? "Creation outcome unknown"
                   : "Create share link"}
             </h2>
+            <p className="share-dialog__artifact">{artifact.name}</p>
           </div>
           <Button
             className="share-dialog__close"
@@ -341,7 +332,7 @@ export function CreateShareLinkDialog({
             onClick={() => closeDialog(true)}
           >
             {created !== null
-              ? "Clear and close"
+              ? "Close"
               : unknownOutcome !== null
                 ? "Close and inspect"
                 : refreshRequired
@@ -352,9 +343,17 @@ export function CreateShareLinkDialog({
 
         {created === null ? (
           <form className="share-policy-form" onSubmit={(event) => void submit(event)} noValidate>
-            <p id={`${id}-description`} className="share-policy-form__intro">
-              Set every policy explicitly. Relay shows the public share URL and token once after creation.
-            </p>
+            <div className="share-link-access">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <ellipse cx="12" cy="12" rx="4" ry="9" />
+                <path d="M3 12h18M5 6.5h14M5 17.5h14" />
+              </svg>
+              <div>
+                <h3>Anyone with the link</h3>
+                <p id={`${id}-description`}>Anyone with this link can view and download the file. No sign-in needed.</p>
+              </div>
+            </div>
 
             {unknownOutcome ? (
               <div
@@ -382,221 +381,155 @@ export function CreateShareLinkDialog({
               </div>
             ) : null}
 
-            <fieldset disabled={pending || unknownOutcome !== null || refreshRequired}>
-              <legend className="sr-only">Share link policy</legend>
+            <details className="share-advanced" open={advancedOpen}>
+              <summary
+                aria-disabled={policyLocked || undefined}
+                tabIndex={policyLocked ? -1 : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (!policyLocked) setAdvancedOpen((open) => !open);
+                }}
+              >
+                <span>Advanced options</span>
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <path d="m4 6 4 4 4-4" />
+                </svg>
+              </summary>
+              <fieldset disabled={policyLocked} hidden={!advancedOpen}>
+                <legend className="sr-only">Share link policy</legend>
 
-              <div className="share-field">
-                <label htmlFor={`${id}-version-policy`}>Version policy</label>
-                <select
-                  ref={firstFieldRef}
-                  id={`${id}-version-policy`}
-                  value={versionPolicy}
-                  onChange={(event) => {
-                    setVersionPolicy(event.currentTarget.value as VersionPolicy);
-                    setErrors((current) => ({ ...current, versionPolicy: undefined }));
-                  }}
-                  aria-invalid={errors.versionPolicy ? true : undefined}
-                  aria-describedby={errors.versionPolicy ? `${id}-version-policy-error` : undefined}
-                >
-                  <option value="">Choose a version policy</option>
-                  <option value="follow">Follow the current version</option>
-                  <option value="pinned">Pin to a specific version</option>
-                </select>
-                {errors.versionPolicy ? (
-                  <p id={`${id}-version-policy-error`} className="share-field__error" role="alert">
-                    {errors.versionPolicy}
-                  </p>
-                ) : null}
-              </div>
-
-              {versionPolicy === "pinned" ? (
                 <div className="share-field">
-                  <label htmlFor={`${id}-pinned-version`}>Pinned version</label>
+                  <label htmlFor={`${id}-version-policy`}>File version</label>
                   <select
-                    id={`${id}-pinned-version`}
-                    value={pinnedVersionId}
+                    id={`${id}-version-policy`}
+                    value={versionPolicy}
                     onChange={(event) => {
-                      setPinnedVersionId(event.currentTarget.value);
+                      setVersionPolicy(event.currentTarget.value as VersionPolicy);
                       setErrors((current) => ({ ...current, pinnedVersion: undefined }));
                     }}
-                    aria-invalid={errors.pinnedVersion ? true : undefined}
-                    aria-describedby={errors.pinnedVersion ? `${id}-pinned-version-error` : undefined}
                   >
-                    <option value="">Choose a version</option>
-                    {[...artifact.versions]
-                      .sort((left, right) => right.sequence - left.sequence)
-                      .map((version) => (
-                        <option value={version.id} key={version.id}>
-                          Version {version.sequence}
-                          {artifact.currentVersion?.id === version.id ? " (current)" : ""}
-                        </option>
-                      ))}
+                    <option value="follow">Always use the latest version</option>
+                    <option value="pinned">Pin to a specific version</option>
                   </select>
-                  {errors.pinnedVersion ? (
-                    <p id={`${id}-pinned-version-error`} className="share-field__error" role="alert">
-                      {errors.pinnedVersion}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <div className="share-policy-form__pair">
-                <div className="share-field">
-                  <label htmlFor={`${id}-expiry-policy`}>Expiry policy</label>
-                  <select
-                    id={`${id}-expiry-policy`}
-                    value={expiryPolicy}
-                    onChange={(event) => {
-                      setExpiryPolicy(event.currentTarget.value as ExpiryPolicy);
-                      setErrors((current) => ({ ...current, expiryPolicy: undefined }));
-                    }}
-                    aria-invalid={errors.expiryPolicy ? true : undefined}
-                    aria-describedby={errors.expiryPolicy ? `${id}-expiry-policy-error` : undefined}
-                  >
-                    <option value="">Choose an expiry policy</option>
-                    <option value="never">No expiry</option>
-                    <option value="custom">Set date and time</option>
-                  </select>
-                  {errors.expiryPolicy ? (
-                    <p id={`${id}-expiry-policy-error`} className="share-field__error" role="alert">
-                      {errors.expiryPolicy}
-                    </p>
-                  ) : null}
                 </div>
 
-                <div className="share-field">
-                  <label htmlFor={`${id}-resolution-policy`}>Resolution limit</label>
-                  <select
-                    id={`${id}-resolution-policy`}
-                    value={resolutionPolicy}
-                    onChange={(event) => {
-                      setResolutionPolicy(event.currentTarget.value as ResolutionPolicy);
-                      setErrors((current) => ({ ...current, resolutionPolicy: undefined }));
-                    }}
-                    aria-invalid={errors.resolutionPolicy ? true : undefined}
-                    aria-describedby={errors.resolutionPolicy
-                      ? `${id}-resolution-policy-error`
-                      : `${id}-resolution-policy-hint`}
-                  >
-                    <option value="">Choose a limit policy</option>
-                    <option value="unlimited">No resolution limit</option>
-                    <option value="limited" disabled>Limited links require recipient confirmation</option>
-                  </select>
-                  {errors.resolutionPolicy ? (
-                    <p id={`${id}-resolution-policy-error`} className="share-field__error" role="alert">
-                      {errors.resolutionPolicy}
-                    </p>
-                  ) : (
-                    <p id={`${id}-resolution-policy-hint`} className="share-field__hint">
-                      Limited-resolution links stay unavailable until recipient confirmation prevents automated previews from consuming the limit.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {expiryPolicy === "custom" ? (
-                <div className="share-field">
-                  <label htmlFor={`${id}-expires-at`}>Expires at</label>
-                  <input
-                    id={`${id}-expires-at`}
-                    type="datetime-local"
-                    value={expiresAt}
-                    onChange={(event) => {
-                      setExpiresAt(event.currentTarget.value);
-                      setErrors((current) => ({ ...current, expiresAt: undefined }));
-                    }}
-                    aria-invalid={errors.expiresAt ? true : undefined}
-                    aria-describedby={errors.expiresAt ? `${id}-expires-at-error` : undefined}
-                  />
-                  {errors.expiresAt ? (
-                    <p id={`${id}-expires-at-error`} className="share-field__error" role="alert">
-                      {errors.expiresAt}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {resolutionPolicy === "limited" ? (
-                <div className="share-field">
-                  <label htmlFor={`${id}-max-resolutions`}>Maximum resolutions</label>
-                  <input
-                    id={`${id}-max-resolutions`}
-                    type="number"
-                    min="1"
-                    step="1"
-                    inputMode="numeric"
-                    value={maxResolutions}
-                    onChange={(event) => {
-                      setMaxResolutions(event.currentTarget.value);
-                      setErrors((current) => ({ ...current, maxResolutions: undefined }));
-                    }}
-                    aria-invalid={errors.maxResolutions ? true : undefined}
-                    aria-describedby={errors.maxResolutions ? `${id}-max-resolutions-error` : undefined}
-                  />
-                  {errors.maxResolutions ? (
-                    <p id={`${id}-max-resolutions-error`} className="share-field__error" role="alert">
-                      {errors.maxResolutions}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <div className="share-field">
-                <label htmlFor={`${id}-access-policy`}>Access policy</label>
-                <select
-                  id={`${id}-access-policy`}
-                  value={accessPolicy}
-                  onChange={(event) => {
-                    setAccessPolicy(event.currentTarget.value as AccessPolicy);
-                    setErrors((current) => ({ ...current, accessPolicy: undefined }));
-                  }}
-                  aria-invalid={errors.accessPolicy ? true : undefined}
-                  aria-describedby={[
-                    `${id}-access-policy-hint`,
-                    errors.accessPolicy ? `${id}-access-policy-error` : null,
-                  ].filter(Boolean).join(" ")}
-                >
-                  <option value="">Choose access policy</option>
-                  <option value="public">Public bearer access</option>
-                  <option value="workspace" disabled>Workspace membership, not available</option>
-                </select>
-                <p id={`${id}-access-policy-hint`} className="share-field__hint">
-                  Anyone with the share URL can resolve it. Workspace membership access requires a recipient continuation flow that is not available yet.
-                </p>
-                {errors.accessPolicy ? (
-                  <p id={`${id}-access-policy-error`} className="share-field__error" role="alert">
-                    {errors.accessPolicy}
-                  </p>
+                {versionPolicy === "pinned" ? (
+                  <div className="share-field">
+                    <label htmlFor={`${id}-pinned-version`}>Pinned version</label>
+                    <select
+                      id={`${id}-pinned-version`}
+                      value={pinnedVersionId}
+                      onChange={(event) => {
+                        setPinnedVersionId(event.currentTarget.value);
+                        setErrors((current) => ({ ...current, pinnedVersion: undefined }));
+                      }}
+                      aria-invalid={errors.pinnedVersion ? true : undefined}
+                      aria-describedby={errors.pinnedVersion ? `${id}-pinned-version-error` : undefined}
+                    >
+                      <option value="">Choose a version</option>
+                      {[...artifact.versions]
+                        .sort((left, right) => right.sequence - left.sequence)
+                        .map((version) => (
+                          <option value={version.id} key={version.id}>
+                            Version {version.sequence}
+                            {artifact.currentVersion?.id === version.id ? " (current)" : ""}
+                          </option>
+                        ))}
+                    </select>
+                    {errors.pinnedVersion ? (
+                      <p id={`${id}-pinned-version-error`} className="share-field__error" role="alert">
+                        {errors.pinnedVersion}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
-              </div>
 
-              <div className="share-field">
-                <label htmlFor={`${id}-content-disposition`}>Delivery behavior</label>
-                <select
-                  id={`${id}-content-disposition`}
-                  value={contentDisposition}
-                  onChange={(event) => {
-                    setContentDisposition(event.currentTarget.value as ContentDisposition);
-                    setErrors((current) => ({ ...current, contentDisposition: undefined }));
-                  }}
-                  aria-invalid={errors.contentDisposition ? true : undefined}
-                  aria-describedby={errors.contentDisposition ? `${id}-content-disposition-error` : undefined}
-                >
-                  <option value="">Choose delivery behavior</option>
-                  <option value="inline">Open inline</option>
-                  <option value="attachment">Download as attachment</option>
-                </select>
-                {errors.contentDisposition ? (
-                  <p id={`${id}-content-disposition-error`} className="share-field__error" role="alert">
-                    {errors.contentDisposition}
-                  </p>
+                <div className="share-policy-form__pair">
+                  <div className="share-field">
+                    <label htmlFor={`${id}-expiry-policy`}>Link expiry</label>
+                    <select
+                      id={`${id}-expiry-policy`}
+                      value={expiryPolicy}
+                      onChange={(event) => {
+                        setExpiryPolicy(event.currentTarget.value as ExpiryPolicy);
+                        setErrors((current) => ({ ...current, expiresAt: undefined }));
+                      }}
+                    >
+                      <option value="never">Never expires</option>
+                      <option value="custom">Set date and time</option>
+                    </select>
+                  </div>
+
+                  <div className="share-field">
+                    <label htmlFor={`${id}-resolution-policy`}>Open limit</label>
+                    <select
+                      id={`${id}-resolution-policy`}
+                      defaultValue="unlimited"
+                    >
+                      <option value="unlimited">Unlimited opens</option>
+                      <option value="limited" disabled>Limited opens (unavailable)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {expiryPolicy === "custom" ? (
+                  <div className="share-field">
+                    <label htmlFor={`${id}-expires-at`}>Expires at</label>
+                    <input
+                      id={`${id}-expires-at`}
+                      type="datetime-local"
+                      value={expiresAt}
+                      onChange={(event) => {
+                        setExpiresAt(event.currentTarget.value);
+                        setErrors((current) => ({ ...current, expiresAt: undefined }));
+                      }}
+                      aria-invalid={errors.expiresAt ? true : undefined}
+                      aria-describedby={errors.expiresAt ? `${id}-expires-at-error` : undefined}
+                    />
+                    {errors.expiresAt ? (
+                      <p id={`${id}-expires-at-error`} className="share-field__error" role="alert">
+                        {errors.expiresAt}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
-              </div>
 
-            </fieldset>
+                <div className="share-field">
+                  <label htmlFor={`${id}-access-policy`}>Link access</label>
+                  <select
+                    id={`${id}-access-policy`}
+                    defaultValue="public"
+                  >
+                    <option value="public">Public — anyone with the link</option>
+                    <option value="workspace" disabled>Workspace members only (unavailable)</option>
+                  </select>
+                </div>
 
-            <p className="share-policy-form__warning">
-              Revoking blocks future Relay resolutions. An authorization already issued before revocation may remain valid until its own expiry.
+                <div className="share-field">
+                  <label htmlFor={`${id}-content-disposition`}>When opened</label>
+                  <select
+                    id={`${id}-content-disposition`}
+                    value={contentDisposition}
+                    onChange={(event) => {
+                      setContentDisposition(event.currentTarget.value as ContentDisposition);
+                    }}
+                  >
+                    <option value="inline">View in browser</option>
+                    <option value="attachment">Download the file</option>
+                  </select>
+                </div>
+
+              </fieldset>
+
+              <p className="share-policy-form__warning" hidden={!advancedOpen}>
+                You can revoke this link later. Downloads already started may still finish.
+              </p>
+            </details>
+
+            <p className="share-policy-summary">
+              {versionPolicy === "follow" ? "Latest version" : "Pinned version"}
+              {" · "}{expiryPolicy === "never" ? "Never expires" : "Expires on your chosen date"}
+              {" · Unlimited opens"}
             </p>
 
             <div className="share-dialog__actions">
@@ -629,66 +562,70 @@ export function CreateShareLinkDialog({
             </div>
           </form>
         ) : (
-          <section className="share-secret" aria-labelledby={`${id}-secret-title`}>
-            <div className="share-secret__notice" role="status" aria-live="polite">
-              <span aria-hidden="true">■</span>
-              <div>
-                <h3 id={`${id}-secret-title`}>Copy these values now</h3>
-                <p id={`${id}-secret-description`}>
-                  {created.replayed
-                    ? "Relay replayed the stored creation result. Copy the recovered share URL and token now; closing this panel clears them from the page."
-                    : "Relay shows this share URL and token once. Closing this panel clears them from the page. Later artifact reads do not return either value."}
-                </p>
-              </div>
-            </div>
-
-            <dl className="share-secret__identity">
-              <div>
-                <dt>Share record</dt>
-                <dd><code>{created.shareLinkId}</code></dd>
-              </div>
-            </dl>
+          <section className="share-secret" aria-label="Your share link">
+            <p id={`${id}-secret-description`} className="share-secret__description">
+              {created.replayed ? "Your link was recovered. " : "Your link is ready. "}
+              Copy it before closing. Anyone with the link can view and download the file.
+            </p>
 
             <div className="share-secret__field">
-              <label htmlFor={`${id}-share-url`}>Public share URL, shown once</label>
+              <label htmlFor={`${id}-share-url`}>Share link</label>
               <input
+                ref={shareUrlRef}
                 id={`${id}-share-url`}
-                type={revealed ? "text" : "password"}
+                type="text"
                 value={shareUrl ?? ""}
                 readOnly
                 autoComplete="off"
                 spellCheck={false}
+                onFocus={(event) => event.currentTarget.select()}
               />
-              <Button variant="outline" onClick={() => void copySecret(shareUrl ?? "", "Share URL")}>
-                Copy share URL
+              <Button onClick={() => void copySecret(shareUrl ?? "", "Link")}>
+                Copy link
               </Button>
-            </div>
-
-            <div className="share-secret__field">
-              <label htmlFor={`${id}-token`}>Share token, shown once</label>
-              <input
-                id={`${id}-token`}
-                type={revealed ? "text" : "password"}
-                value={created.token}
-                readOnly
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <Button variant="outline" onClick={() => void copySecret(created.token, "Token")}>
-                Copy token
-              </Button>
-            </div>
-
-            <div className="share-secret__controls">
-              <Button variant="quiet" onClick={() => setRevealed((value) => !value)}>
-                {revealed ? "Hide values" : "Reveal values"}
-              </Button>
-              <Button onClick={onDone}>Clear values and refresh</Button>
             </div>
 
             <p className="share-secret__copy-status" role="status" aria-live="polite">
               {copyStatus}
             </p>
+
+            <details className="share-advanced share-secret__details">
+              <summary>
+                <span>Link details</span>
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <path d="m4 6 4 4 4-4" />
+                </svg>
+              </summary>
+              <div className="share-secret__details-body">
+                <dl className="share-secret__identity">
+                  <div>
+                    <dt>Share record</dt>
+                    <dd><code>{created.shareLinkId}</code></dd>
+                  </div>
+                </dl>
+                <div className="share-secret__field">
+                  <label htmlFor={`${id}-token`}>Share token</label>
+                  <input
+                    ref={tokenRef}
+                    id={`${id}-token`}
+                    type="text"
+                    value={created.token}
+                    readOnly
+                    autoComplete="off"
+                    spellCheck={false}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                  <Button variant="outline" onClick={() => void copySecret(created.token, "Token")}>
+                    Copy token
+                  </Button>
+                </div>
+                <p className="share-field__hint">The link includes this token. You only need it separately for API requests.</p>
+              </div>
+            </details>
+
+            <div className="share-dialog__actions">
+              <Button variant="outline" onClick={onDone}>Done</Button>
+            </div>
           </section>
         )}
       </div>

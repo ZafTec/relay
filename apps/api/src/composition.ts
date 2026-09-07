@@ -111,11 +111,10 @@ export function createMvpApiApplicationServices(
   keyring: ShareTokenKeyringConfig,
   handlers: HandlerRegistry = createMvpApiHandlerRegistry(),
 ): ApplicationServices {
-  const quota = new PostgresArtifactQuota({
-    limitProvider: createGlobalArtifactStorageLimitProvider(
-      lifecycle.workspaceMaxBytes,
-    ),
-  });
+  const limitProvider = createGlobalArtifactStorageLimitProvider(
+    lifecycle.workspaceMaxBytes,
+  );
+  const quota = new PostgresArtifactQuota({ limitProvider });
   const artifacts = new ArtifactService({
     pool,
     storage,
@@ -134,6 +133,8 @@ export function createMvpApiApplicationServices(
     handlers,
     admissionUsage: createPostgresAdmissionUsagePort(),
     artifactCommands: artifacts,
+    storageLimit: (workspaceId) =>
+      limitProvider.getLimit(pool, { workspaceId }),
     admissionDeadlineMs: MVP_ADMISSION_DEADLINE_MS,
     runDeadlineMs: MVP_RUN_DEADLINE_MS,
   });

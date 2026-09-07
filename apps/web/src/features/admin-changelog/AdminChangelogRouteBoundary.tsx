@@ -16,9 +16,11 @@ import {
   type AdminChangelogContextValue,
 } from "./AdminChangelogContext";
 import { isAbortError } from "./model";
+import { checkAdminAccess, type CheckAdminAccess } from "../../lib/api/admin-access";
 
 interface AdminChangelogRouteBoundaryProps {
   readonly adapter?: AdminChangelogAdapter;
+  readonly checkAccess?: CheckAdminAccess;
 }
 
 type GateState =
@@ -39,6 +41,7 @@ function GateFrame({ children }: { readonly children: React.ReactNode }) {
 
 export function AdminChangelogRouteBoundary({
   adapter = httpAdminChangelogAdapter,
+  checkAccess = checkAdminAccess,
 }: AdminChangelogRouteBoundaryProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -87,7 +90,7 @@ export function AdminChangelogRouteBoundary({
     setReauthenticating(false);
     setReauthenticationError(null);
 
-    void adapter.list({ limit: 1 }, controller.signal).then((result) => {
+    void checkAccess(controller.signal).then((result) => {
       if (result.kind === "auth-expired") {
         expireSession(expectedSessionId);
         return;
@@ -102,7 +105,7 @@ export function AdminChangelogRouteBoundary({
         setState({ kind: "allowed", sessionId: expectedSessionId });
       } else if (result.kind === "reauthentication-required") {
         setState({ kind: "reauthentication-required" });
-      } else if (result.kind === "denied" || result.kind === "not-found") {
+      } else if (result.kind === "denied") {
         setState({ kind: "denied" });
       } else {
         setState({ kind: "degraded", message: result.message });
@@ -116,14 +119,14 @@ export function AdminChangelogRouteBoundary({
       ) return;
       setState({
         kind: "degraded",
-        message: "Relay could not confirm admin changelog access. No admin data was shown.",
+        message: "Relay could not check platform access. Try again.",
       });
     }).finally(() => {
       if (controllerRef.current === controller) controllerRef.current = null;
     });
 
     return () => controller.abort();
-  }, [adapter, expireSession, retryGeneration, sessionId]);
+  }, [checkAccess, expireSession, retryGeneration, sessionId]);
 
   useEffect(() => {
     activeRef.current = true;
@@ -167,7 +170,7 @@ export function AdminChangelogRouteBoundary({
       <GateFrame>
         <p className="mono-label">Platform access</p>
         <h1>Checking admin access</h1>
-        <Skeleton label="Checking admin changelog access" lines={2} />
+        <Skeleton label="Checking platform access" lines={2} />
       </GateFrame>
     );
   }
@@ -178,7 +181,7 @@ export function AdminChangelogRouteBoundary({
         <p className="mono-label">Platform access</p>
         <h1>Admin access unavailable</h1>
         <InlineNotice title="Access denied" tone="error">
-          <p>This session cannot open the platform changelog. No admin changelog data was shown.</p>
+          <p>This account does not currently have superadmin access.</p>
         </InlineNotice>
         <LinkButton variant="outline" to="/dashboard">Back to workspace</LinkButton>
       </GateFrame>
@@ -191,7 +194,7 @@ export function AdminChangelogRouteBoundary({
         <p className="mono-label">Platform access</p>
         <h1>Reauthentication required</h1>
         <InlineNotice title="Confirm this session" tone="warning">
-          <p>Sign out and sign in again before opening the platform changelog.</p>
+          <p>Sign out and sign in again to confirm this sensitive action.</p>
         </InlineNotice>
         {reauthenticationError ? (
           <InlineNotice title="Reauthentication not started" tone="error">

@@ -178,6 +178,7 @@ export function createStubServices(
       resolveShareLink: () => Promise.resolve({ kind: "unavailable" }),
     },
     usage: {
+      getStorageSummary: () => Promise.resolve({ kind: "unavailable" }),
       getSummary: () => Promise.resolve({ kind: "ok", usage: USAGE }),
     },
     events: {

@@ -136,7 +136,7 @@ export const betterAuthAdapter: AuthAdapter = {
   async submitOAuthConsent(input: OAuthConsentInput): Promise<void> {
     const result = await authClient.oauth2.consent({
       accept: input.accept,
-      ...(input.scope ? { scope: input.scope } : {}),
+      ...(input.scope !== undefined ? { scope: input.scope } : {}),
       ...(input.claims ? { claims: input.claims } : {}),
     });
     if (result.error) throw authError(result.error, "Relay could not complete consent.");

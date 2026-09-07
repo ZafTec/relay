@@ -1,3 +1,7 @@
+import {
+  RELAY_MCP_ADMIN_SCOPES,
+  RELAY_MCP_WORKSPACE_SCOPES,
+} from "@relay/contracts";
 import { mcp } from "@better-auth/mcp";
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { betterAuth } from "better-auth";
@@ -7,6 +11,7 @@ import {
   authorizeMcpAccessTokenClaims,
   createMcpOAuthOptions,
   parseMcpAccessTokenClaims,
+  RELAY_ADMIN_SESSION_CLAIM,
   RELAY_AUTHORIZATION_SCOPES,
   RELAY_MCP_RESOURCE_SCOPES,
   RELAY_OAUTH_SCOPES,
@@ -86,7 +91,7 @@ Deno.test("Relay MCP OAuth constants and resource policy are exact", () => {
     "email",
     "offline_access",
   ]);
-  assertEquals(RELAY_MCP_RESOURCE_SCOPES, [
+  assertEquals(RELAY_MCP_WORKSPACE_SCOPES, [
     "tools:read",
     "tools:execute",
     "runs:read",
@@ -97,6 +102,14 @@ Deno.test("Relay MCP OAuth constants and resource policy are exact", () => {
     "usage:read",
     "notifications:read",
     "notifications:write",
+  ]);
+  assertEquals(RELAY_MCP_RESOURCE_SCOPES, [
+    ...RELAY_MCP_WORKSPACE_SCOPES,
+    ...RELAY_MCP_ADMIN_SCOPES,
+  ]);
+  assertEquals(options.clientRegistrationDefaultScopes, [
+    ...RELAY_AUTHORIZATION_SCOPES,
+    ...RELAY_MCP_WORKSPACE_SCOPES,
   ]);
   assertEquals(RELAY_OAUTH_SCOPES, [
     ...RELAY_AUTHORIZATION_SCOPES,
@@ -168,7 +181,7 @@ Deno.test("MCP access-token claims are strict and current authorization is reche
   );
 });
 
-Deno.test("pinned MCP discovery disables DCR and the legacy token route", async () => {
+Deno.test("pinned MCP discovery advertises dynamic registration and disables the legacy token route", async () => {
   const { queryable } = membershipFixture("member");
   const baseUrl = new URL("http://localhost:8000");
   const resource = relayMcpResource(baseUrl);
@@ -191,7 +204,10 @@ Deno.test("pinned MCP discovery disables DCR and the legacy token route", async 
   assertEquals(authorizationMetadataResponse.status, 200);
   const authorizationMetadata = await authorizationMetadataResponse
     .json() as Record<string, unknown>;
-  assertEquals(authorizationMetadata.registration_endpoint, undefined);
+  assertEquals(
+    authorizationMetadata.registration_endpoint,
+    "http://localhost:8000/api/auth/oauth2/register",
+  );
   assertEquals(authorizationMetadata.grant_types_supported, [
     "authorization_code",
     "refresh_token",
@@ -219,21 +235,6 @@ Deno.test("pinned MCP discovery disables DCR and the legacy token route", async 
       "RS256",
     ],
     scopes_supported: [...RELAY_MCP_RESOURCE_SCOPES],
-  });
-
-  const registrationResponse = await auth.handler(
-    new Request("http://localhost:8000/api/auth/oauth2/register", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        redirect_uris: ["http://localhost:3000/callback"],
-      }),
-    }),
-  );
-  assertEquals(registrationResponse.status, 403);
-  assertEquals(await registrationResponse.json(), {
-    error: "access_denied",
-    error_description: "Client registration is disabled",
   });
 
   const tokenResponse = await auth.handler(
@@ -277,7 +278,18 @@ Deno.test("Relay resource scopes require workspace selection and membership", as
   } as Parameters<typeof postLogin.shouldRedirect>[0];
 
   assertEquals(postLogin.page, "/oauth/workspace");
-  assertEquals(await postLogin.shouldRedirect(resourceContext), false);
+  assertEquals(await postLogin.shouldRedirect(resourceContext), true);
+  const continuation = createMcpOAuthOptions(
+    member.queryable,
+    new URL("http://localhost:8000"),
+    {
+      isWorkspaceContinuation: (headers) => headers === resourceContext.headers,
+    },
+  );
+  assertEquals(
+    await continuation.postLogin!.shouldRedirect(resourceContext),
+    false,
+  );
   assertEquals(await postLogin.shouldRedirect(identityContext), false);
   assertEquals(
     await postLogin.consentReferenceId(resourceContext),
@@ -360,4 +372,47 @@ Deno.test("workspace access-token claims fail closed on stale context", async ()
     new URL("http://localhost:8000"),
   ).customAccessTokenClaims!;
   await assertRejects(async () => await nonmemberClaims(validContext));
+});
+
+Deno.test("admin scopes require a signed session claim and recheck current role/session", async () => {
+  const claims = {
+    sub: "admin",
+    client_id: "client",
+    scope: "tools:read admin:allowances:write",
+    [RELAY_WORKSPACE_ID_CLAIM]: "workspace",
+  };
+  assertEquals(parseMcpAccessTokenClaims(claims), null);
+  const complete = { ...claims, [RELAY_ADMIN_SESSION_CLAIM]: "admin-session" };
+  let roleCurrent = true;
+  let checks = 0;
+  const queryable: Queryable = {
+    query<T>(text: string, params?: unknown[]) {
+      const admin = text.includes("join relay.system_role_assignments");
+      if (admin) {
+        checks++;
+        assertEquals(params, ["admin-session", "admin", false]);
+      }
+      return Promise.resolve({
+        rows: [{ authorized: !admin || roleCurrent }] as T[],
+      });
+    },
+  };
+  assertEquals(
+    (await authorizeMcpAccessTokenClaims(
+      queryable,
+      "https://relay.test/mcp",
+      complete,
+    ))?.adminSessionId,
+    "admin-session",
+  );
+  roleCurrent = false;
+  assertEquals(
+    await authorizeMcpAccessTokenClaims(
+      queryable,
+      "https://relay.test/mcp",
+      complete,
+    ),
+    null,
+  );
+  assertEquals(checks, 2);
 });

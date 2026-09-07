@@ -18,6 +18,7 @@ import {
 } from "../middleware/session.ts";
 
 export interface SuperadminAccessService {
+  access(session: string): Promise<boolean>;
   list(session: string): Promise<unknown>;
   invite(session: string, id: string, email: string): Promise<unknown>;
   revoke(session: string, id: string): Promise<unknown>;
@@ -31,6 +32,18 @@ export function createPostgresSuperadminAccessService(
     return (await pool.query<{ result: unknown }>(sql, args)).rows[0].result;
   }
   return {
+    async access(session) {
+      const result = await pool.query<{ allowed: boolean }>(
+        `select exists (
+          select 1 from auth.session s
+          join auth."user" u on u.id = s."userId" and u."emailVerified" is true
+          join relay.system_role_assignments r on r.user_id = u.id and r.revoked_at is null
+          where s.id = $1 and s."expiresAt" > now()
+        ) as allowed`,
+        [session],
+      );
+      return result.rows[0]?.allowed === true;
+    },
     list: (session) =>
       query("select relay.list_superadmin_access($1) as result", [session]),
     invite: (session, id, email) =>
@@ -78,7 +91,7 @@ export function createSuperadminAccessRoutes(
   const admin = "/api/v1/admin/superadmins";
   const acceptance = "/api/v1/superadmin-invitations";
   const origins = new Set(dependencies.allowedOrigins);
-  for (const root of [admin, acceptance]) {
+  for (const root of [admin, acceptance, "/api/v1/admin/access"]) {
     routes.use(`${root}/*`, async (context, next) => {
       context.header("cache-control", "no-store");
       context.header("x-content-type-options", "nosniff");
@@ -127,6 +140,15 @@ export function createSuperadminAccessRoutes(
       context.get("requestId") ?? `req_${crypto.randomUUID()}`,
     );
   });
+  routes.get(
+    "/api/v1/admin/access",
+    async (context) => {
+      if (!await dependencies.service.access(context.get("operatorSession"))) {
+        throw authorizationDenied();
+      }
+      return context.json({ allowed: true });
+    },
+  );
   routes.get(
     admin,
     async (context) =>

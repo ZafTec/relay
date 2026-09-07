@@ -161,6 +161,34 @@ function failHardDeleteOn(
   };
 }
 
+async function claimWorkspaceArtifactPurges(
+  pool: InstanceType<typeof pg.Pool>,
+  service: ArtifactService,
+  workspaceId: string,
+  limit?: number,
+): Promise<Awaited<ReturnType<ArtifactService["claimArtifactPurges"]>>> {
+  const isolation = await pool.connect();
+  try {
+    await isolation.query("begin");
+    // Maintenance claims are global, but this contract owns a separate bucket.
+    // Leave older fixtures untouched and let SKIP LOCKED isolate this batch.
+    await isolation.query(
+      `select id from relay.artifacts
+        where workspace_id <> $1
+          and purge_status in ('pending', 'claimed', 'deleting_pending', 'deleting')
+        for update skip locked`,
+      [workspaceId],
+    );
+    return await service.claimArtifactPurges(limit);
+  } finally {
+    try {
+      await isolation.query("rollback");
+    } finally {
+      isolation.release();
+    }
+  }
+}
+
 Deno.test({
   name: "artifact lifecycle contract passes against PostgreSQL and MinIO",
   ignore: !runContract,
@@ -889,7 +917,11 @@ Deno.test({
       assertEquals(secondDelete.kind, "deleted");
       if (secondDelete.kind !== "deleted") throw new Error("delete failed");
       clock = new Date(secondDelete.purgeAfter.getTime() + 1);
-      const purgeLeases = await service.claimArtifactPurges();
+      const purgeLeases = await claimWorkspaceArtifactPurges(
+        pool,
+        service,
+        primary.workspaceId,
+      );
       const primaryPurge = purgeLeases.find((lease) =>
         lease.artifactId === v1.value.artifactId
       );
@@ -939,7 +971,12 @@ Deno.test({
         }),
         { kind: "not_found" },
       );
-      const resumedPurge = (await service.claimArtifactPurges(1))[0];
+      const resumedPurge = (await claimWorkspaceArtifactPurges(
+        pool,
+        service,
+        primary.workspaceId,
+        1,
+      ))[0];
       assertExists(resumedPurge);
       assertEquals(resumedPurge.artifactId, v1.value.artifactId);
       assertNotEquals(resumedPurge.leaseToken, primaryPurge.leaseToken);
@@ -1098,14 +1135,24 @@ Deno.test({
         false,
       );
 
-      const firstFailedClaims = (await service.claimArtifactPurges(2)).filter(
+      const firstFailedClaims = (await claimWorkspaceArtifactPurges(
+        pool,
+        service,
+        primary.workspaceId,
+        2,
+      )).filter(
         (lease) =>
           lease.artifactId === mismatch.value.artifactId ||
           lease.artifactId === abandoned.value.artifactId,
       );
       assertEquals(firstFailedClaims.length, 2);
       clock = new Date(clock.getTime() + 11_000);
-      const oneReclaimed = (await service.claimArtifactPurges(1))[0];
+      const oneReclaimed = (await claimWorkspaceArtifactPurges(
+        pool,
+        service,
+        primary.workspaceId,
+        1,
+      ))[0];
       assertExists(oneReclaimed);
       const claimStates = await pool.query<{
         id: string;
@@ -1140,7 +1187,12 @@ Deno.test({
       assertEquals(await service.processArtifactPurge(oneReclaimed), {
         kind: "purged",
       });
-      const finalFailedClaim = (await service.claimArtifactPurges(1))[0];
+      const finalFailedClaim = (await claimWorkspaceArtifactPurges(
+        pool,
+        service,
+        primary.workspaceId,
+        1,
+      ))[0];
       assertExists(finalFailedClaim);
       assertEquals(await service.processArtifactPurge(finalFailedClaim), {
         kind: "purged",

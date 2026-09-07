@@ -1,3 +1,4 @@
+import type { CheckAdminAccess } from "../../src/lib/api/admin-access";
 import axe from "axe-core";
 import { useState } from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
@@ -207,13 +208,27 @@ function SignInProbe() {
   return <h1>Sign in {location.search}</h1>;
 }
 
+// Gate tests reuse their programmable result fixture through the access seam.
+const accessProbes = new WeakMap<AdminChangelogAdapter, CheckAdminAccess>();
+function accessProbe(adapter: AdminChangelogAdapter): CheckAdminAccess {
+  let probe = accessProbes.get(adapter);
+  if (!probe) {
+    probe = async (signal) => {
+      const result = await adapter.list({ limit: 1 }, signal);
+      return result.kind === "not-found" ? { kind: "degraded", message: "Access check unavailable." } : result;
+    };
+    accessProbes.set(adapter, probe);
+  }
+  return probe;
+}
+
 function AdminRoutes({ adapter }: { readonly adapter: AdminChangelogAdapter }) {
   return (
     <Routes>
       <Route path="/sign-in" element={<SignInProbe />} />
       <Route path="/dashboard" element={<h1>Workspace</h1>} />
       <Route element={<ProtectedRoute />}>
-        <Route element={<AdminChangelogRouteBoundary adapter={adapter} />}>
+        <Route element={<AdminChangelogRouteBoundary adapter={adapter} checkAccess={accessProbe(adapter)} />}>
           <Route element={<AdminLayout />}>
             <Route path="/admin/changelog" element={<AdminChangelogListPage />} />
             <Route path="/admin/changelog/new" element={<AdminChangelogEditorPage createNew />} />
@@ -250,7 +265,7 @@ function renderBoundaryOnly(
         <Routes>
           <Route path="/sign-in" element={<SignInProbe />} />
           <Route element={<ProtectedRoute />}>
-            <Route element={<AdminChangelogRouteBoundary adapter={adapter} />}>
+            <Route element={<AdminChangelogRouteBoundary adapter={adapter} checkAccess={accessProbe(adapter)} />}>
               <Route path="/admin" element={<h1>Allowed admin content</h1>} />
             </Route>
           </Route>
@@ -396,7 +411,7 @@ describe("admin changelog access boundary", () => {
           <Routes>
             <Route path="/sign-in" element={<SignInProbe />} />
             <Route element={<ProtectedRoute />}>
-              <Route element={<AdminChangelogRouteBoundary adapter={adapter} />}>
+              <Route element={<AdminChangelogRouteBoundary adapter={adapter} checkAccess={accessProbe(adapter)} />}>
                 <Route path="/admin" element={<h1>Replacement session content</h1>} />
               </Route>
             </Route>
@@ -419,15 +434,15 @@ describe("admin changelog access boundary", () => {
     render(
       <MemoryRouter>
         <AuthProvider adapter={createTestAuthAdapter({ identity, activeWorkspace: workspace })}>
-          <AdminAccessLink adapter={adapter} />
+          <AdminAccessLink checkAccess={accessProbe(adapter)} />
         </AuthProvider>
       </MemoryRouter>,
     );
 
     await waitFor(() => expect(adapter.list).toHaveBeenCalledTimes(1));
-    expect(screen.queryByRole("link", { name: "Admin changelog" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Platform admin" })).not.toBeInTheDocument();
     await act(async () => probe.resolve({ kind: "ok", releases: [] }));
-    expect(await screen.findByRole("link", { name: "Admin changelog" })).toHaveAttribute("href", "/admin/changelog");
+    expect(await screen.findByRole("link", { name: "Platform admin" })).toHaveAttribute("href", "/admin/allowances");
   });
 });
 

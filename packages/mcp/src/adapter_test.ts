@@ -155,6 +155,7 @@ function createServices(
       resolveShareLink: () => Promise.resolve({ kind: "unavailable" }),
     },
     usage: {
+      getStorageSummary: () => Promise.resolve({ kind: "unavailable" }),
       getSummary: () => Promise.resolve({ kind: "not_found" }),
     },
     events: {
@@ -207,6 +208,7 @@ Deno.test("management tool names and scopes are stable", () => {
     "relay.artifacts.get_access",
     "relay.notifications.get",
     "relay.notifications.configure",
+    "relay.usage.storage",
   ]);
   assertEquals(RELAY_MCP_MANAGEMENT_TOOL_SCOPES, {
     "relay.tools.list": ["tools:read"],
@@ -224,6 +226,7 @@ Deno.test("management tool names and scopes are stable", () => {
     "relay.artifacts.get_access": ["artifacts:read"],
     "relay.notifications.get": ["notifications:read"],
     "relay.notifications.configure": ["notifications:write"],
+    "relay.usage.storage": ["usage:read"],
   });
 });
 
@@ -300,6 +303,96 @@ Deno.test("management tools use canonical defaults and workspace identity", asyn
     });
   } finally {
     await connection.close();
+  }
+});
+
+Deno.test("storage usage preserves exact counters and accepts only the authenticated workspace", async () => {
+  const received: unknown[] = [];
+  const storage = {
+    generatedAt: NOW,
+    storedBytes: "9007199254740993",
+    reservedBytes: "7",
+    cleanupPendingBytes: "2",
+    limitBytes: "9007199254741010",
+    availableBytes: "10",
+  };
+  const server = await createRelayMcpServer({
+    services: createServices({
+      usage: {
+        getStorageSummary: (identity) => {
+          received.push(identity);
+          return Promise.resolve({ kind: "ok", storage });
+        },
+      },
+    }),
+    principal: {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      scopes: ["usage:read"],
+    },
+  });
+  const connection = await connectClient(server);
+  try {
+    const denied = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.getStorageUsage,
+      arguments: { workspaceId: "foreign-workspace" },
+    });
+    assertEquals(denied.isError, true);
+    assertEquals(received, []);
+    const result = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.getStorageUsage,
+      arguments: {},
+    });
+    assertEquals(result.isError, undefined);
+    assertEquals(result.structuredContent, { kind: "ok", storage });
+    assertEquals(received, [{
+      workspaceId: WORKSPACE_ID,
+      actorUserId: USER_ID,
+    }]);
+  } finally {
+    await connection.close();
+  }
+});
+
+Deno.test("storage usage rejects missing scope and never reports unavailable counters as zero", async () => {
+  for (const kind of ["scope_denied", "not_found", "unavailable"] as const) {
+    let called = false;
+    const server = await createRelayMcpServer({
+      services: createServices({
+        usage: {
+          getStorageSummary: () => {
+            called = true;
+            return Promise.resolve({
+              kind: kind === "scope_denied" ? "not_found" : kind,
+            });
+          },
+        },
+      }),
+      principal: {
+        identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+        scopes: kind === "scope_denied" ? [] : ["usage:read"],
+      },
+    });
+    const connection = await connectClient(server);
+    try {
+      const result = await connection.client.callTool({
+        name: RELAY_MCP_TOOL_NAMES.getStorageUsage,
+        arguments: {},
+      });
+      assertEquals(result.isError, true);
+      assertEquals(called, kind !== "scope_denied");
+      const envelope = errorEnvelopeSchema.parse(result.structuredContent);
+      assertEquals(
+        envelope.error.code,
+        kind === "scope_denied"
+          ? "authentication_required"
+          : kind === "not_found"
+          ? "not_found"
+          : "dependency_unavailable",
+      );
+      assertEquals("storage" in envelope, false);
+    } finally {
+      await connection.close();
+    }
   }
 });
 

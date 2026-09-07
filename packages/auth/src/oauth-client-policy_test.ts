@@ -1,4 +1,9 @@
-import { assertEquals, assertRejects } from "@std/assert";
+import {
+  requireS256Authorization,
+  safeClientRedirect,
+  validateRelayClientMetadata,
+} from "./oauth-client-policy.ts";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { createMcpOAuthOptions } from "./oauth.ts";
 import { APIError } from "better-auth/api";
 
@@ -21,7 +26,7 @@ Deno.test("OAuth client management requires a current superadmin and fresh sessi
   } as Input;
   assertEquals(await privileges(request), true);
   allowed = false;
-  assertEquals(await privileges(request), false);
+  await assertRejects(() => Promise.resolve(privileges(request)), APIError);
   allowed = true;
   const stale = {
     ...request,
@@ -37,6 +42,70 @@ Deno.test("OAuth client management requires a current superadmin and fresh sessi
     false,
   );
   assertEquals(await privileges({ ...request, user: undefined }), false);
-  assertEquals(options.allowDynamicClientRegistration, false);
+  assertEquals(options.allowDynamicClientRegistration, true);
   assertEquals(options.storeClientSecret, "hashed");
+});
+
+Deno.test("OAuth client redirect policy accepts exact HTTPS and native loopback only", () => {
+  for (
+    const url of [
+      "https://claude.ai/api/mcp/auth_callback",
+      "https://agent.example.test/callback?mode=connect",
+      "http://localhost:3210/callback",
+      "http://127.0.0.1:3210/callback",
+      "http://[::1]:3210/callback",
+    ]
+  ) {
+    assertEquals(safeClientRedirect(url), true, url);
+  }
+  for (
+    const url of [
+      "http://agent.example.test/callback",
+      "https://*.example.com/callback",
+      "https://user:secret@example.com/cb",
+      "https://agent.example.com/cb#",
+      "https://127.0.0.1/cb",
+      "http://127.1/cb",
+      "http://0x7f000001/cb",
+      "http://localhost.evil.test/cb",
+      "http://localhost/cb path",
+      "https://localhost/cb",
+      "file:///callback",
+    ]
+  ) {
+    assertEquals(safeClientRedirect(url), false, url);
+  }
+});
+
+Deno.test("client registration refuses privilege overrides and remote metadata transports", () => {
+  validateRelayClientMetadata({
+    redirect_uris: ["https://agent.example.test/cb"],
+    token_endpoint_auth_method: "none",
+  });
+  for (
+    const payload of [
+      { jwks_uri: "https://evil.test/keys" },
+      { user_id: "admin" },
+      { client_credentials_scopes: ["admin:oauth:write"] },
+      { skip_consent: true },
+      { require_pkce: false },
+      { grant_types: ["client_credentials"] },
+      { redirect_uris: [] },
+      { token_endpoint_auth_method: "private_key_jwt" },
+    ]
+  ) {
+    assertThrows(() => validateRelayClientMetadata(payload), APIError);
+  }
+  requireS256Authorization({
+    code_challenge_method: "S256",
+    code_challenge: "a".repeat(43),
+  });
+  for (
+    const query of [undefined, {}, {
+      code_challenge_method: "plain",
+      code_challenge: "a".repeat(43),
+    }, { code_challenge_method: "S256", code_challenge: "short" }]
+  ) {
+    assertThrows(() => requireS256Authorization(query), APIError);
+  }
 });

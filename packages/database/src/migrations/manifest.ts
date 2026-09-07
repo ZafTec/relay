@@ -1,5 +1,7 @@
 import { migration as superadminInvitations } from "./0005_superadmin_invitations.ts";
 import { migration as notifications } from "./0006_notifications.ts";
+import { migration as workspaceNames } from "./0007_workspace_names.ts";
+import { migration as superadminInvitationListing } from "./0008_superadmin_invitation_listing.ts";
 import type { Migration } from "./types.ts";
 import { migration as relayBaseline } from "./0001_relay_baseline.ts";
 import { migration as allowanceManagement } from "./0002_allowance_management.ts";
@@ -20,4 +22,6 @@ export const MIGRATIONS: readonly Migration[] = [
   imageTools,
   superadminInvitations,
   notifications,
+  workspaceNames,
+  superadminInvitationListing,
 ];

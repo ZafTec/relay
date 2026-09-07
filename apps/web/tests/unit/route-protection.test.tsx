@@ -29,8 +29,8 @@ const workspace: RelayWorkspace = {
 function mockRegistryEndpoints() {
   vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input) => {
     const path = String(input);
-    if (path.startsWith("/api/v1/admin/changelog")) {
-      return new Response(JSON.stringify({ releases: [] }), {
+    if (path === "/api/v1/admin/access") {
+      return new Response(JSON.stringify({ allowed: true }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -259,7 +259,7 @@ describe("protected routing", () => {
   it("renders the protected dashboard with real adapter data and no invented counts", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input) => {
       const path = String(input);
-      if (path.startsWith("/api/v1/admin/changelog")) {
+      if (path === "/api/v1/admin/access") {
         return new Response(JSON.stringify({
           error: {
             code: "authorization_denied",

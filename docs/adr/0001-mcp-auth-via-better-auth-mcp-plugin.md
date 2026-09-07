@@ -64,7 +64,7 @@ Endpoints this replaces the hand-built versions of:
 /oauth2/authorize   (was: custom authorize)
 /oauth2/token       (was: custom token)
 /oauth2/userinfo
-/oauth2/register    (optional DCR — still gated: see below)
+/oauth2/register    (automatic MCP registration; see policy update below)
 /jwks               (from jwt() plugin)
 ```
 
@@ -111,9 +111,12 @@ client-secret rotation and revocation through the default client flow.
   Better Auth plugin, not a hand-built provider.
 - `00-research-decisions.md`'s "MCP decisions" section is updated to record this
   package selection instead of leaving it as an open ADR trigger.
-- Dynamic Client Registration (`/oauth2/register`) stays gated behind the same
-  operator-pre-registration-first policy the handoff already specifies; this ADR
-  does not change client-registration policy, only the token-issuance mechanism.
+- Registration policy update, 2026-09-07: Dynamic Client Registration is enabled
+  for automatic MCP connection, with exact safe redirects, S256 PKCE, workspace
+  selection and explicit permission consent. Manual client ID/secret setup
+  remains available to superadmins. Registration never grants execution or usage
+  allowances. Administration scopes are excluded from default access and require
+  a current verified superadmin. See [connection guidance](../mcp-and-notifications.md).
 - `@better-auth/mcp`'s exact behavior (metadata routes, DPoP handling, error
   shapes) must still be proven against the official MCP conformance suite in
   Wave 0/Wave 4B; adopting the package is not itself a substitute for that
