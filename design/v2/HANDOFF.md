@@ -251,7 +251,7 @@ contract: **default · hover · focus · active · disabled · loading · error*
 
 1. **No repository context was available in this environment.** The brief's
    required reading (`docs/architecture.md`, `docs/brand.md`, `docs/legal.md`,
-   `docs/versioning.md`, `.superdesign/*`) and the live `zaftech.co` site could
+   `docs/versioning.md`, `.superdesign/*`) and the parent-brand site could
    not be opened here; the parent visual language came from the bound ZafTech
    design system, and product facts came from the brief itself. Re-check three
    things against the repo before merging: exact route list, legal footer

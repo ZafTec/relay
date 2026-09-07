@@ -31,7 +31,7 @@ The same Better Auth instance serves both:
   Better Auth Hono integration doc.
 - MCP clients: OAuth 2.1 authorization-code-with-PKCE flow against
   `mcp()`-provided endpoints, short-lived JWT access tokens carrying
-  `aud: "https://relay.zaftech.co/mcp"`, verified per request by
+  `aud: "https://relay.example.test/mcp"`, verified per request by
   `requireMcpAuth()`.
 
 Concretely:
@@ -44,7 +44,7 @@ export const auth = betterAuth({
     mcp({
       loginPage: "/sign-in",
       consentPage: "/consent",
-      resource: "https://relay.zaftech.co/mcp",
+      resource: "https://relay.example.test/mcp",
     }),
   ],
 });
@@ -54,7 +54,7 @@ const mcpServerHandler = createMcpHandler(() => new McpServer(/* ... */));
 const POST = requireMcpAuth(
   auth,
   (request, accessTokenClaims) => mcpServerHandler.fetch(request),
-  { resource: "https://relay.zaftech.co/mcp" },
+  { resource: "https://relay.example.test/mcp" },
 );
 ```
 

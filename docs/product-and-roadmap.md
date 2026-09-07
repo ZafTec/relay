@@ -3,7 +3,7 @@
 Status: canonical product and architecture direction\
 Last updated: 2026-08-20\
 Product: Relay by ZafTech\
-Planned domain: `https://relay.zaftech.co`
+Local API URL: `http://localhost:8000`; hosted origin is configured externally.
 
 ## Authority and scope
 
@@ -755,7 +755,7 @@ member
 
 `superadmin` is a separate system-level role. It is never a workspace role.
 
-Session cookies remain host-only to `relay.zaftech.co` unless a separately
+Session cookies remain host-only to `relay.example.test` unless a separately
 reviewed central ZafTech login is introduced. OAuth provider tokens are
 encrypted at rest. Account linking requires verified provider data and an
 explicit policy.
@@ -785,7 +785,7 @@ Minimum controls:
   artifact deletion, role changes, entitlement changes, and changelog
   publication
 
-Company-wide legal pages remain canonical on `zaftech.co`. Relay needs a
+Company-wide legal pages remain canonical on `example.test`. Relay needs a
 reviewed product addendum covering stored inputs and outputs, prompts, provider
 subprocessors, retention, sharing, usage consumption, safety handling, and
 refund implications. Legal acceptance records store document version and content
@@ -888,7 +888,7 @@ Relay uses a Git-assisted, database-published changelog:
 
 Raw commits are never rendered directly. See [`changelog.md`](changelog.md).
 
-## CI, packaging, and deployment
+## CI, packaging, and releases
 
 ### Pull requests to `main`
 
@@ -899,29 +899,14 @@ and image scanning.
 
 ### Merge to `main`
 
-CD builds once and pushes Docker Hub tags for the immutable Git SHA and the
-chosen moving tags such as `main` or `latest`. Official SemVer tags are
-published only by the release process.
+Merges trigger Release Please. Merging its release PR creates the version tag
+and draft release; the release workflow builds and verifies the paired backend
+and web images before publishing. See [versioning.md](versioning.md).
 
-### VPS deployment
+Host deployment configuration and operational procedures are managed outside
+this repository. Local development and tests use their dedicated Compose files.
 
-Infrastructure remains external. The preferred zero-surprise sequence is:
-
-```sh
-docker compose pull
-docker compose run --rm migrate
-docker compose up -d --remove-orphans
-```
-
-The user's existing
-`docker compose down -v && docker compose pull && docker
-compose up -d` does not
-remove independently managed infrastructure volumes, but `down -v` is
-unnecessary, creates downtime, and could remove future application-owned
-volumes. Production should pin a release or immutable SHA for deterministic
-rollback.
-
-Readiness must check required dependencies and migration compatibility without
+Readiness checks required dependencies and migration compatibility without
 mutating them. Liveness only proves the process can respond.
 
 ## Delivery plan and test gates
@@ -964,7 +949,7 @@ accessibility checks for representative states.
 - Git-assisted, superadmin-published changelog
 - OpenTelemetry bootstrap for API and worker
 - Durable audit-event service
-- PR CI and merge-to-Docker-Hub CD
+- PR CI and Release Please image publication
 - Build metadata and migration command
 
 Gate: changelog authorization/publication tests, trace/log correlation test,

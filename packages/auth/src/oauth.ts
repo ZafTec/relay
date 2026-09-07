@@ -18,8 +18,7 @@ export const RELAY_OAUTH_SCOPES = [
   ...RELAY_MCP_RESOURCE_SCOPES,
 ] as const;
 
-export const RELAY_WORKSPACE_ID_CLAIM =
-  "https://relay.zaftech.co/claims/workspace_id";
+export const RELAY_WORKSPACE_ID_CLAIM = "urn:relay:workspace_id";
 
 export interface AuthorizedMcpPrincipal {
   readonly actorUserId: string;

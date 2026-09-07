@@ -3,7 +3,7 @@
 Status: approved product name and voice; Ledger v3 is the current registry-first
 implementation reference with documented fixture exceptions\
 Parent brand: ZafTech\
-Domain: `relay.zaftech.co`
+Hosted origin: configured outside the repository
 
 ## Name
 

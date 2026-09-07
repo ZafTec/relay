@@ -14,7 +14,7 @@ vi.mock("@grafana/faro-web-sdk", async (importOriginal) => ({
 const meta = {
   page: {
     url:
-      "https://relay.zaftech.co/dashboard/runs/private-run?token=secret#private",
+      "https://relay.example.test/dashboard/runs/private-run?token=secret#private",
   },
   user: { email: "private@example.com" },
   session: { id: "private-session" },
@@ -23,12 +23,19 @@ const meta = {
 };
 
 describe("browser telemetry privacy", () => {
+  beforeEach(() => {
+    vi.stubGlobal("location", new URL("https://relay.example.test/"));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("keeps only known route templates, never query strings or identifiers", () => {
     expect(telemetryPageUrl(meta.page.url)).toBe(
-      "https://relay.zaftech.co/dashboard/runs/:runId",
+      "https://relay.example.test/dashboard/runs/:runId",
     );
     expect(telemetryPageUrl("/sign-in?returnTo=secret")).toBe(
-      "https://relay.zaftech.co/sign-in",
+      "https://relay.example.test/sign-in",
     );
     for (
       const url of [
@@ -39,7 +46,7 @@ describe("browser telemetry privacy", () => {
       ]
     ) {
       expect(telemetryPageUrl(url)).toBe(
-        "https://relay.zaftech.co/__unknown__",
+        "https://relay.example.test/__unknown__",
       );
     }
   });
@@ -58,7 +65,7 @@ describe("browser telemetry privacy", () => {
           frames: [
             {
               filename:
-                "https://relay.zaftech.co/assets/index-abc123.js?secret=private",
+                "https://relay.example.test/assets/index-abc123.js?secret=private",
               function: "private-function",
               lineno: 42,
             },
@@ -67,7 +74,7 @@ describe("browser telemetry privacy", () => {
               function: "private",
             },
             {
-              filename: "https://relay.zaftech.co/s/private",
+              filename: "https://relay.example.test/s/private",
               function: "private",
             },
           ],
@@ -80,7 +87,7 @@ describe("browser telemetry privacy", () => {
       value: "Unhandled browser error",
       stacktrace: {
         frames: [{
-          filename: "https://relay.zaftech.co/assets/index-abc123.js",
+          filename: "https://relay.example.test/assets/index-abc123.js",
           function: "",
           lineno: 42,
         }],
@@ -139,14 +146,21 @@ describe("telemetry startup", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ORIGIN", "https://relay.example.test");
+    vi.stubEnv(
+      "VITE_FARO_COLLECTOR_URL",
+      "https://collector.example.test/collect",
+    );
+    vi.stubGlobal("location", new URL("https://relay.example.test/"));
   });
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
 
-  it("never sends preview or local traffic to production", async () => {
-    vi.stubEnv("PROD", true);
+  it("never sends traffic from an unconfigured preview or local origin", async () => {
+    vi.stubGlobal("location", new URL("http://localhost:4173/"));
     const { startBrowserTelemetry } = await import(
       "../../src/observability/faro"
     );
@@ -154,9 +168,7 @@ describe("telemetry startup", () => {
     expect(initializeFaro).not.toHaveBeenCalled();
   });
 
-  it("uses the existing collector without persistent sessions and starts once", async () => {
-    vi.stubEnv("PROD", true);
-    vi.stubGlobal("location", new URL("https://relay.zaftech.co/"));
+  it("uses the configured collector without persistent sessions and starts once", async () => {
     const { startBrowserTelemetry } = await import(
       "../../src/observability/faro"
     );
@@ -164,15 +176,47 @@ describe("telemetry startup", () => {
     startBrowserTelemetry();
     expect(initializeFaro).toHaveBeenCalledTimes(1);
     expect(initializeFaro).toHaveBeenCalledWith(expect.objectContaining({
-      url: "https://zaftech.co/collect",
+      url: "https://collector.example.test/collect",
       sessionTracking: { enabled: false },
       trackGeolocation: false,
     }));
   });
 
+  it("does not send development traffic even when the origin matches", async () => {
+    vi.stubEnv("PROD", false);
+    const { startBrowserTelemetry } = await import(
+      "../../src/observability/faro"
+    );
+    startBrowserTelemetry();
+    expect(initializeFaro).not.toHaveBeenCalled();
+  });
+
+  it.each(["VITE_APP_ORIGIN", "VITE_FARO_COLLECTOR_URL"])(
+    "disables telemetry when %s is missing",
+    async (name) => {
+      vi.stubEnv(name, "");
+      const { startBrowserTelemetry } = await import(
+        "../../src/observability/faro"
+      );
+      startBrowserTelemetry();
+      expect(initializeFaro).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "not-a-url",
+    "http://collector.example.test/collect",
+    "https://user:password@collector.example.test/collect",
+  ])("ignores an invalid collector: %s", async (url) => {
+    vi.stubEnv("VITE_FARO_COLLECTOR_URL", url);
+    const { startBrowserTelemetry } = await import(
+      "../../src/observability/faro"
+    );
+    expect(() => startBrowserTelemetry()).not.toThrow();
+    expect(initializeFaro).not.toHaveBeenCalled();
+  });
+
   it("allows the app to start when the SDK fails", async () => {
-    vi.stubEnv("PROD", true);
-    vi.stubGlobal("location", new URL("https://relay.zaftech.co/"));
     vi.mocked(initializeFaro).mockImplementationOnce(() => {
       throw new Error("collector unavailable");
     });

@@ -50,7 +50,7 @@ RUN sed -i 's/\r$//' /app/relay-entrypoint && \
     chmod 0555 /app/relay-entrypoint
 
 # Required OCI labels per
-# docs/implementation-handoff/09-ci-release-deployment.md. VERSION/
+# docs/versioning.md. VERSION/
 # REVISION/CREATED are injected at build time (CI passes the real
 # release SemVer, git SHA, and build timestamp); the defaults here are
 # only for a local `docker build` with no --build-arg overrides.

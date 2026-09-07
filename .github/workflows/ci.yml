@@ -168,14 +168,14 @@ jobs:
           format: table
 
   delivery:
-    name: release and deployment validation
+    name: release validation
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Validate workflows and release/deployment assets
-        run: bash scripts/ci/check-release-deploy.sh
+      - name: Validate workflows and release scripts
+        run: bash scripts/ci/check-release.sh
       - name: Confirm validation was read-only
         run: test -z "$(git status --short)"
 

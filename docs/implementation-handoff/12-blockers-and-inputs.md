@@ -95,66 +95,6 @@ Verify route enrichment, BullMQ propagation, backend outage behavior, and
 shutdown export. Native OTel is developing and has no conventional application
 `forceFlush` API.
 
-## VPS inputs required before production configuration
-
-### Observability
-
-Known from supplied evidence: Prometheus has OTLP and remote-write receivers
-enabled, Grafana is 12.3.1, Loki accepts OTLP with structured metadata, Jaeger
-is in-memory, Alloy exists, and Tempo is listed but unspecified.
-
-Still required:
-
-- `/opt/prometheus/alloy-config.river`, Alloy image/version, startup flags, and
-  storage path
-- Prometheus image/version, runtime flags/config/rules, exposure, and the actual
-  metrics path Alloy currently uses
-- `/opt/tempo/docker-compose.yml`, Tempo image/config/storage
-- Jaeger exact image/major version
-- Loki runtime/build info and schema/config history
-- Grafana database backend, plugins, effective config, secret-key handling, and
-  datasource/dashboard/alert/contact exports
-- Alert ownership: Grafana-managed or Alertmanager
-- Expected signal volume, SLOs, retention, and outage tolerance
-
-### Storage
-
-- MinIO Compose/config/network name
-- Internal endpoint and browser-reachable signing endpoint
-- Bucket and CORS policy
-- TLS/certificate arrangement
-- Backup/versioning/lifecycle policy
-
-### Delivery
-
-- Docker Hub namespace/repository names, CI push-only token, optional VPS
-  read-only pull token, and tag immutability policy
-- VPS architecture (`linux/amd64` only or multi-arch images)
-- Docker Engine/Compose versions
-- Exact external Docker network memberships and aliases
-- Complete current Nginx Compose, image/version/modules, included configs, and
-  Cloudflare/origin firewall/TLS policy
-- Deployment account permissions
-- Secret storage approach under `/opt/relay`
-
-### Database/Redis operations
-
-Known from supplied evidence: PostgreSQL 18 is host-published with a custom
-`PGDATA`; Redis is host-published, password-protected, and AOF-enabled; Nginx is
-containerized; networks are external/shared; deployment is manual under `/opt`.
-
-Still required:
-
-- PostgreSQL exact image/digest, `SHOW data_directory`, effective mounts/UID,
-  `pg_hba.conf`, listen interfaces, TLS, connection budget, and PostgreSQL 18
-  backup-client version
-- Backup/PITR schedule and isolated restore evidence
-- Redis exact version, config, memory, ACL/secret method, AOF directory/rewrite,
-  backup/restore procedure
-- Whether host ports remain necessary for remote administration
-
-Do not put unredacted output in Git.
-
 ## v3 inconsistencies to resolve
 
 - Handoff says old content/component files are partly superseded but leaves no
@@ -175,26 +115,6 @@ Do not put unredacted output in Git.
 
 Engineering can correct semantic/a11y implementation defects, but material
 visual/product ambiguity returns to the owner/design agent.
-
-## Infrastructure risks
-
-| Risk                                                    | Consequence                                      | Required mitigation                                                       |
-| ------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------- |
-| Redis unauthenticated healthcheck                       | Container may remain unhealthy                   | Authenticated healthcheck using secret mechanism                          |
-| Redis 128 MB/no explicit noeviction                     | OOM or queue-key eviction                        | Size from load; set noeviction; monitor                                   |
-| Password in Redis command                               | Secret visible in inspection                     | Mounted config/ACL/secret handling                                        |
-| PostgreSQL/Redis host ports                             | Additional attack surface                        | Remove or bind private/loopback; retain firewall                          |
-| Floating infrastructure tags                            | Uncontrolled upgrade/config break                | Pin tested version/digest                                                 |
-| Jaeger memory storage                                   | Trace loss on restart                            | Tempo or persistent Jaeger                                                |
-| Missing Alloy config audit                              | Duplicate/lost/unredacted telemetry              | Export, validate, merge pipelines deliberately                            |
-| Loki auth disabled                                      | Anyone on reachable network can query/ingest     | Keep private or add authenticated proxy/tenancy                           |
-| Cloudflare IP header trusted by presence                | Spoofable rate-limit identity on direct origin   | Enforce Cloudflare source ranges/real-IP config                           |
-| `down -v` deployment                                    | Downtime and future volume deletion              | Pull/migrate/up without volume removal                                    |
-| Migration/rollback process not implemented or validated | Deployment can corrupt availability/data         | Implement and rehearse the documented checksummed/expand-contract process |
-| PostgreSQL 18 data layout not verified                  | Recreated container may use unexpected storage   | Inspect mounts and `SHOW data_directory` before change                    |
-| Static Nginx upstream resolution                        | Recreated Relay container may remain unreachable | Dynamic DNS or mandatory tested graceful reload                           |
-| Native OTel URL attributes                              | OAuth codes and signed credentials may leak      | Mandatory Alloy span transforms and canary tests                          |
-| Manual Grafana state only                               | Drift and irreproducible alerts                  | Export then provision/version selected resources                          |
 
 ## What can be implemented before remaining product decisions
 
@@ -222,7 +142,6 @@ visual/product ambiguity returns to the owner/design agent.
 - Public provider output examples
 - Release tag/image publication before versioning approval and implementation/
   validation of the documented draft-release/image-promotion workflow
-- Production telemetry routing before live Alloy/Tempo review
 - Public launch claims, uptime, and changelog entries
 
 ## Decision recording

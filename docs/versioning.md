@@ -147,38 +147,19 @@ publication is the final release operation. Any earlier failure leaves the draft
 unpublished and preserves the candidates and uploaded evidence for investigation
 and idempotent rerun recovery.
 
-## Deployment identity
+## Published image identity
 
-Production and rollback use the backend and web `repository@sha256:digest`
-values from one `release-manifest.json`. SemVer, full-SHA, and `latest` tags are
-navigation aids only; `latest` is never a deployment input. Release builds embed
-the application version and full revision as OCI labels and provide them as
-runtime inputs. Version-bearing runtime, migration, and telemetry surfaces must
-use that identity as each surface is implemented.
+`release-manifest.json` records the paired backend and web image digests. Release
+builds embed the application version and full revision as OCI labels and runtime
+inputs. Version-bearing runtime and telemetry surfaces use that build identity.
 
-See [`../deploy/README.md`](../deploy/README.md) for the pull-only Compose
-layout, external networks, Nginx fragments, non-mutating preflight, and manual
-operator runbooks. No GitHub workflow has SSH or production-host credentials.
+Release Please creates the protected version tag through the repository-scoped
+GitHub App. The image workflow publishes SemVer, `git-<full-40-character-sha>`, and
+eligible `latest` tags. Digests identify immutable image contents; `latest` is a
+mutable pointer to the newest verified stable release.
 
-## Superseded image and tag guidance
-
-The release workflow remains tag-triggered, but deployment is not tag-selected.
-This policy explicitly supersedes earlier examples or recommendations that:
-
-- published one `zaftech/relay` image for the whole product;
-- used a truncated `git-<sha>` tag;
-- selected a production or rollback image by SemVer, Git-SHA, or `latest` tag;
-- treated `latest` as an immutable or authoritative release reference; or
-- relied on an operator-created release tag as the normal release mechanism.
-
-The approved model uses paired `zaftec/relay-backend` and
-`zaftec/relay-web` images, each built for `linux/amd64`. Release Please creates
-the protected `vMAJOR.MINOR.PATCH` tag through the repository-scoped GitHub App;
-the image workflow promotes each verified digest to the SemVer,
-`git-<full-40-character-sha>`, and eligible `latest` tags. Operators deploy and
-roll back the paired digests from `release-manifest.json`, never any of those
-tags. Tag-based deployment guidance is superseded; tag-triggered release
-automation is not.
+Image publication ends at the registry and GitHub release. Host configuration
+and deployment procedures are managed outside this repository.
 
 ## Independent version dimensions
 

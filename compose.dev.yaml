@@ -5,10 +5,8 @@
 # Usage: docker compose -f compose.dev.yaml up -d
 #
 # Provides PostgreSQL 18, Redis, and MinIO so `apps/api`/`apps/worker` and
-# their tests run against the same engines and role/schema model documented
-# in docs/implementation-handoff/02-runtime-database.md and
-# docs/implementation-handoff/10-vps-remediation.md, without depending on the
-# shared VPS instances.
+# their tests run against the engines and role/schema model documented
+# in docs/implementation-handoff/02-runtime-database.md.
 
 services:
   postgres:
@@ -21,9 +19,7 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       # PostgreSQL 18's image places data in a version-specific subdirectory
-      # of /var/lib/postgresql; do not mount at .../data directly (see
-      # docs/implementation-handoff/10-vps-remediation.md "PostgreSQL 18
-      # volume safety").
+      # of /var/lib/postgresql; mount the parent directory for this local stack.
       - relay_dev_postgres:/var/lib/postgresql
       - ./scripts/dev/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:

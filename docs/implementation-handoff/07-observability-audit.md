@@ -37,9 +37,9 @@ Use Deno's built-in provider:
 ```text
 OTEL_DENO=true
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
 OTEL_SERVICE_NAME=relay-api or relay-worker
-OTEL_RESOURCE_ATTRIBUTES=service.namespace=relay,deployment.environment.name=production,service.version=<version>,relay.build.revision=<sha>,service.instance.id=<id>
+OTEL_RESOURCE_ATTRIBUTES=service.namespace=relay,deployment.environment.name=development,service.version=<version>,relay.build.revision=<sha>,service.instance.id=<id>
 OTEL_PROPAGATORS=tracecontext
 OTEL_DENO_CONSOLE=capture
 OTEL_METRIC_EXPORT_INTERVAL=15000
@@ -270,50 +270,8 @@ Requirements:
 - Persistent OTel queues require a currently preview Alloy component; decide
   explicitly whether preview is acceptable.
 
-Exact Alloy syntax is deferred until the live `alloy-config.river` and image
-version are supplied. See [`10-vps-remediation.md`](10-vps-remediation.md).
-
-## Backend routing
-
-### Prometheus
-
-Use its enabled native OTLP receiver through Alloy. The final wire URL is:
-
-```text
-http://prometheus:9090/api/v1/otlp/v1/metrics
-```
-
-For Alloy `otelcol.exporter.otlphttp.client.endpoint`, use the base
-`http://prometheus:9090/api/v1/otlp`; the exporter appends `/v1/metrics`.
-Alternatively use the component's explicit full `metrics_endpoint`. Validate the
-actual requested URL from exporter metrics/logs.
-
-Add out-of-order ingestion tolerance for batched collectors and a conservative
-resource-attribute promotion list. Do not send duplicate metrics through both
-OTLP and remote write.
-
-### Loki
-
-The final Loki wire URL is:
-
-```text
-http://loki:3100/otlp/v1/logs
-```
-
-For Alloy's generic OTLP HTTP client endpoint, use `http://loki:3100/otlp`;
-otherwise configure the explicit full logs endpoint.
-
-Keep only service/environment/namespace as index labels. Instance ID, version,
-revision, trace/span IDs, and application IDs remain structured metadata. Alert
-on discarded samples and structured-metadata limit failures.
-
-### Traces
-
-Prefer Tempo after auditing its actual version/config/storage. The supplied
-Jaeger all-in-one is memory-backed and loses traces on restart, so it is
-suitable only for smoke tests.
-
-Do not permanently fan every trace to both Tempo and Jaeger.
+Collector routing and backend configuration are maintained outside this repository.
+Use a local collector when testing telemetry export.
 
 ## Durable audit events
 
@@ -391,10 +349,10 @@ Provision or document:
 5. Telemetry pipeline: Alloy accepted/refused/exported, queue saturation,
    backend errors.
 6. Backend health: Prometheus TSDB, Loki ingestion/query, selected persistent
-   trace-backend storage/query, VPS/container resources.
+   trace-backend storage/query, container resources.
 7. Release comparison by bounded service version.
 
-Use stable datasource UIDs and version-controlled provisioning where possible.
+Keep dashboard and alert configuration outside this application repository.
 Do not overwrite existing Grafana alerts without exporting/reviewing them first.
 
 ## Alerts

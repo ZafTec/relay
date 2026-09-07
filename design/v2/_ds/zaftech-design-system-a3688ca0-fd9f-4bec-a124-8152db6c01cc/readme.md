@@ -12,7 +12,7 @@ Alongside client work, ZafTech ships its own SaaS products:
 - **Talos** — auth + sandboxed code execution for agent platforms (live)
 - **Tarik** — a free, non-commercial Ethiopian heritage archive (live)
 
-The marketing site (`zaftech.co`) is the one product surface this design system was built from — a single-page scroll home (Hero → Trusted-by → What-we-do → Services → Products → Portfolio → Testimonials → Process → Contact → Final CTA) plus a `/careers` page.
+The marketing site (`example.test`) is the one product surface this design system was built from — a single-page scroll home (Hero → Trusted-by → What-we-do → Services → Products → Portfolio → Testimonials → Process → Contact → Final CTA) plus a `/careers` page.
 
 **Source:** [github.com/ZafTec/zaf_tech_landing](https://github.com/ZafTec/zaf_tech_landing) (Astro + Tailwind v4 + Bun). The repo ships its own design-system notes at `.superdesign/design-system.md` and `.superdesign/init/*.md` — read those directly for anything this file doesn't cover, and re-check the live source before extending this system further; the site is under active development and had already outgrown parts of its own docs (e.g. the section list/component names) by the time this was written.
 

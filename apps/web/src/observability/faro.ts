@@ -12,7 +12,6 @@ import type {
   Meta,
 } from "@grafana/faro-web-sdk";
 
-const origin = "https://relay.zaftech.co";
 const version = import.meta.env.VITE_APP_VERSION ?? "development";
 const staticRoutes = new Set([
   "/",
@@ -48,6 +47,7 @@ const dynamicRoutes: [RegExp, string][] = [
 ];
 
 export function telemetryPageUrl(raw: string): string {
+  const origin = globalThis.location.origin;
   try {
     const url = new URL(raw, origin);
     if (url.origin === origin) {
@@ -64,6 +64,7 @@ export function telemetryPageUrl(raw: string): string {
 // Rebuild each payload from an allowlist. SDK defaults may contain URLs, DOM
 // selectors, user data, exception messages, and request/console contents.
 export const sanitizeBrowserTelemetry: BeforeSendHook = (item) => {
+  const origin = globalThis.location.origin;
   const meta: Meta = {
     app: {
       name: "relay-web",
@@ -152,13 +153,22 @@ export const sanitizeBrowserTelemetry: BeforeSendHook = (item) => {
 let started = false;
 
 export function startBrowserTelemetry(): void {
-  if (started || !import.meta.env.PROD || globalThis.location.origin !== origin) {
+  if (
+    started || !import.meta.env.PROD ||
+    globalThis.location.origin !== import.meta.env.VITE_APP_ORIGIN ||
+    !import.meta.env.VITE_FARO_COLLECTOR_URL
+  ) {
     return;
   }
-  started = true;
   try {
+    const collector = new URL(import.meta.env.VITE_FARO_COLLECTOR_URL);
+    if (
+      collector.protocol !== "https:" || collector.username ||
+      collector.password
+    ) return;
+    started = true;
     const faro = initializeFaro({
-      url: "https://zaftech.co/collect",
+      url: collector.href,
       app: { name: "relay-web", version, environment: "production" },
       instrumentations: [
         new ErrorsInstrumentation(),

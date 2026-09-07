@@ -244,7 +244,7 @@ package version — adopting it is not itself proof it is correct.
 Resource:
 
 ```text
-https://relay.zaftech.co/mcp
+https://relay.example.test/mcp
 ```
 
 Authorization-server identity/session scopes:
@@ -288,11 +288,11 @@ Every MCP request validates:
 Cookie-only Better Auth sessions do not authenticate `/mcp`.
 
 Expose and test the exact metadata routes produced by the pinned Better Auth
-configuration. At minimum, the resource `https://relay.zaftech.co/mcp` requires
+configuration. At minimum, the resource `https://relay.example.test/mcp` requires
 path-aware RFC 9728 metadata at:
 
 ```text
-https://relay.zaftech.co/.well-known/oauth-protected-resource/mcp
+https://relay.example.test/.well-known/oauth-protected-resource/mcp
 ```
 
 The response contains the exact canonical `resource`, approved
@@ -302,7 +302,7 @@ Expose the authorization-server/OIDC metadata routes required by the provider
 without proxying every arbitrary `/.well-known/*` request. Unauthenticated
 responses include a `WWW-Authenticate` challenge pointing to the protected
 resource metadata. Authorization and token requests include the exact OAuth
-`resource=https://relay.zaftech.co/mcp`, and issued tokens carry that audience.
+`resource=https://relay.example.test/mcp`, and issued tokens carry that audience.
 
 ## Client registration
 

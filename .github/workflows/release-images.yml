@@ -225,6 +225,8 @@ jobs:
             APP_VERSION=${{ steps.identity.outputs.version }}
             GIT_SHA=${{ steps.identity.outputs.revision }}
             IMAGE_CREATED=${{ steps.identity.outputs.created }}
+            VITE_APP_ORIGIN=${{ vars.VITE_APP_ORIGIN }}
+            VITE_FARO_COLLECTOR_URL=${{ vars.VITE_FARO_COLLECTOR_URL }}
           provenance: mode=max
           sbom: true
 

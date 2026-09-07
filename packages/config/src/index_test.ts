@@ -32,9 +32,10 @@ const validObservabilityEnv = {
 };
 
 const validAuthEnv = {
-  BETTER_AUTH_URL: "https://relay.zaftech.co",
+  BETTER_AUTH_URL: "https://relay.example.test",
   BETTER_AUTH_SECRET: "a".repeat(32),
-  AUTH_TRUSTED_ORIGINS: "https://relay.zaftech.co, https://staging.example.com",
+  AUTH_TRUSTED_ORIGINS:
+    "https://relay.example.test, https://staging.example.com",
   GOOGLE_CLIENT_ID: "google-id",
   GOOGLE_CLIENT_SECRET: "google-secret",
   GITHUB_CLIENT_ID: "github-id",
@@ -261,14 +262,14 @@ Deno.test("loadAuthConfig requires AUTH_TRUSTED_ORIGINS", () => {
 Deno.test("loadAuthConfig splits and trims comma-separated trusted origins", () => {
   const config = loadAuthConfig(validAuthEnv);
   assertEquals(config.trustedOrigins, [
-    "https://relay.zaftech.co",
+    "https://relay.example.test",
     "https://staging.example.com",
   ]);
 });
 
 Deno.test("loadAuthConfig accepts a fully valid environment", () => {
   const config = loadAuthConfig(validAuthEnv);
-  assertEquals(config.baseUrl.toString(), "https://relay.zaftech.co/");
+  assertEquals(config.baseUrl.toString(), "https://relay.example.test/");
   assertEquals(config.google.clientId, "google-id");
   assertEquals(config.github.clientId, "github-id");
 });

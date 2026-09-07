@@ -50,7 +50,7 @@ Required shape:
 
 ```text
 appName: Relay
-baseURL: validated BETTER_AUTH_URL (`https://relay.zaftech.co` in production)
+baseURL: validated BETTER_AUTH_URL (`http://localhost:8000` in local development)
 basePath: /api/auth
 database: shared pg.Pool
 trustedOrigins: exact environment origins
@@ -63,7 +63,7 @@ Security decisions:
 
 - Secure, HTTP-only, host-only cookies in production
 - `SameSite=Lax` for OAuth callback navigation
-- No `.zaftech.co` cross-subdomain cookie
+- No `.example.test` cross-subdomain cookie
 - CSRF and origin checks enabled
 - Static production base URL instead of trusting arbitrary forwarded host data
 - OAuth token encryption enabled
@@ -101,7 +101,7 @@ Do not request Drive/Gmail or offline access for login.
 Callbacks:
 
 ```text
-https://relay.zaftech.co/api/auth/callback/google
+https://relay.example.test/api/auth/callback/google
 http://127.0.0.1:5173/api/auth/callback/google  # when Vite proxies /api
 ```
 
@@ -118,7 +118,7 @@ user:email
 Callbacks:
 
 ```text
-https://relay.zaftech.co/api/auth/callback/github
+https://relay.example.test/api/auth/callback/github
 http://127.0.0.1:5173/api/auth/callback/github  # when Vite proxies /api
 ```
 
@@ -270,8 +270,8 @@ and workspace-selection contract before MCP is considered complete.
 Production is same-origin:
 
 ```text
-web: https://relay.zaftech.co
-API/auth: https://relay.zaftech.co/api/*
+web: https://relay.example.test
+API/auth: https://relay.example.test/api/*
 ```
 
 Production normally needs no auth CORS.

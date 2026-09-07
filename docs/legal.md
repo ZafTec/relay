@@ -8,15 +8,16 @@ advice, and the final product-specific language should receive legal review.
 
 ## Canonical documents
 
-The company-wide legal documents remain canonical on `zaftech.co`:
+The company-wide legal documents remain canonical. The URLs below use a
+reserved example domain; actual policy URLs are configured outside Git.
 
-| Document              | Canonical URL                       | Page metadata when verified              |
+| Document              | Example URL                         | Page metadata when verified              |
 | --------------------- | ----------------------------------- | ---------------------------------------- |
-| Terms of Service      | <https://zaftech.co/terms>          | Effective 2026-04-24; updated 2026-04-24 |
-| Privacy Policy        | <https://zaftech.co/privacy>        | Effective 2026-04-24; updated 2026-07-17 |
-| Refund Policy         | <https://zaftech.co/refunds>        | Effective 2026-04-24; updated 2026-04-24 |
-| Cookie Policy         | <https://zaftech.co/cookies>        | Effective 2026-04-24; updated 2026-07-17 |
-| Acceptable Use Policy | <https://zaftech.co/acceptable-use> | Effective 2026-04-24; updated 2026-04-24 |
+| Terms of Service      | <https://example.test/terms>          | Effective 2026-04-24; updated 2026-04-24 |
+| Privacy Policy        | <https://example.test/privacy>        | Effective 2026-04-24; updated 2026-07-17 |
+| Refund Policy         | <https://example.test/refunds>        | Effective 2026-04-24; updated 2026-04-24 |
+| Cookie Policy         | <https://example.test/cookies>        | Effective 2026-04-24; updated 2026-07-17 |
+| Acceptable Use Policy | <https://example.test/acceptable-use> | Effective 2026-04-24; updated 2026-04-24 |
 
 The path `/privacy-policy` returned 404 when checked. The canonical privacy path
 is `/privacy`.
@@ -25,11 +26,12 @@ Product routes such as `/legal/terms` and `/legal/privacy` should redirect to
 the canonical pages rather than copying their HTML. This prevents product copies
 from becoming stale.
 
-OAuth client metadata should use the canonical URLs:
+OAuth client metadata should use the externally configured canonical URLs.
+Example metadata:
 
 ```text
-tos: https://zaftech.co/terms
-policy: https://zaftech.co/privacy
+tos: https://example.test/terms
+policy: https://example.test/privacy
 ```
 
 ## Existing coverage

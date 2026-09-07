@@ -29,7 +29,6 @@ src/main.ts
 Dockerfile
 compose.dev.yaml
 compose.test.yaml
-deploy/compose.prod.yaml
 scripts/
 ```
 
@@ -41,8 +40,8 @@ One lane owns `deno.json`, `deno.lock`, `src/main.ts`, and
 `packages/database/src/migrations/manifest.ts`. The database owner reserves
 migration IDs and regenerates shared database types; feature lanes submit schema
 specifications or reserved migration modules rather than editing the manifest
-concurrently. Root `compose.yaml` remains the current scaffold until
-deliberately replaced by distinct development, test, and production files.
+concurrently. `compose.dev.yaml` and `compose.test.yaml` provide local and
+disposable integration infrastructure; host deployment files stay outside Git.
 
 ## Parallel work inside this phase
 
