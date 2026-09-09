@@ -11,19 +11,33 @@ export function RelayBrand({
   compact = false,
   showParent = true,
 }: RelayBrandProps) {
-  const mark = surface === "product"
-    ? "/relay/brand/relay-mark-reverse.svg"
-    : "/relay/brand/relay-mark.svg";
+  const size = compact ? 22 : 26;
 
   return (
     <Link className="relay-brand" to="/" aria-label="Relay home">
-      <img
-        className="relay-brand__mark"
-        src={mark}
-        width={compact ? 22 : 26}
-        height={compact ? 22 : 26}
-        alt=""
-      />
+      {surface === "product" ? (
+        // The product surface follows the OS/browser color scheme (see globals.css),
+        // so the mark must switch with it: the "reverse" ramp reads on a dark rail,
+        // the base ramp reads on a light one.
+        <picture>
+          <source srcSet="/relay/brand/relay-mark-reverse.svg" media="(prefers-color-scheme: dark)" />
+          <img
+            className="relay-brand__mark"
+            src="/relay/brand/relay-mark.svg"
+            width={size}
+            height={size}
+            alt=""
+          />
+        </picture>
+      ) : (
+        <img
+          className="relay-brand__mark"
+          src="/relay/brand/relay-mark.svg"
+          width={size}
+          height={size}
+          alt=""
+        />
+      )}
       <span className="relay-brand__name">Relay</span>
       {showParent ? <span className="relay-brand__parent">by ZafTech</span> : null}
     </Link>
