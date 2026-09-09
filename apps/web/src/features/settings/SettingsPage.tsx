@@ -95,7 +95,7 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
             Connect Gemini or another AI agent, then sign in and approve access to your workspace.
           </p>
         </div>
-        <LinkButton to="/admin/oauth-clients" variant="outline">Manage OAuth clients</LinkButton>
+        <LinkButton to="/dashboard/oauth-clients" variant="outline">Manage OAuth clients</LinkButton>
       </header>
 
       <ol className="settings-mcp__steps">

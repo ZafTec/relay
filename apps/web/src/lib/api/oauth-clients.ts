@@ -75,7 +75,7 @@ export const oauthClients = {
 
 export function oauthClientError(error: unknown): string {
   if (error instanceof ApiError && [401, 403].includes(error.status)) {
-    return "Sign in again with your superadmin account, then try this action again.";
+    return "Sign in again, then try this action again.";
   }
   if (error instanceof ApiError && error.status === 400) {
     return "Check the redirect URLs and permissions, then try again.";

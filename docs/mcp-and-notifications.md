@@ -11,12 +11,15 @@ credentials during registration. All authorization-code clients require S256
 PKCE and exact callback URLs. HTTPS callbacks and local loopback callbacks are
 supported; wildcard callbacks are rejected.
 
-For agents that ask you to supply a client ID, a superadmin can open **Manage
-OAuth clients** (`/admin/oauth-clients`) from Settings. Create a client with the
-exact callback URL supplied by the agent, choose its permissions and
-authentication method, and copy the client ID and one-time secret into the
-agent. Public clients do not have a secret. Manual registration still leads to
-the same workspace selection and permission approval flow.
+For agents that ask you to supply a client ID, open **Manage OAuth clients**
+(`/dashboard/oauth-clients`) from Settings. Create a client with the exact
+callback URL supplied by the agent, choose its permissions and authentication
+method, and copy the client ID and one-time secret into the agent. Public
+clients do not have a secret. Manual registration still leads to the same
+workspace selection and permission approval flow. A current superadmin also
+sees an additional, opt-in section for requesting platform-wide `admin:*`
+scopes on a client; those still require consent and never bypass workspace
+usage allowances.
 
 The endpoint accepts the SDK's stateless 2025-03-26, 2025-06-18 and 2025-11-25
 compatibility flows as well as the 2026-07-28 protocol. Agents can use normal

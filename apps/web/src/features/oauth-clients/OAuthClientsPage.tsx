@@ -8,7 +8,6 @@ import { Skeleton } from "../../components/ui/Skeleton";
 import { type ManagedOAuthClient, type OAuthClientCredentials, oauthClientError, oauthClients } from "../../lib/api/oauth-clients";
 import { ApiError } from "../../lib/api/client";
 import { checkAdminAccess } from "../../lib/api/admin-access";
-import { useAdminChangelog } from "../admin-changelog/AdminChangelogContext";
 import "./oauth-clients.css";
 
 const permissions = [
@@ -51,8 +50,7 @@ export function OAuthClientsPage() {
 }
 
 function ClientManager() {
-  const { session } = useAuth();
-  const { reportAccessFailure } = useAdminChangelog();
+  const { session, expireSession } = useAuth();
   const sessionId = session.status === "authenticated" ? session.identity.session.id : undefined;
   const [clients, setClients] = useState<ManagedOAuthClient[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,10 +71,9 @@ function ClientManager() {
   const endpoint = new URL("/mcp", window.location.origin).href;
 
   function showFailure(failure: unknown) {
-    if (failure instanceof ApiError && [401, 403].includes(failure.status)) {
+    if (failure instanceof ApiError && failure.status === 401) {
       setCredentials(null);
-      const fresh = failure.code === "SESSION_TOO_OLD" || failure.code === "reauthentication_required";
-      reportAccessFailure({ kind: fresh ? "reauthentication-required" : failure.status === 401 ? "auth-expired" : "denied" }, sessionId);
+      expireSession(sessionId);
     } else setError(oauthClientError(failure));
   }
 

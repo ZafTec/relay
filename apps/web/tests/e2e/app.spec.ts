@@ -1039,7 +1039,7 @@ test("OAuth clients, superadmin invitations and notifications work across screen
   await page.route("**/api/v1/superadmin-invitations/*", (route) => route.fulfill({ json: { email: invitation.email, accepted: route.request().method() === "POST" } }));
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/admin/oauth-clients");
+    await page.goto("/dashboard/oauth-clients");
     await expect(page.getByRole("heading", { name: "OAuth clients", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Create client", exact: true }).click();
     await page.getByLabel("Client name").fill("Browser agent");

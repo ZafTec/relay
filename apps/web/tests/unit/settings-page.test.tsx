@@ -93,7 +93,7 @@ describe("workspace settings page", () => {
     expect(within(mcpSection).getByText(new URL("/mcp", window.location.origin).href)).toBeInTheDocument();
     expect(within(mcpSection).getByText("/.well-known/oauth-protected-resource/mcp"))
       .toBeInTheDocument();
-    expect(within(mcpSection).getByRole("link", { name: "Manage OAuth clients" })).toHaveAttribute("href", "/admin/oauth-clients");
+    expect(within(mcpSection).getByRole("link", { name: "Manage OAuth clients" })).toHaveAttribute("href", "/dashboard/oauth-clients");
     expect(within(mcpSection).getByText(/Running tools also requires a usage allowance/i)).toBeInTheDocument();
     expect(within(mcpSection).getByText("@northstar-fixture")).toBeInTheDocument();
     expect(within(mcpSection).getByText("Read tool usage and workspace storage usage.")).toBeInTheDocument();

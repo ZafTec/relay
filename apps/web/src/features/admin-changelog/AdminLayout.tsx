@@ -37,9 +37,6 @@ function AdminNavigation({ mobile = false }: { readonly mobile?: boolean }) {
         Allowances
       </NavLink>
       <NavLink className={({ isActive }) => `admin-nav__item${isActive ? " is-active" : ""}`} to="/admin/superadmins">Superadmins</NavLink>
-      <NavLink className={({ isActive }) => `admin-nav__item${isActive ? " is-active" : ""}`} to="/admin/oauth-clients">
-        OAuth clients
-      </NavLink>
     </nav>
   );
 }

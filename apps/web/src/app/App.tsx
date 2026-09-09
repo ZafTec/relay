@@ -159,6 +159,7 @@ export const relayRoutes = [
             path: "settings",
             element: productRoute(<SettingsPage />, "Loading workspace settings"),
           },
+          { path: "oauth-clients", element: productRoute(<OAuthClientsPage />, "Loading OAuth clients") },
         ],
       },
       {
@@ -212,7 +213,6 @@ export const relayRoutes = [
                 element: productRoute(<AdminAllowancesPage />, "Loading allowances"),
               },
               { path: "superadmins", element: protectedLazyRoute(<SuperadminsPage />, "Loading platform access") },
-          { path: "oauth-clients", element: productRoute(<OAuthClientsPage />, "Loading OAuth clients") },
             ],
           },
         ],
