@@ -194,7 +194,7 @@ export function ToolsPage({
     return [...options].sort((left, right) => left.localeCompare(right));
   }, [categoryDraft, knownCategories]);
   const workspaceLabel = workspace.status === "ready"
-    ? `Workspace ${workspace.workspace.id}`
+    ? workspace.workspace.name
     : "Workspace catalog";
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {

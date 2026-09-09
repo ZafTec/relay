@@ -18,7 +18,6 @@ export function OAuthLayout({ children }: OAuthLayoutProps) {
         {children}
       </main>
       <footer className="oauth-shell__footer">
-        <span>RLY-01 / MCP OAUTH</span>
         <span>Only approve clients you recognize.</span>
         <LegalLinks />
       </footer>
