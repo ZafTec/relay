@@ -29,13 +29,48 @@ session IDs.
 
 Registration does not grant usage allowances. Execution still needs an explicit
 `tools.execute` capability and the applicable image or OCR allowance. Client
-creation, rotation, and deletion require a recently authenticated superadmin
-session when managed manually. Managed clients belong to the superadmin who
+creation, rotation, and deletion require a recently authenticated owner
+session when managed manually. Managed clients belong to the signed-in user who
 registered them. Client-credentials grants are disabled.
 
 Rotating a secret requires updating the agent. Deleting a client invalidates its
 authorizations. If a creation response is lost, refresh the list and rotate the
-client's secret to obtain a new copy.
+client’s secret to obtain a new copy.
+
+## Discover and execute tools
+
+Claude and other agents see a stable catalog interface instead of one MCP tool
+per image model:
+
+1. Call `relay.tools.list` to find an available tool.
+2. Call `relay.tools.get` with its `toolKey` to inspect the real `inputSchema`,
+   `outputSchema`, limits, and `activeVersionId`.
+3. Call `relay.tools.execute` with that key, matching `input`, and a unique
+   `idempotencyKey`. Optionally pass `toolVersionId` from the inspected contract
+   to prevent execution if the contract changes.
+4. Poll `relay.runs.get` with the returned `runId`. Use
+   `relay.artifacts.get_access` for completed output files.
+
+Example `relay.tools.execute` arguments, after inspecting GPT Image 2:
+
+```json
+{
+  "toolKey": "image.generate.gpt-image-2",
+  "input": { "prompt": "A quiet mountain lake at sunrise" },
+  "idempotencyKey": "4c9e9e75-9910-44b1-949a-e82bc6633f35"
+}
+```
+
+Generate a new key for a new operation and reuse the same key and arguments for
+retries. The executor requires the key as an ordinary argument, so clients do
+not need to attach custom metadata. Input validation, workspace tool access,
+and usage allowance failures are returned separately. OAuth consent alone does
+not grant an execution allowance.
+
+Existing connections may cache the previous per-model tool list. Refresh or
+reconnect Relay in the client after upgrading. Integrations calling model names
+directly must switch to `relay.tools.execute`. Run, file, notification, and
+authorized administration tools remain available.
 
 ## Workspaces and storage usage
 
@@ -79,12 +114,13 @@ authentication; sign in again and reconnect when prompted.
 Tools use the `relay.admin.` prefix, for example
 `relay.admin.allowances.workspaces` and `relay.admin.oauth.create`. The agent
 discovers only administrative operations covered by its consented scopes.
-Writes require a stable 16–128 character `io.relay/idempotency-key` in call
-metadata. Allowance, capacity, changelog, and invitation mutations retain their
+Writes require a stable 16–128 character `idempotencyKey` argument (a UUID is
+suitable). Legacy `io.relay/idempotency-key` call metadata is also accepted;
+when both supply a key, they must match. Allowance, capacity, changelog, and invitation mutations retain their
 existing replay protection and audit boundaries.
 
 OAuth client operations use Better Auth's native management endpoints, which
-do not deduplicate requests using that metadata key. Creation and secret rotation
+do not deduplicate requests using that key. Creation and secret rotation
 return a secret once. Never automatically retry an uncertain creation or
 rotation: inspect the client list and obtain the user's instruction before
 creating another client or rotating again. OAuth tools are marked
@@ -140,12 +176,15 @@ Example upload arguments:
   "encoding": "text",
   "content": "Notes to keep in my workspace.",
   "access": "temporary",
-  "expiresInSeconds": 300
+  "expiresInSeconds": 300,
+  "idempotencyKey": "7c9a4467-7247-4f1b-bbae-a2566518b229"
 }
 ```
 
-Supply a stable `io.relay/idempotency-key` in the MCP call's `_meta`, and reuse
-it when retrying the same operation. Upload requires `artifacts:write` and
+Supply a stable `idempotencyKey` argument and reuse it when retrying the same
+operation. Existing file clients may continue supplying
+`io.relay/idempotency-key` in `_meta`; both keys must match when present.
+Upload requires `artifacts:write` and
 `artifacts:read`.
 
 `relay.artifacts.get_access` also creates an access URL for an existing upload

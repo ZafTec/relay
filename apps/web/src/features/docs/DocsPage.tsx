@@ -16,7 +16,7 @@ const quickstartSteps = [
     id: "create-run",
     number: "02",
     title: "Create a run",
-    copy: "POST a tool key and schema-valid input with an idempotency key. Relay returns an accepted run or a typed capacity, availability, or idempotency result.",
+    copy: "Call relay.tools.execute with a tool key, schema-valid input, and a unique idempotencyKey. HTTP clients can POST the same work to /api/v1/runs. Relay returns a run ID or a specific access, allowance, or input error.",
   },
   {
     id: "track-run",
@@ -56,14 +56,21 @@ const httpContracts = [
 const mcpContracts = [
   { name: "relay.tools.list", scope: "tools:read", description: "List published tools." },
   { name: "relay.tools.get", scope: "tools:read", description: "Read one tool contract." },
+  { name: "relay.tools.execute", scope: "tools:execute", description: "Execute a catalog tool using its input schema and a unique idempotencyKey." },
   { name: "relay.runs.list", scope: "runs:read", description: "List workspace runs." },
   { name: "relay.runs.get", scope: "runs:read", description: "Read one run." },
   { name: "relay.runs.cancel", scope: "runs:cancel", description: "Cancel or request cancellation." },
   { name: "relay.artifacts.list", scope: "artifacts:read", description: "List workspace artifacts." },
   { name: "relay.artifacts.get", scope: "artifacts:read", description: "Read artifact versions and shares." },
   { name: "relay.artifacts.create_upload", scope: "artifacts:write", description: "Create a direct upload authorization." },
+  { name: "relay.artifacts.complete_upload", scope: "artifacts:write", description: "Verify and complete a direct upload." },
+  { name: "relay.artifacts.upload_content", scope: "artifacts:write, artifacts:read", description: "Save file bytes and return an access URL." },
+  { name: "relay.artifacts.get_access", scope: "artifacts:read", description: "Get a temporary file URL. Permanent links also require artifacts:share." },
   { name: "relay.artifacts.create_share_link", scope: "artifacts:share", description: "Create an artifact share link." },
   { name: "relay.artifacts.revoke_share_link", scope: "artifacts:share", description: "Revoke an artifact share link." },
+  { name: "relay.usage.storage", scope: "usage:read", description: "Read workspace storage usage and available space." },
+  { name: "relay.notifications.get", scope: "notifications:read", description: "Read email notification preferences and delivery status." },
+  { name: "relay.notifications.configure", scope: "notifications:write", description: "Update notification preferences after explicit user approval." },
 ] as const;
 
 const searchEntries = [
@@ -203,7 +210,7 @@ function HttpContractTable() {
 function McpContractTable() {
   return (
     <div className="docs-table-scroll" tabIndex={0} role="region" aria-label="MCP management tools table">
-      <table className="docs-contract-table">
+      <table className="docs-contract-table docs-contract-table--mcp">
         <caption>Stable MCP management tool names</caption>
         <thead>
           <tr>
@@ -304,8 +311,9 @@ export function DocsPage() {
                 <h2 id="mcp-contracts-title">OAuth-protected management tools</h2>
               </div>
               <p className="docs-reference__lead">
-                Relay's MCP adapter uses Streamable HTTP at <code>/mcp</code> when application services are configured. Published catalog tools are registered dynamically and require <code>tools:execute</code>; the management names below are stable.
+                Connect through <code>/mcp</code>. Use <code>relay.tools.list</code> to discover image models, OCR, and other catalog entries, then <code>relay.tools.get</code> to read the selected tool's schema. Run it with <code>relay.tools.execute</code>. Models appear in catalog results; the connector exposes the stable tools below.
               </p>
+              <p className="docs-reference__lead">Execution, uploads, share links, and administrative changes accept an <code>idempotencyKey</code> in the tool arguments. Reuse that key with identical arguments when retrying. The executor requires this argument; existing file and administration clients may continue supplying the key in MCP metadata. Execution also requires the workspace's tool access and usage allowance.</p>
               <McpContractTable />
             </section>
 

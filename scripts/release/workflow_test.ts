@@ -120,6 +120,7 @@ Deno.test("release remains draft through evidence and publishes last", async () 
     "name: Attach verified evidence to the draft release",
   );
   const draftCheck = workflow.indexOf("name: Confirm release is still a draft");
+  const notes = workflow.indexOf("name: Prepare detailed release notes");
   const latest = workflow.indexOf("name: Promote latest image tags");
   const release = workflow.indexOf(
     "name: Publish the verified draft release last",
@@ -132,6 +133,7 @@ Deno.test("release remains draft through evidence and publishes last", async () 
       manifest,
       retained,
       evidence,
+      notes,
       draftCheck,
       latest,
       release,
@@ -139,7 +141,8 @@ Deno.test("release remains draft through evidence and publishes last", async () 
   );
   assert(
     attestation < immutable && immutable < manifest && manifest < retained &&
-      retained < evidence && evidence < draftCheck && draftCheck < latest &&
+      retained < evidence && evidence < notes && notes < draftCheck &&
+      draftCheck < latest &&
       latest < release,
   );
   assertStringIncludes(
@@ -240,6 +243,7 @@ Deno.test("release-please config supports bootstrap and recorded releases", asyn
   assertEquals(config.packages["."]["version-file"], "version.txt");
   assertEquals(config.draft, true);
   assertEquals(config["force-tag-creation"], true);
+  assertEquals(config["changelog-type"], "default");
   assert(
     manifest !== null && typeof manifest === "object" &&
       !Array.isArray(manifest),

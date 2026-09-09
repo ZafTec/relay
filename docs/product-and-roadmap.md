@@ -684,13 +684,16 @@ release. Mutating requests use idempotency keys. Asynchronous acceptance returns
 The remote MCP server uses Streamable HTTP at `/mcp` and Better Auth OAuth 2.1
 protected-resource metadata.
 
-Relay should advertise active curated tools as typed MCP tools so an agent can
-see each tool's real schema. Management tools remain stable across the catalog,
-for example:
+Relay advertises a compact, stable MCP interface. Agents discover curated
+models through `relay.tools.list`, inspect their actual input/output schemas
+with `relay.tools.get`, then submit schema-valid input through
+`relay.tools.execute`. Individual catalog entries do not appear as separate MCP
+tools. The stable interface includes:
 
 ```text
 relay.tools.list
 relay.tools.get
+relay.tools.execute
 relay.runs.get
 relay.runs.list
 relay.runs.cancel
@@ -701,8 +704,13 @@ relay.artifacts.create_share_link
 relay.artifacts.revoke_share_link
 ```
 
-Exact executable tool names are chosen with the first provider contracts. A
-generic raw-JSON executor must not be the only interface to image generators.
+The executor requires `toolKey`, `input`, and a unique `idempotencyKey` argument.
+It validates input against the selected catalog schema before admission. An
+optional `toolVersionId` pins the inspected active contract; a changed version
+requires inspection again. Run, file, notification, and authorized administration
+operations remain directly callable. File and administrative operations retain
+legacy `io.relay/idempotency-key` metadata support; when an argument and metadata
+both supply a key, they must match. Retry keys are never inferred from prompts.
 
 A successful asynchronous tool call returns structured data containing the run
 ID, state, estimate or reservation summary, and status-check guidance. A

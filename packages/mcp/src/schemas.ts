@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { idempotencyKeySchema } from "./idempotency.ts";
 import {
   MAX_CURSOR_LENGTH,
   MAX_PAGE_SIZE,
@@ -32,6 +33,21 @@ export const listToolsInputSchema = z.object({
 
 export const getToolInputSchema = z.object({
   toolKey: toolKeySchema,
+}).strict();
+
+export const executeToolInputSchema = z.object({
+  toolKey: toolKeySchema.describe(
+    "Choose a tool key returned by relay.tools.list.",
+  ),
+  input: z.record(z.string(), z.unknown()).describe(
+    "Arguments matching the inputSchema returned by relay.tools.get for this tool.",
+  ),
+  toolVersionId: z.string().regex(PUBLIC_ID_PATTERNS.toolVersion).optional()
+    .describe(
+      "The activeVersionId from relay.tools.get. Supplying it prevents execution if the tool contract changed.",
+    ),
+  requestedModelVersion: z.string().min(1).max(128).nullable().optional(),
+  idempotencyKey: idempotencyKeySchema,
 }).strict();
 
 export const listRunsInputSchema = z.object({

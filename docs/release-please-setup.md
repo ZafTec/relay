@@ -107,7 +107,15 @@ its tag. Changing `main` does not repair a rerun of an older tag.
 
 ## Publication boundary
 
-Release Please prepares versions and release notes. The image workflow publishes
+Release Please prepares versions and a changelog grouped by Conventional Commit
+type. Descriptive squash titles explain individual changes; reviewed
+[release highlights](release-notes/README.md) provide the user impact and upgrade
+steps that a PR-title list cannot capture. The image workflow adds versioned
+container references, deployment guidance, and links to verification files to
+the draft before publication. Reruns replace these generated sections without
+duplicating them. Failed drafts do not consume a release's highlights.
+
+The image workflow publishes
 verified artifacts and a manifest identifying the paired image digests. Host
 deployment files, credentials, dashboards, and operator procedures are managed
 outside this repository. See the [release/versioning policy](versioning.md).

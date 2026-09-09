@@ -485,6 +485,57 @@ test("MVP tool composers remain accessible and usable on desktop and mobile", as
   }
 });
 
+test("creating a run brings an accessible confirmation into view", async ({ page }) => {
+  await mockProductionTools(page);
+  let calls = 0;
+  let confirmRun: () => void = () => {};
+  await page.route("**/api/v1/runs", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    calls += 1;
+    await new Promise<void>((resolve) => { confirmRun = resolve; });
+    await route.fulfill({ status: 202, headers: { location: `/api/v1/runs/${runId}` }, json: {
+      kind: "accepted",
+      replayed: false,
+      queueReason: "awaiting_dispatch",
+      run: {
+        ...browserRun,
+        tool: { ...browserRun.tool, key: "image.generate.gpt-image-2", name: "GPT Image 2" },
+        input: route.request().postDataJSON().input,
+        status: "queued", startedAt: null, terminalAt: null,
+        resultCompleteness: null, outputSet: null, reservation: null,
+      },
+    } });
+  });
+  for (const colorScheme of ["light", "dark"] as const) {
+    for (const width of [1440, 390]) {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/dashboard/tools/image.generate.gpt-image-2");
+      await page.getByLabel("Prompt", { exact: true }).fill("A quiet mountain lake");
+      const submit = page.getByRole("button", { name: "Create run", exact: true });
+      await submit.scrollIntoViewIfNeeded();
+      await submit.focus();
+      const previousCalls = calls;
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("button", { name: "Creating run", exact: true })).toBeDisabled();
+      await expect.poll(() => calls).toBe(previousCalls + 1);
+      confirmRun();
+      const confirmation = page.getByRole("region", { name: "Run accepted" });
+      await expect(confirmation).toBeFocused();
+      await expect(confirmation).toBeInViewport({ ratio: 1 });
+      await expect(confirmation.getByText("Queued", { exact: true })).toBeVisible();
+      await expect(page.getByLabel("Prompt", { exact: true })).toHaveValue("A quiet mountain lake");
+      await page.keyboard.press("Tab");
+      await expect(confirmation.getByRole("link", { name: "View run" })).toBeFocused();
+      await expectNoPageOverflow(page);
+      await expectNoSeriousAxeViolations(page);
+      await page.screenshot({ path: path.join("artifacts", "review", `run-accepted-${colorScheme}-${width}.png`) });
+      await page.keyboard.press("Enter");
+      await expect(page).toHaveURL(new RegExp(`/dashboard/runs/${runId}$`));
+    }
+  }
+});
+
 test("MVP upload and sign-out dialogs retain focus and fit small screens", async ({ page }) => {
   await mockProductionTools(page);
   for (const width of [1440, 390]) {

@@ -137,10 +137,19 @@ Deno.test("admin mutations preserve trusted identity, require stable keys and re
     });
     assertEquals(forged.isError, true);
     assertEquals(test.calls.length, 0);
+    const conflictingKeys = await test.client.callTool({
+      name: "relay.admin.allowances.grant",
+      arguments: { ...grant, idempotencyKey: "different-admin-change-0001" },
+      _meta: metadata,
+    });
+    assertEquals(conflictingKeys.isError, true);
+    assertEquals(test.calls.length, 0);
     const granted = await test.client.callTool({
       name: "relay.admin.allowances.grant",
-      arguments: grant,
-      _meta: metadata,
+      arguments: {
+        ...grant,
+        idempotencyKey: metadata["io.relay/idempotency-key"],
+      },
     });
     assertEquals(granted.isError, undefined);
     assertEquals(test.calls[0].operation, "allowances.grant");

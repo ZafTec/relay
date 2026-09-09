@@ -7,6 +7,7 @@ import {
 import type { ApplicationServices } from "@relay/application/services";
 import {
   type ArtifactDetail,
+  type CreateRunResult,
   errorEnvelopeSchema,
   type RunDetail,
   type ToolDetail,
@@ -19,6 +20,7 @@ import {
   RELAY_MCP_SCOPES,
   RELAY_MCP_TOOL_NAMES,
 } from "./adapter.ts";
+import { IDEMPOTENCY_INPUT_MESSAGE } from "./idempotency.ts";
 
 const publicId = (prefix: string, character: string) =>
   `${prefix}_${character.repeat(32)}`;
@@ -195,6 +197,7 @@ Deno.test("management tool names and scopes are stable", () => {
   assertEquals(Object.values(RELAY_MCP_TOOL_NAMES), [
     "relay.tools.list",
     "relay.tools.get",
+    "relay.tools.execute",
     "relay.runs.get",
     "relay.runs.list",
     "relay.runs.cancel",
@@ -213,6 +216,7 @@ Deno.test("management tool names and scopes are stable", () => {
   assertEquals(RELAY_MCP_MANAGEMENT_TOOL_SCOPES, {
     "relay.tools.list": ["tools:read"],
     "relay.tools.get": ["tools:read"],
+    "relay.tools.execute": ["tools:execute"],
     "relay.runs.get": ["runs:read"],
     "relay.runs.list": ["runs:read"],
     "relay.runs.cancel": ["runs:cancel"],
@@ -533,9 +537,9 @@ Deno.test("artifact mutation metadata errors are stable and do not call services
       assertEquals(envelope.error.code, "invalid_request");
       assertEquals(
         envelope.error.message,
-        "The required idempotency metadata is missing or invalid.",
+        IDEMPOTENCY_INPUT_MESSAGE,
       );
-      assertEquals(envelope.error.details, {});
+      assertEquals(envelope.error.details, { field: "idempotencyKey" });
       assertEquals(JSON.stringify(result).includes(ARTIFACT_ID), false);
     }
     assertEquals(called, false);
@@ -696,7 +700,7 @@ Deno.test("artifact mutation scope denial precedes idempotency validation", asyn
   }
 });
 
-Deno.test("published catalog tools expose their schema and create compact runs", async () => {
+Deno.test("catalog discovery exposes schemas and execution accepts ordinary arguments", async () => {
   let admitted: unknown;
   const services = createServices({
     tools: {
@@ -743,29 +747,39 @@ Deno.test("published catalog tools expose their schema and create compact runs",
     services,
     principal: {
       identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
-      scopes: ["tools:execute"],
+      scopes: ["tools:read", "tools:execute"],
       clientId: "client_test",
     },
   });
   const connection = await connectClient(server);
   try {
     const listed = await connection.client.listTools();
-    const executable = listed.tools.find((tool) => tool.name === TOOL.key);
+    const executable = listed.tools.find((tool) =>
+      tool.name === RELAY_MCP_TOOL_NAMES.executeTool
+    );
     assert(executable !== undefined);
-    assertEquals(executable.inputSchema, TOOL.inputSchema as unknown);
+    assert(executable.inputSchema.required?.includes("idempotencyKey"));
+    assertEquals(listed.tools.some((tool) => tool.name === TOOL.key), false);
+    const detail = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.getTool,
+      arguments: { toolKey: TOOL.key },
+    });
+    assertEquals(detail.structuredContent, { kind: "found", tool: TOOL });
 
     const missingKey = await connection.client.callTool({
-      name: TOOL.key,
-      arguments: { prompt: "mountain" },
+      name: RELAY_MCP_TOOL_NAMES.executeTool,
+      arguments: { toolKey: TOOL.key, input: { prompt: "mountain" } },
     });
     assertEquals(missingKey.isError, true);
     assertEquals(admitted, undefined);
 
     const result = await connection.client.callTool({
-      name: TOOL.key,
-      arguments: { prompt: "mountain" },
-      _meta: {
-        [RELAY_MCP_IDEMPOTENCY_META_KEY]: "mcp-test-idempotency",
+      name: RELAY_MCP_TOOL_NAMES.executeTool,
+      arguments: {
+        toolKey: TOOL.key,
+        toolVersionId: TOOL_VERSION_ID,
+        input: { prompt: "mountain" },
+        idempotencyKey: "mcp-test-idempotency",
       },
     });
     assertEquals(result.isError, undefined);
@@ -790,6 +804,254 @@ Deno.test("published catalog tools expose their schema and create compact runs",
       expectedToolVersionId: TOOL_VERSION_ID,
     });
     assertEquals(JSON.stringify(result).includes("prompt"), false);
+  } finally {
+    await connection.close();
+  }
+});
+
+Deno.test("catalog execution rejects invalid input, stale versions and conflicting retry keys before admission", async () => {
+  let admissions = 0;
+  const server = await createRelayMcpServer({
+    services: createServices({
+      tools: {
+        list: () => {
+          throw new Error("MCP discovery must not enumerate the catalog");
+        },
+        get: () => Promise.resolve({ kind: "found", tool: TOOL }),
+      },
+      runs: {
+        create: () => {
+          admissions += 1;
+          return Promise.resolve({ kind: "not_entitled" });
+        },
+      },
+    }),
+    principal: {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      scopes: ["tools:execute"],
+    },
+  });
+  const connection = await connectClient(server);
+  const args = {
+    toolKey: TOOL.key,
+    input: { prompt: "mountain" },
+    idempotencyKey: "catalog-call-0001",
+  };
+  try {
+    const listed = await connection.client.listTools();
+    assertEquals(listed.tools.some((tool) => tool.name === TOOL.key), false);
+    for (
+      const input of [{}, { prompt: 123 }, {
+        prompt: "mountain",
+        secret: "private-input",
+      }]
+    ) {
+      const result = await connection.client.callTool({
+        name: RELAY_MCP_TOOL_NAMES.executeTool,
+        arguments: { ...args, input },
+      });
+      assertEquals(result.isError, true);
+      assertEquals(
+        errorEnvelopeSchema.parse(result.structuredContent).error.code,
+        "invalid_request",
+      );
+      assertEquals(JSON.stringify(result).includes("private-input"), false);
+    }
+    const stale = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.executeTool,
+      arguments: { ...args, toolVersionId: publicId("tver", "9") },
+    });
+    assertEquals(
+      errorEnvelopeSchema.parse(stale.structuredContent).error.details.reason,
+      "version_changed",
+    );
+    for (const requestedModelVersion of ["", "a".repeat(129)]) {
+      const invalidVersion = await connection.client.callTool({
+        name: RELAY_MCP_TOOL_NAMES.executeTool,
+        arguments: { ...args, requestedModelVersion },
+      });
+      assertEquals(invalidVersion.isError, true);
+    }
+    const conflict = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.executeTool,
+      arguments: args,
+      _meta: { [RELAY_MCP_IDEMPOTENCY_META_KEY]: "different-call-0001" },
+    });
+    assertEquals(
+      errorEnvelopeSchema.parse(conflict.structuredContent).error.details.field,
+      "idempotencyKey",
+    );
+    assertEquals(admissions, 0);
+  } finally {
+    await connection.close();
+  }
+});
+
+Deno.test("catalog execution returns actionable admission errors and preserves retry keys", async () => {
+  const keys: string[] = [];
+  let outcome: CreateRunResult = { kind: "not_entitled" };
+  const server = await createRelayMcpServer({
+    services: createServices({
+      tools: { get: () => Promise.resolve({ kind: "found", tool: TOOL }) },
+      runs: {
+        create: (_identity, _request, key) => {
+          keys.push(key);
+          return Promise.resolve(outcome);
+        },
+      },
+    }),
+    principal: {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      scopes: ["tools:execute"],
+    },
+  });
+  const connection = await connectClient(server);
+  const request = {
+    name: RELAY_MCP_TOOL_NAMES.executeTool,
+    arguments: {
+      toolKey: TOOL.key,
+      input: { prompt: "mountain" },
+      idempotencyKey: "same-operation-0001",
+    },
+  };
+  try {
+    const denied = await connection.client.callTool(request);
+    assertEquals(
+      errorEnvelopeSchema.parse(denied.structuredContent).error.code,
+      "not_entitled",
+    );
+    outcome = {
+      kind: "allowance_exceeded",
+      metric: "images.generated",
+      unit: "image",
+      limitAmount: "1",
+      consumedAmount: "1",
+      reservedAmount: "0",
+      requestedAmount: "1",
+    };
+    const limited = errorEnvelopeSchema.parse(
+      (await connection.client.callTool(request)).structuredContent,
+    ).error;
+    assertEquals(limited.code, "allowance_exceeded");
+    assertEquals(limited.details.requestedAmount, "1");
+    outcome = { kind: "usage_unavailable", reason: "unavailable" };
+    const unavailable = errorEnvelopeSchema.parse(
+      (await connection.client.callTool(request)).structuredContent,
+    ).error;
+    assertEquals(unavailable.code, "dependency_unavailable");
+    assertEquals(unavailable.retryable, true);
+    outcome = {
+      kind: "accepted",
+      run: RUN,
+      queueReason: "awaiting_dispatch",
+      replayed: true,
+    };
+    const replay = await connection.client.callTool(request);
+    assertEquals(replay.isError, undefined);
+    assertEquals(
+      (replay.structuredContent as { replayed: boolean }).replayed,
+      true,
+    );
+    assertEquals(keys, Array(4).fill("same-operation-0001"));
+  } finally {
+    await connection.close();
+  }
+});
+
+Deno.test("file mutations accept argument retry keys without forwarding transport fields", async () => {
+  let received: unknown;
+  const server = await createRelayMcpServer({
+    services: createServices({
+      artifacts: {
+        createUpload: (_identity, request, key) => {
+          received = { request, key };
+          return Promise.resolve({ kind: "not_found" });
+        },
+      },
+    }),
+    principal: {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      scopes: ["artifacts:write"],
+    },
+  });
+  const connection = await connectClient(server);
+  const request = {
+    target: { kind: "new_artifact", name: "Image", mediaKind: "image" },
+    sizeBytes: 4,
+    mimeType: "image/png",
+    sha256: "a".repeat(64),
+    contentMd5: `${"A".repeat(22)}==`,
+  };
+  try {
+    const result = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.createArtifactUpload,
+      arguments: { ...request, idempotencyKey: "file-upload-0001" },
+    });
+    assertEquals(
+      errorEnvelopeSchema.parse(result.structuredContent).error.code,
+      "not_found",
+    );
+    assertEquals(received, { request, key: "file-upload-0001" });
+  } finally {
+    await connection.close();
+  }
+});
+
+Deno.test("content arguments retain access refinements and strip retry keys before storage", async () => {
+  const writes: unknown[] = [];
+  const server = await createRelayMcpServer({
+    services: {
+      ...createServices(),
+      content: {
+        upload: (_identity, request, key) => {
+          writes.push({ request, key });
+          return Promise.resolve({ kind: "not_found" });
+        },
+        access: (_identity, request, key) => {
+          writes.push({ request, key });
+          return Promise.resolve({ kind: "not_found" });
+        },
+      },
+    },
+    principal: {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      scopes: allScopes(),
+    },
+  });
+  const connection = await connectClient(server);
+  const content = {
+    name: "notes.txt",
+    mimeType: "text/plain",
+    encoding: "text",
+    content: "Notes",
+  };
+  try {
+    for (
+      const [name, args] of [
+        [RELAY_MCP_TOOL_NAMES.uploadContent, content],
+        [RELAY_MCP_TOOL_NAMES.getAccess, { artifactId: ARTIFACT_ID }],
+      ] as const
+    ) {
+      const invalidAccess = await connection.client.callTool({
+        name,
+        arguments: {
+          ...args,
+          access: "permanent",
+          expiresInSeconds: 60,
+          idempotencyKey: "content-test-0001",
+        },
+      });
+      assertEquals(invalidAccess.isError, true);
+    }
+    assertEquals(writes.length, 0);
+    await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.uploadContent,
+      arguments: { ...content, idempotencyKey: "content-test-0002" },
+    });
+    assertEquals(writes, [{
+      request: { ...content, access: "temporary" },
+      key: "content-test-0002",
+    }]);
   } finally {
     await connection.close();
   }

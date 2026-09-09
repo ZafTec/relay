@@ -124,7 +124,7 @@ export function CancelRunDialog({
           <p id="cancel-run-description">
             {state.kind === "error"
               ? state.message
-              : "Relay will ask the current work to stop. If the run reaches a terminal result first, that result wins. The cancellation request is safe to send again only after this request finishes."}
+              : "We'll ask the run to stop. It may finish before cancellation takes effect. Wait for confirmation before trying again."}
           </p>
         </div>
         <footer className="run-cancel-dialog__actions">

@@ -432,6 +432,13 @@
   width: 330px;
 }
 
+.docs-contract-table--mcp { min-width: 820px; }
+.docs-contract-table--mcp th:first-child,
+.docs-contract-table--mcp td:first-child { width: 310px; }
+.docs-contract-table--mcp td:first-child code { white-space: nowrap; }
+.docs-contract-table--mcp th:nth-child(2),
+.docs-contract-table--mcp td:nth-child(2) { width: 210px; }
+
 .docs-reference__list {
   margin-top: var(--relay-space-8);
   border: 1px solid var(--surface-border);

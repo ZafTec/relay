@@ -11,7 +11,13 @@ import {
 } from "./context.ts";
 
 export const MAX_INLINE_CONTENT_BYTES = 4 * 1024 * 1024;
-const accessOptions = {
+type AccessOptionsShape = {
+  access: z.ZodDefault<
+    z.ZodEnum<{ temporary: "temporary"; permanent: "permanent" }>
+  >;
+  expiresInSeconds: z.ZodOptional<z.ZodNumber>;
+};
+const accessOptions: AccessOptionsShape = {
   access: z.enum(["temporary", "permanent"]).default("temporary"),
   expiresInSeconds: z.number().int().min(1).max(3600).optional(),
 };
@@ -29,9 +35,14 @@ export interface ContentAccessRequest {
   access?: "temporary" | "permanent";
   expiresInSeconds?: number;
 }
-export const uploadContentSchema: z.ZodType<
-  UploadContentRequest & { access: "temporary" | "permanent" },
-  UploadContentRequest
+export const uploadContentSchema: z.ZodObject<
+  AccessOptionsShape & {
+    name: z.ZodString;
+    mimeType: z.ZodString;
+    encoding: z.ZodEnum<{ base64: "base64"; text: "text" }>;
+    content: z.ZodString;
+  },
+  z.core.$strict
 > = z.object({
   name: z.string().trim().min(1).max(255).refine(
     (value) =>
@@ -50,10 +61,16 @@ export const uploadContentSchema: z.ZodType<
   (value) =>
     value.access !== "permanent" || value.expiresInSeconds === undefined,
   "Permanent links do not expire",
-);
-export const contentAccessSchema: z.ZodType<
-  ContentAccessRequest & { access: "temporary" | "permanent" },
-  ContentAccessRequest
+) satisfies z.ZodType<
+  UploadContentRequest & { access: "temporary" | "permanent" },
+  UploadContentRequest
+>;
+export const contentAccessSchema: z.ZodObject<
+  AccessOptionsShape & {
+    artifactId: z.ZodString;
+    artifactVersionId: z.ZodOptional<z.ZodString>;
+  },
+  z.core.$strict
 > = z.object({
   artifactId: z.string().regex(PUBLIC_ID_PATTERNS.artifact),
   artifactVersionId: z.string().regex(PUBLIC_ID_PATTERNS.artifactVersion)
@@ -63,7 +80,10 @@ export const contentAccessSchema: z.ZodType<
   (value) =>
     value.access !== "permanent" || value.expiresInSeconds === undefined,
   "Permanent links do not expire",
-);
+) satisfies z.ZodType<
+  ContentAccessRequest & { access: "temporary" | "permanent" },
+  ContentAccessRequest
+>;
 export type ContentFailure = {
   kind:
     | "not_found"

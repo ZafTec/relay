@@ -657,7 +657,7 @@ describe("runs list page", () => {
     await waitFor(() => expect(eventHarness.factory).toHaveBeenCalledTimes(1));
     act(() => eventHarness.accessUnavailable());
 
-    expect(screen.getByText("Membership changed · refreshing permissions"))
+    expect(screen.getByText("Access changed · refreshing"))
       .toBeInTheDocument();
     expect(eventHarness.connection.reconnect).not.toHaveBeenCalled();
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
@@ -680,10 +680,10 @@ describe("run detail page", () => {
     );
 
     expect(await screen.findByRole("heading", { level: 1, name: runningRun.tool.name })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Current state" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Run status" })).toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(screen.getByText("Run details", { selector: ".disclosure__title" }));
-    await user.click(screen.getByText("Input and reservation"));
+    await user.click(screen.getByText("Input and usage"));
     expect(screen.getByLabelText(`Input for ${RUN_ID}`)).toHaveTextContent("test-only lighthouse");
     expect(screen.getByText("images.generated")).toBeInTheDocument();
     expect(screen.getByText("1 produced · 2 requested")).toBeInTheDocument();
@@ -735,8 +735,8 @@ describe("run detail page", () => {
       kind: "already_terminal",
       run: succeededRun,
     }));
-    expect(await screen.findByText("Run already terminal")).toBeInTheDocument();
-    expect(screen.getByText(/finished as succeeded before cancellation took effect/i))
+    expect(await screen.findByText("Run already finished")).toBeInTheDocument();
+    expect(screen.getByText(/finished before cancellation took effect.*final status is succeeded/i))
       .toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Request cancellation" }))
@@ -780,7 +780,7 @@ describe("run detail page", () => {
       kind: "already_terminal",
       run: succeededRun,
     }));
-    expect(await screen.findByText("Run already terminal")).toBeInTheDocument();
+    expect(await screen.findByText("Run already finished")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -803,7 +803,7 @@ describe("run detail page", () => {
     expect((await screen.findAllByText("Running")).length).toBeGreaterThan(0);
     await waitFor(() => expect(eventHarness.factory).toHaveBeenCalledTimes(1));
     act(() => eventHarness.state({ kind: "reconnecting", attempt: 2 }));
-    expect(screen.getByText("Reconnecting · attempt 2")).toBeInTheDocument();
+    expect(screen.getByText("Reconnecting…")).toBeInTheDocument();
 
     act(() => eventHarness.event(workspaceEvent("1", {
       type: "run.status_changed",
@@ -815,7 +815,7 @@ describe("run detail page", () => {
 
     act(() => eventHarness.resynchronize("1"));
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
-    expect(screen.getByText("Resynchronized · durable state refreshed")).toBeInTheDocument();
+    expect(screen.getByText("Live updates restored")).toBeInTheDocument();
     expect(screen.getAllByText("Running").length).toBeGreaterThan(0);
 
     act(() => eventHarness.event(workspaceEvent("2", {

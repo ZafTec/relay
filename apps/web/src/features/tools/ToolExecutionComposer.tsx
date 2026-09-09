@@ -11,6 +11,7 @@ import { Button, LinkButton } from "../../components/ui/Button";
 import { InlineNotice } from "../../components/ui/InlineNotice";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { StatusBadge } from "../../components/ui/StatusBadge";
+import { RunStatusBadge } from "../runs/run-display";
 import type {
   ArtifactSummary,
   ArtifactsAdapter,
@@ -196,11 +197,11 @@ function createRunIdempotencyKey(toolKey: ProductionToolKey): string {
 function queueReasonLabel(reason: RunQueueReason | null): string {
   switch (reason) {
     case "awaiting_dispatch":
-      return "Awaiting dispatch";
+      return "Waiting to start";
     case "capacity_wait":
       return "Waiting for capacity";
     case "retry_backoff":
-      return "Retry backoff";
+      return "Waiting to retry";
     case null:
       return "Accepted";
   }
@@ -1668,6 +1669,36 @@ function OcrComposer({
   );
 }
 
+function AcceptedRunFeedback({ result }: {
+  readonly result: Extract<VisibleRunResult, { readonly kind: "accepted" }>;
+}) {
+  const feedbackRef = useRef<HTMLDivElement>(null);
+  const headingId = useId();
+
+  useEffect(() => {
+    const feedback = feedbackRef.current;
+    if (!feedback) return;
+    feedback.focus({ preventScroll: true });
+    // An instant move keeps keyboard use and reduced-motion preferences comfortable.
+    feedback.scrollIntoView({ block: "start", behavior: "instant" });
+  }, [result]);
+
+  return (
+    <div ref={feedbackRef} className="tool-run-accepted" tabIndex={-1} role="region" aria-labelledby={headingId}>
+      <div className="tool-run-accepted__heading">
+        <span className="tool-run-accepted__check" aria-hidden="true">✓</span>
+        <h3 id={headingId}>{result.replayed ? "Run already created" : "Run accepted"}</h3>
+        <RunStatusBadge status={result.run.status} />
+      </div>
+      <p>{result.replayed
+        ? "Your earlier request was successful. No duplicate run was created."
+        : "Your request is saved. Open the run to follow progress and see your results."}</p>
+      {result.queueReason === null ? null : <p className="tool-run-accepted__queue">{queueReasonLabel(result.queueReason)}</p>}
+      <LinkButton to={`/dashboard/runs/${encodeURIComponent(result.run.id)}`} endGlyph="→">View run</LinkButton>
+    </div>
+  );
+}
+
 function SubmissionFeedback({
   pendingOperation,
   state,
@@ -1681,8 +1712,8 @@ function SubmissionFeedback({
   if (state.kind === "submitting") {
     return (
       <div className="tool-run-feedback" role="status" aria-live="polite">
-        <strong>{state.exactRetry ? "Retrying exact request" : "Submitting run"}</strong>
-        <p>No automatic retry will be attempted.</p>
+        <strong>{state.exactRetry ? "Retrying your request" : "Creating your run"}</strong>
+        <p>Waiting for confirmation…</p>
       </div>
     );
   }
@@ -1690,31 +1721,15 @@ function SubmissionFeedback({
   const result = state.result;
   switch (result.kind) {
     case "accepted":
-      return (
-        <InlineNotice
-          title={result.replayed ? "Stored run replayed" : "Run accepted"}
-          tone="success"
-          action={
-            <LinkButton variant="outline" to={`/dashboard/runs/${encodeURIComponent(result.run.id)}`}>
-              Open run
-            </LinkButton>
-          }
-        >
-          <p>
-            {result.replayed
-              ? "Relay returned the run already bound to this exact request; no duplicate run was created."
-              : `Run status: ${result.run.status}. Queue state: ${queueReasonLabel(result.queueReason)}.`}
-          </p>
-        </InlineNotice>
-      );
+      return <AcceptedRunFeedback result={result} />;
     case "unknown-outcome":
       return (
         <InlineNotice
-          title="Run outcome unknown"
+          title="Still waiting for confirmation"
           tone="warning"
           action={
             <Button type="button" onClick={onRetry} disabled={pendingOperation === null}>
-              Retry exact request
+              Retry request
             </Button>
           }
         >
@@ -1724,7 +1739,7 @@ function SubmissionFeedback({
             : <p>{retryAfterCopy(result.retryAfterSeconds)}</p>}
           {pendingOperation === null
             ? null
-            : <p>Stable request key: <code>{pendingOperation.idempotencyKey}</code></p>}
+            : <p>Your inputs are saved. Retrying will check the same request without creating a duplicate.</p>}
         </InlineNotice>
       );
     case "queue-full":
@@ -1739,7 +1754,7 @@ function SubmissionFeedback({
     case "not-entitled":
       return (
         <InlineNotice title="Tool access required" tone="warning">
-          <p>The active workspace is not entitled to execute this tool.</p>
+          <p>This workspace does not have access to run this tool. Ask an administrator to enable access.</p>
         </InlineNotice>
       );
     case "allowance-exceeded":
@@ -1757,28 +1772,28 @@ function SubmissionFeedback({
     case "tool-unavailable":
       return (
         <InlineNotice title="Tool temporarily unavailable" tone="warning">
-          <p>Relay cannot admit this tool right now. The request was not accepted.</p>
+          <p>This tool cannot start a run right now. Please try again later.</p>
         </InlineNotice>
       );
     case "idempotency-conflict":
       return (
-        <InlineNotice title="Request key conflict" tone="error">
-          <p>The stable request key is bound to different content. The frozen request cannot be retried.</p>
+        <InlineNotice title="Request could not be reused" tone="error">
+          <p>This request was already used with different inputs. Review your inputs and create a new run.</p>
         </InlineNotice>
       );
     case "not_found":
       return (
         <InlineNotice title="Tool no longer available" tone="error">
-          <p>Relay could not find this tool during admission. Reload the catalog before submitting again.</p>
+          <p>This tool is no longer available. Return to Tools and choose another.</p>
         </InlineNotice>
       );
     case "degraded":
       return (
         <InlineNotice
-          title={result.retryable ? "Run admission unavailable" : "Run not created"}
+          title={result.retryable ? "Could not start the run" : "Run not created"}
           tone="error"
           action={result.retryable && pendingOperation !== null
-            ? <Button type="button" onClick={onRetry}>Retry exact request</Button>
+            ? <Button type="button" onClick={onRetry}>Retry request</Button>
             : undefined}
         >
           <p>{result.message}</p>
@@ -1786,7 +1801,7 @@ function SubmissionFeedback({
             ? null
             : <p>{retryAfterCopy(result.retryAfterSeconds ?? null)}</p>}
           {result.retryable && pendingOperation !== null
-            ? <p>Stable request key: <code>{pendingOperation.idempotencyKey}</code></p>
+            ? <p>Your inputs are saved. Retrying will check the same request without creating a duplicate.</p>
             : null}
         </InlineNotice>
       );
@@ -1795,7 +1810,7 @@ function SubmissionFeedback({
 
 function composerBadge(state: SubmissionState, exactRequestPending: boolean) {
   if (state.kind === "submitting") return <StatusBadge tone="pending">Submitting</StatusBadge>;
-  if (exactRequestPending) return <StatusBadge tone="warning">Retry locked</StatusBadge>;
+  if (exactRequestPending) return <StatusBadge tone="warning">Confirmation pending</StatusBadge>;
   if (state.kind === "result" && state.result.kind === "accepted") {
     return <StatusBadge tone="ready">Accepted</StatusBadge>;
   }
@@ -1831,7 +1846,7 @@ export function ToolExecutionComposer({
       result = {
         kind: "unknown-outcome",
         message:
-          "Relay could not confirm whether the run was accepted. Retry only this exact frozen request with the same idempotency key.",
+          "We couldn't confirm whether your run was created. Use Retry request to check again with your saved inputs.",
         retryable: true,
         retryMode: "exact-request",
         retryAfterSeconds: null,
@@ -1865,8 +1880,8 @@ export function ToolExecutionComposer({
         result: {
           kind: "degraded",
           message: error instanceof Error
-            ? `Relay could not prepare a stable run request. ${error.message}`
-            : "Relay could not prepare a stable run request in this browser.",
+            ? `Could not prepare your run. ${error.message}`
+            : "Could not prepare your run in this browser. Please reload and try again.",
           retryable: false,
           retryAfterSeconds: null,
         },

@@ -55,15 +55,15 @@
    The public marketing surface stays on its paper palette in both modes. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --relay-product-bg: #141A16;
-    --relay-product-rail: #121815;
-    --relay-product-surface: #1D251F;
-    --relay-product-surface-2: #2E3830;
-    --relay-product-border: #2E3830;
-    --relay-product-border-strong: #414D45;
-    --relay-product-ink: #F5F4ED;
-    --relay-product-ink-secondary: #B4C0B6;
-    --relay-product-ink-muted: #8E9A92;
+    --relay-product-bg: #0F1010;
+    --relay-product-rail: #0C0D0D;
+    --relay-product-surface: #171919;
+    --relay-product-surface-2: #232626;
+    --relay-product-border: #2B2E2E;
+    --relay-product-border-strong: #484C4C;
+    --relay-product-ink: #EDEEEE;
+    --relay-product-ink-secondary: #B7BDBD;
+    --relay-product-ink-muted: #929B9B;
     --relay-product-accent: #63C8BC;
     --relay-product-accent-hover: #86D6CD;
   }

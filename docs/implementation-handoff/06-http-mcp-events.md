@@ -190,11 +190,12 @@ file payloads.
 
 ## MCP tools
 
-Management tools remain stable and typed, for example:
+MCP tools remain stable and typed across changes to the catalog, for example:
 
 ```text
 relay.tools.list
 relay.tools.get
+relay.tools.execute
 relay.runs.get
 relay.runs.list
 relay.runs.cancel
@@ -205,8 +206,14 @@ relay.artifacts.create_share_link
 relay.artifacts.revoke_share_link
 ```
 
-Executable published catalog tools are exposed with their actual typed schemas.
-A generic raw-JSON executor is not the only image-generation interface.
+Published models are catalog entries rather than individually registered MCP
+tools. `relay.tools.get` returns the real input/output schemas and active version.
+`relay.tools.execute` validates `input` against that schema, then uses the same
+run admission service as HTTP. Its required arguments are `toolKey`, `input`, and
+`idempotencyKey`; optional `toolVersionId` pins the inspected contract. Ordinary
+arguments work in clients that cannot attach custom MCP metadata, including
+Claude. File/admin operations also accept argument keys while retaining legacy
+metadata support. Conflicting keys are rejected before mutation.
 
 Exact names remain a contract decision. v3 fixture names such as
 `relay.run_tool` are not automatically authoritative.

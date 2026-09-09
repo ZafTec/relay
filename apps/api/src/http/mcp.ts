@@ -13,11 +13,7 @@ import type {
   ProtectMcpOptions,
 } from "@relay/auth";
 import type { ApplicationServices } from "@relay/application";
-import {
-  getToolResultSchema,
-  RELAY_MCP_WORKSPACE_SCOPES,
-  TOOL_KEY_PATTERN,
-} from "@relay/contracts";
+import { RELAY_MCP_WORKSPACE_SCOPES } from "@relay/contracts";
 import {
   createRelayMcpServer,
   RELAY_MCP_ADMIN_TOOL_SCOPES,
@@ -281,11 +277,9 @@ async function boundedJsonRequest(
   };
 }
 
-async function requiredScopesForBody(
+function requiredScopesForBody(
   body: unknown,
-  services: ApplicationServices,
-  principal: AuthorizedMcpPrincipal,
-): Promise<readonly string[]> {
+): readonly string[] {
   if (body === null || typeof body !== "object" || Array.isArray(body)) {
     return [];
   }
@@ -316,21 +310,7 @@ async function requiredScopesForBody(
     }
     return management;
   }
-  if (name.length > 128 || !TOOL_KEY_PATTERN.test(name)) return [];
-  try {
-    const result = getToolResultSchema.parse(
-      await services.tools.get(
-        {
-          workspaceId: principal.workspaceId,
-          actorUserId: principal.actorUserId,
-        },
-        name,
-      ),
-    );
-    return result.kind === "found" ? ["tools:execute"] : [];
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 function accessToken(request: Request): string | null {
@@ -426,10 +406,8 @@ export function createRelayMcpHttpHandler(
           if (principal === null) {
             return jsonRpcError(403, INVALID_REQUEST, "MCP access denied");
           }
-          const requiredScopes = await requiredScopesForBody(
+          const requiredScopes = requiredScopesForBody(
             bounded.parsedBody,
-            options.services,
-            principal,
           );
           options.auth.requireMcpScopes(principal.scopes, requiredScopes);
           const token = accessToken(protectedRequest);
