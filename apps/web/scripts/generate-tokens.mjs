@@ -12,8 +12,26 @@ function cssDuration(value, tokenName) {
 }
 
 const product = source.color.product;
+const productLight = product.light;
 const publicSurface = source.color.public;
 const spaces = source.space.scale;
+
+function productVariableLines(tokens) {
+  return [
+    ["--relay-product-bg", tokens.bg.value],
+    ["--relay-product-rail", tokens["bg-rail"].value],
+    ["--relay-product-surface", tokens.surface.value],
+    ["--relay-product-surface-2", tokens["surface-2"].value],
+    ["--relay-product-border", tokens.border.value],
+    ["--relay-product-border-strong", tokens["border-strong"].value],
+    ["--relay-product-ink", tokens.ink.value],
+    ["--relay-product-ink-secondary", tokens["ink-secondary"].value],
+    ["--relay-product-ink-muted", tokens["ink-muted"].value],
+    ["--relay-product-accent", tokens.accent.value],
+    ["--relay-product-accent-hover", tokens["accent-hover"].value],
+  ];
+}
+
 const variableLines = [
   ["--relay-public-paper", publicSurface.paper.value],
   ["--relay-public-paper-2", publicSurface["paper-2"].value],
@@ -25,17 +43,7 @@ const variableLines = [
   ["--relay-public-accent", publicSurface.accent.value],
   ["--relay-public-accent-hover", publicSurface["accent-hover"].value],
   ["--relay-public-invert", publicSurface.invert.value],
-  ["--relay-product-bg", product.bg.value],
-  ["--relay-product-rail", product["bg-rail"].value],
-  ["--relay-product-surface", product.surface.value],
-  ["--relay-product-surface-2", product["surface-2"].value],
-  ["--relay-product-border", product.border.value],
-  ["--relay-product-border-strong", product["border-strong"].value],
-  ["--relay-product-ink", product.ink.value],
-  ["--relay-product-ink-secondary", product["ink-secondary"].value],
-  ["--relay-product-ink-muted", product["ink-muted"].value],
-  ["--relay-product-accent", product.accent.value],
-  ["--relay-product-accent-hover", product["accent-hover"].value],
+  ...productVariableLines(productLight),
   ["--relay-font-sans", source.typography.families.sans.stack],
   ["--relay-font-mono", source.typography.families.mono.stack],
   ["--relay-radius", source.radius.all],
@@ -52,9 +60,14 @@ const variableLines = [
   ...spaces.map((space, index) => [`--relay-space-${index + 1}`, `${space}px`]),
 ];
 
-const generated = `/* Generated from the approved Relay v3 token copy. Do not edit by hand. */\n:root {\n${variableLines
-  .map(([name, value]) => `  ${name}: ${value};`)
-  .join("\n")}\n}\n`;
+const darkProductLines = productVariableLines(product);
+const generated = `/* Generated from the approved Relay v3 token copy. Do not edit by hand. */\n`
+  + `:root {\n${variableLines.map(([name, value]) => `  ${name}: ${value};`).join("\n")}\n}\n\n`
+  + `/* The product surface (dashboard, admin) follows the viewer's OS/browser color-scheme preference.\n`
+  + `   The public marketing surface stays on its paper palette in both modes. */\n`
+  + `@media (prefers-color-scheme: dark) {\n  :root {\n${darkProductLines
+    .map(([name, value]) => `    ${name}: ${value};`)
+    .join("\n")}\n  }\n}\n`;
 
 if (process.argv.includes("--check")) {
   const existing = await readFile(outputUrl, "utf8").catch(() => "");

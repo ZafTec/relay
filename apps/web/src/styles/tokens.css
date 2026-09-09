@@ -10,17 +10,17 @@
   --relay-public-accent: #1F776E;
   --relay-public-accent-hover: #145B54;
   --relay-public-invert: #141A16;
-  --relay-product-bg: #141A16;
-  --relay-product-rail: #121815;
-  --relay-product-surface: #1D251F;
-  --relay-product-surface-2: #2E3830;
-  --relay-product-border: #2E3830;
-  --relay-product-border-strong: #414D45;
-  --relay-product-ink: #F5F4ED;
-  --relay-product-ink-secondary: #B4C0B6;
-  --relay-product-ink-muted: #8E9A92;
-  --relay-product-accent: #63C8BC;
-  --relay-product-accent-hover: #86D6CD;
+  --relay-product-bg: #F3F5F3;
+  --relay-product-rail: #EAEEEB;
+  --relay-product-surface: #FFFFFF;
+  --relay-product-surface-2: #E1E7E3;
+  --relay-product-border: #DCE3DF;
+  --relay-product-border-strong: #C4CDC7;
+  --relay-product-ink: #141A16;
+  --relay-product-ink-secondary: #46514B;
+  --relay-product-ink-muted: #5F6B64;
+  --relay-product-accent: #1F776E;
+  --relay-product-accent-hover: #145B54;
   --relay-font-sans: "Plus Jakarta Sans", "Segoe UI", sans-serif;
   --relay-font-mono: "JetBrains Mono", ui-monospace, monospace;
   --relay-radius: 0;
@@ -49,4 +49,22 @@
   --relay-space-13: 64px;
   --relay-space-14: 88px;
   --relay-space-15: 104px;
+}
+
+/* The product surface (dashboard, admin) follows the viewer's OS/browser color-scheme preference.
+   The public marketing surface stays on its paper palette in both modes. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --relay-product-bg: #141A16;
+    --relay-product-rail: #121815;
+    --relay-product-surface: #1D251F;
+    --relay-product-surface-2: #2E3830;
+    --relay-product-border: #2E3830;
+    --relay-product-border-strong: #414D45;
+    --relay-product-ink: #F5F4ED;
+    --relay-product-ink-secondary: #B4C0B6;
+    --relay-product-ink-muted: #8E9A92;
+    --relay-product-accent: #63C8BC;
+    --relay-product-accent-hover: #86D6CD;
+  }
 }
