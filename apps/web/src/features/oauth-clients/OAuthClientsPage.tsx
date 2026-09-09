@@ -7,6 +7,7 @@ import { InlineNotice } from "../../components/ui/InlineNotice";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { type ManagedOAuthClient, type OAuthClientCredentials, oauthClientError, oauthClients } from "../../lib/api/oauth-clients";
 import { ApiError } from "../../lib/api/client";
+import { checkAdminAccess } from "../../lib/api/admin-access";
 import { useAdminChangelog } from "../admin-changelog/AdminChangelogContext";
 import "./oauth-clients.css";
 
@@ -67,6 +68,7 @@ function ClientManager() {
   const [authMethod, setAuthMethod] = useState<"client_secret_post" | "client_secret_basic" | "none">("client_secret_post");
   const [credentials, setCredentials] = useState<OAuthClientCredentials | null>(null);
   const [confirm, setConfirm] = useState<{ client: ManagedOAuthClient; action: "rotate" | "delete" } | null>(null);
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const endpoint = new URL("/mcp", window.location.origin).href;
 
@@ -94,6 +96,13 @@ function ClientManager() {
     return () => { alive.current = false; controller.abort(); };
   }, []);
   useEffect(() => { if (credentials) heading.current?.focus(); }, [credentials]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void checkAdminAccess(controller.signal).then((result) => {
+      if (!controller.signal.aborted) setIsSuperadmin(result.kind === "ok");
+    }).catch(() => { if (!controller.signal.aborted) setIsSuperadmin(false); });
+    return () => controller.abort();
+  }, [sessionId]);
 
   async function change(action: () => Promise<OAuthClientCredentials | void>) {
     if (busyRef.current || mustRefresh) return;
@@ -145,7 +154,7 @@ function ClientManager() {
       <label>Redirect URLs<textarea required rows={3} value={redirects} onChange={(event) => setRedirects(event.target.value)} aria-describedby="redirect-help" placeholder="https://agent.example.com/oauth/callback" /></label>
       <p id="redirect-help">Copy the redirect URI from your agent’s setup screen. Enter one exact URL per line.</p>
       <fieldset><legend>Allowed permissions</legend><p>The agent still needs your consent. Running tools also requires a workspace usage allowance.</p><div className="oauth-permissions">{permissions.map(([scope, label]) => <label key={scope}><input type="checkbox" checked={scopes.includes(scope)} onChange={(event) => setScopes((current) => event.target.checked ? [...current, scope] : current.filter((value) => value !== scope))} />{label}</label>)}</div></fieldset>
-      <details><summary>Platform admin permissions</summary><p>These permissions require a current superadmin to opt in during consent. They never bypass workspace usage allowances.</p><div className="oauth-permissions">{["allowances", "capacity", "superadmins", "changelog", "oauth"].flatMap((area) => ["read", "write"].map((action) => { const scope = `admin:${area}:${action}`; return <label key={scope}><input type="checkbox" checked={scopes.includes(scope)} onChange={(event) => setScopes((current) => event.target.checked ? [...current, scope] : current.filter((value) => value !== scope))} />{describeScope(scope).title}</label>; }))}</div></details>
+      {isSuperadmin ? <details><summary>Platform admin permissions</summary><p>You have superadmin access, so this client can request platform-wide permissions. They still need your consent at connection time and never bypass workspace usage allowances.</p><div className="oauth-permissions">{["allowances", "capacity", "superadmins", "changelog", "oauth"].flatMap((area) => ["read", "write"].map((action) => { const scope = `admin:${area}:${action}`; return <label key={scope}><input type="checkbox" checked={scopes.includes(scope)} onChange={(event) => setScopes((current) => event.target.checked ? [...current, scope] : current.filter((value) => value !== scope))} />{describeScope(scope).title}</label>; }))}</div></details> : null}
       <details><summary>Client authentication</summary><label>Token authentication<select value={authMethod} onChange={(event) => setAuthMethod(event.target.value as typeof authMethod)}><option value="client_secret_post">Client secret in request body</option><option value="client_secret_basic">Client secret with HTTP Basic</option><option value="none">Public client — PKCE, no secret</option></select></label><p>Use the method your agent supports. All clients must use PKCE with S256.</p></details>
       <div className="oauth-form-actions"><Button type="submit" disabled={mustRefresh} pending={busy} pendingLabel="Creating client">Create client</Button><Button variant="quiet" disabled={busy} onClick={() => setEditing(false)}>Cancel</Button></div>
     </form> : null}
