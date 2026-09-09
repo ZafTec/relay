@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { App, createRelayMemoryRouter } from "../../src/app/App";
 import { createTestAuthAdapter } from "../../src/auth/test-adapter";
@@ -33,10 +34,11 @@ it("hides platform admin permissions from a non-superadmin creating a client", a
     if (path === "/api/auth/oauth2/get-clients") return Response.json([]);
     return Response.json({ error: { code: "authorization_denied" } }, { status: 403 });
   }));
+  const user = userEvent.setup();
   render(<App adapter={adapter()} router={createRelayMemoryRouter(["/dashboard/oauth-clients"])} />);
   const createButton = await screen.findByRole("button", { name: "Create client", exact: true });
   await waitFor(() => expect(createButton).toBeEnabled());
-  createButton.click();
+  await user.click(createButton);
   expect(await screen.findByRole("heading", { name: "Create an OAuth client" })).toBeInTheDocument();
   expect(screen.queryByText("Platform admin permissions")).not.toBeInTheDocument();
 });
@@ -48,10 +50,11 @@ it("shows platform admin permissions to a confirmed superadmin creating a client
     if (path === "/api/auth/oauth2/get-clients") return Response.json([]);
     return Response.json({ error: { code: "authorization_denied" } }, { status: 403 });
   }));
+  const user = userEvent.setup();
   render(<App adapter={adapter()} router={createRelayMemoryRouter(["/dashboard/oauth-clients"])} />);
   const createButton = await screen.findByRole("button", { name: "Create client", exact: true });
   await waitFor(() => expect(createButton).toBeEnabled());
-  createButton.click();
+  await user.click(createButton);
   expect(await screen.findByText("Platform admin permissions")).toBeInTheDocument();
 });
 
