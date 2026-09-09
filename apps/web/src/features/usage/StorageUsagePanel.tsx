@@ -8,15 +8,15 @@ import type {
   StorageUsageResult,
 } from "../../lib/api/storage-usage";
 
-const BYTE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
+const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB", "EB"];
 const INTEGER_FORMAT = new Intl.NumberFormat("en-US");
 
 export function formatStorageBytes(value: string): string {
   const count = BigInt(value);
   let divisor = 1n;
   let unit = 0;
-  while (unit < BYTE_UNITS.length - 1 && count >= divisor * 1024n) {
-    divisor *= 1024n;
+  while (unit < BYTE_UNITS.length - 1 && count >= divisor * 1000n) {
+    divisor *= 1000n;
     unit++;
   }
   if (unit === 0) return `${INTEGER_FORMAT.format(count)} B`;
@@ -92,7 +92,7 @@ export function StorageUsagePanel({ adapter, reloadKey }: {
             <p className="usage-storage__available">
               {storage.availableBytes === null ? "No storage cap" : (
                 <>
-                  <ByteValue value={storage.availableBytes} />{" "}available
+                  <ByteValue value={storage.availableBytes} /> available
                 </>
               )}
             </p>
@@ -189,13 +189,13 @@ export function StorageUsagePanel({ adapter, reloadKey }: {
               ? (
                 <p className="usage-storage__limit" role="status">
                   Storage capacity reached. Space becomes available after files
-                  are permanently removed or the limit is increased.
+                  are permanently removed.
                 </p>
               )
               : null}
             <p className="usage-storage__note">
               Space is freed after cleanup finishes. Storage is separate from
-              tool usage below.
+              tool usage.
             </p>
           </>
         )

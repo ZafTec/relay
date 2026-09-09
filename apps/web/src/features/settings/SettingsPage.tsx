@@ -49,10 +49,10 @@ function AuthorizationWorkspace({ state }: AuthorizationWorkspaceProps) {
   if (state.status === "ready") {
     return (
       <div className="settings-mcp__binding">
-        <span>New authorization target</span>
+        <span>Workspace to connect</span>
         <strong>{state.workspace.name}</strong>
         <code>@{state.workspace.slug}</code>
-        <p>Relay records this workspace in the access token and rechecks membership.</p>
+        <p>Your agent can access only the workspace you approve.</p>
       </div>
     );
   }
@@ -60,7 +60,7 @@ function AuthorizationWorkspace({ state }: AuthorizationWorkspaceProps) {
   if (state.status === "empty") {
     return (
       <div className="settings-mcp__binding">
-        <span>New authorization target</span>
+        <span>Workspace to connect</span>
         <strong>No active workspace</strong>
         <p>Selecting an active workspace is required before MCP authorization can complete.</p>
       </div>
@@ -70,7 +70,7 @@ function AuthorizationWorkspace({ state }: AuthorizationWorkspaceProps) {
   if (state.status === "degraded") {
     return (
       <div className="settings-mcp__binding">
-        <span>New authorization target</span>
+        <span>Workspace to connect</span>
         <strong>Workspace unavailable</strong>
         <p>Retry the workspace context before starting a new MCP authorization.</p>
       </div>
@@ -79,7 +79,7 @@ function AuthorizationWorkspace({ state }: AuthorizationWorkspaceProps) {
 
   return (
     <div className="settings-mcp__binding">
-      <span>New authorization target</span>
+      <span>Workspace to connect</span>
       <strong>Resolving active workspace</strong>
       <p>Relay must verify the workspace before MCP authorization can complete.</p>
     </div>

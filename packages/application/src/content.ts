@@ -1,4 +1,6 @@
 import { z } from "zod/v4";
+import { fetchRemoteContent } from "./remote-content.ts";
+export { RemoteContentError } from "./remote-content.ts";
 import { PUBLIC_ID_PATTERNS } from "@relay/contracts";
 import type {
   ArtifactCommandApplicationService,
@@ -21,6 +23,19 @@ const accessOptions: AccessOptionsShape = {
   access: z.enum(["temporary", "permanent"]).default("temporary"),
   expiresInSeconds: z.number().int().min(1).max(3600).optional(),
 };
+export const importUrlSchema: z.ZodObject<
+  AccessOptionsShape & { url: z.ZodString; name: z.ZodOptional<z.ZodString> },
+  z.core.$strict
+> = z.object({
+  url: z.string().url().max(4096),
+  name: z.string().trim().min(1).max(255).optional(),
+  ...accessOptions,
+}).strict().refine(
+  (value) =>
+    value.access !== "permanent" || value.expiresInSeconds === undefined,
+  "Permanent links do not expire",
+);
+export type ImportUrlRequest = z.input<typeof importUrlSchema>;
 export interface UploadContentRequest {
   name: string;
   mimeType: string;
@@ -106,6 +121,11 @@ export interface ContentAccess {
 }
 export type ContentAccessResult = ContentAccess | ContentFailure;
 export interface ContentApplicationService {
+  importUrl?(
+    context: WorkspaceActorContext,
+    request: ImportUrlRequest,
+    idempotencyKey: string,
+  ): Promise<ContentAccessResult>;
   upload(
     context: WorkspaceActorContext,
     request: UploadContentRequest,
@@ -180,6 +200,7 @@ export function createContentService(
   uploadPort: ContentUploadPort,
   artifacts: ArtifactCommandApplicationService & ArtifactReadApplicationService,
   appOrigin: string,
+  loadUrl: typeof fetchRemoteContent = fetchRemoteContent,
 ): ContentApplicationService {
   const origin = new URL(appOrigin).origin;
   async function access(
@@ -231,6 +252,44 @@ export function createContentService(
   }
   return {
     access,
+    async importUrl(context, raw, idempotencyKey) {
+      validateWorkspaceActorContext(context);
+      const request = importUrlSchema.parse(raw);
+      const key = await contentKey(idempotencyKey);
+      const file = await loadUrl(request.url);
+      const name = request.name ?? file.name;
+      // Reuse filename and MIME validation without passing downloaded bytes as inline content.
+      uploadContentSchema.parse({
+        name,
+        mimeType: file.mimeType,
+        encoding: "text",
+        content: "",
+      });
+      const mediaKind =
+        ["image", "audio", "video"].includes(file.mimeType.split("/")[0])
+          ? file.mimeType.split("/")[0]
+          : "document";
+      const result = await uploadPort.uploadContent({
+        ...context,
+        name,
+        mimeType: file.mimeType,
+        mediaKind,
+        bytes: file.bytes,
+        idempotencyKey: key,
+        metadata: {
+          requestedAccess: request.access,
+          expiresInSeconds: request.expiresInSeconds ?? null,
+          source: "url",
+        },
+      });
+      if (result.kind !== "completed") return result;
+      return await access(context, {
+        artifactId: result.artifactId,
+        artifactVersionId: result.artifactVersionId,
+        access: request.access,
+        expiresInSeconds: request.expiresInSeconds,
+      }, idempotencyKey);
+    },
     async upload(context, raw, idempotencyKey) {
       validateWorkspaceActorContext(context);
       const request = uploadContentSchema.parse(raw);

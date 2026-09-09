@@ -681,22 +681,38 @@ export function loadWorkerS3Config(
 }
 
 /** Loads byte, TTL, purge, and maintenance limits used by artifact processes. */
+export const WORKSPACE_STORAGE_CAP_BYTES = 100_000_000;
+
 export function loadArtifactLifecycleConfig(
   env: ConfigEnv = readProcessEnvironment(ARTIFACT_ENVIRONMENT_VARIABLES),
 ): ArtifactLifecycleConfig {
-  const workspaceMaxBytes = readConfigInteger(
+  const configuredWorkspaceMaxBytes = readConfigInteger(
     "ARTIFACT_WORKSPACE_MAX_BYTES",
     env.ARTIFACT_WORKSPACE_MAX_BYTES,
-    { min: 1, max: Number.MAX_SAFE_INTEGER },
-  );
-  const maxUploadBytes = readConfigInteger(
-    "ARTIFACT_MAX_UPLOAD_BYTES",
-    env.ARTIFACT_MAX_UPLOAD_BYTES,
     {
-      fallback: Math.min(workspaceMaxBytes, DEFAULT_ARTIFACT_MAX_UPLOAD_BYTES),
+      fallback: WORKSPACE_STORAGE_CAP_BYTES,
       min: 1,
-      max: Math.min(workspaceMaxBytes, MAX_ARTIFACT_UPLOAD_BYTES),
+      max: Number.MAX_SAFE_INTEGER,
     },
+  );
+  const workspaceMaxBytes = Math.min(
+    configuredWorkspaceMaxBytes,
+    WORKSPACE_STORAGE_CAP_BYTES,
+  );
+  const maxUploadBytes = Math.min(
+    workspaceMaxBytes,
+    readConfigInteger(
+      "ARTIFACT_MAX_UPLOAD_BYTES",
+      env.ARTIFACT_MAX_UPLOAD_BYTES,
+      {
+        fallback: Math.min(
+          workspaceMaxBytes,
+          DEFAULT_ARTIFACT_MAX_UPLOAD_BYTES,
+        ),
+        min: 1,
+        max: Math.min(configuredWorkspaceMaxBytes, MAX_ARTIFACT_UPLOAD_BYTES),
+      },
+    ),
   );
 
   return Object.freeze({

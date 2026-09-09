@@ -11,6 +11,10 @@ import {
   type RelayMcpAdminOperation,
 } from "@relay/mcp";
 import pg from "pg";
+import { Client } from "@modelcontextprotocol/client";
+import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server";
+import { getPublishedChangelogBySlug } from "@relay/changelog";
+import { registerRelayAdminTools } from "../../../../packages/mcp/src/admin-tools.ts";
 import { TEST_AUTH_CONFIG } from "../../../../packages/auth/src/test-utils.ts";
 import {
   CANONICAL_SQL as INVITATION_LIST_SQL,
@@ -26,6 +30,97 @@ import { createMcpAdminServices } from "./mcp-admin-services.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
 const ownerUrl = Deno.env.get("AUTH_SECURITY_TEST_DATABASE_URL");
+
+Deno.test({
+  name:
+    "admin MCP creates and publishes a reviewed changelog revision visible to public readers",
+  ignore: !databaseUrl || !ownerUrl,
+  fn: async () => {
+    const live = await fixture();
+    const server = new McpServer({ name: "changelog-live", version: "1.0.0" });
+    registerRelayAdminTools(server, live.services, {
+      actorUserId: live.users[0],
+      adminSessionId: live.sessions[0],
+      scopes: ["admin:changelog:read", "admin:changelog:write"],
+    });
+    const client = new Client({ name: "admin-agent", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport
+      .createLinkedPair();
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    const slug = `mcp-release-${crypto.randomUUID()}`;
+    try {
+      const draft = {
+        version: `0.0.0-${slug}`,
+        slug,
+        title: "Clearer file previews",
+        summary: "Preview saved images directly in Relay.",
+        gitTag: `v0.0.0-${slug}`,
+        commitSha: "a".repeat(40),
+        releasedAt: new Date().toISOString(),
+        items: [{
+          category: "added",
+          area: "Files",
+          title: "Private previews",
+          description: "View images while keeping files private.",
+          sortOrder: 0,
+        }],
+      };
+      const created = await client.callTool({
+        name: "relay.admin.changelog.create",
+        arguments: { draft, idempotencyKey: crypto.randomUUID() },
+      });
+      assertEquals(created.isError, undefined);
+      const result = (created.structuredContent as Record<string, unknown>)
+        ?.result as {
+          kind: string;
+          releaseId: string;
+          revision: number;
+        };
+      assertEquals(result.kind, "created");
+      assertEquals(await getPublishedChangelogBySlug(live.pool, slug), null);
+      const args = {
+        releaseId: result.releaseId,
+        expectedRevision: result.revision,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const published = await client.callTool({
+        name: "relay.admin.changelog.publish",
+        arguments: args,
+      });
+      assertEquals(published.isError, undefined);
+      assertEquals(
+        (await getPublishedChangelogBySlug(live.pool, slug))?.title,
+        draft.title,
+      );
+      const replay = await client.callTool({
+        name: "relay.admin.changelog.publish",
+        arguments: args,
+      });
+      assertEquals(replay.isError, undefined);
+      assertEquals(
+        ((replay.structuredContent as Record<string, unknown>)?.result as {
+          replayed: boolean;
+        }).replayed,
+        true,
+      );
+      const removed = await client.callTool({
+        name: "relay.admin.changelog.unpublish",
+        arguments: {
+          releaseId: result.releaseId,
+          expectedPublishedRevision: result.revision,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      });
+      assertEquals(removed.isError, undefined);
+      assertEquals(await getPublishedChangelogBySlug(live.pool, slug), null);
+    } finally {
+      await client.close();
+      await server.close();
+      await live.close(true);
+    }
+  },
+});
 
 Deno.test("superadmin invitation listing repair retains its canonical checksum", async () => {
   assertEquals(
@@ -94,7 +189,7 @@ async function fixture() {
     workspaceId,
     services,
     context,
-    async close() {
+    async close(preserveUsers = false) {
       await owner.query("begin");
       try {
         for (
@@ -137,9 +232,12 @@ async function fixture() {
         await owner.query("delete from auth.organization where id=$1", [
           workspaceId,
         ]);
-        await owner.query('delete from auth."user" where id=any($1::text[])', [
-          users,
-        ]);
+        if (!preserveUsers) {
+          await owner.query(
+            'delete from auth."user" where id=any($1::text[])',
+            [users],
+          );
+        }
         for (
           const [table, trigger] of [
             ["entitlement_grants", "entitlement_grants_mutation_guard"],

@@ -367,3 +367,18 @@
     border-color: CanvasText;
   }
 }
+.profile-photo-editor {
+  margin-bottom: 28px;
+}
+.profile-photo-editor > .disclosure__body {
+  display: grid;
+  gap: 20px;
+}
+.profile-photo-editor__providers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.profile-photo-editor > .disclosure__body > .button {
+  justify-self: start;
+}

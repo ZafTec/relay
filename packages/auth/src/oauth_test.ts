@@ -165,6 +165,8 @@ Deno.test("MCP access-token claims are strict and current authorization is reche
     "workspace_1",
     "user_1",
     resource,
+    null,
+    ["tools:read", "runs:read"],
   ]);
   assertEquals(calls[0].text.includes("client.disabled is not true"), true);
   assertEquals(calls[0].text.includes("resource.disabled is not true"), true);

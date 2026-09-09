@@ -9,7 +9,7 @@
   top: 0;
   z-index: 20;
   border-bottom: 1px solid var(--surface-border);
-  background: rgb(245 244 237 / 94%);
+  background: color-mix(in srgb, var(--surface-bg) 94%, transparent);
   backdrop-filter: blur(6px);
 }
 

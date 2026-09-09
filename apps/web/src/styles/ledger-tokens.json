@@ -111,7 +111,7 @@
       }
     },
     "public": {
-      "$comment": "Marketing + public docs/changelog. Paper. Keeps /  visually distinct from /dashboard.",
+      "$comment": "Public pages follow the browser theme: warm paper in light mode and neutral charcoal in dark mode.",
       "paper": {
         "value": "#F5F4ED",
         "role": "page background"
@@ -156,6 +156,48 @@
       "invert": {
         "value": "#141A16",
         "role": "high-emphasis button fill on paper"
+      },
+      "dark": {
+        "paper": {
+          "value": "#0F1010",
+          "role": "page background"
+        },
+        "paper-2": {
+          "value": "#171919",
+          "role": "alternating section"
+        },
+        "border": {
+          "value": "#2B2E2E",
+          "role": "default 1px border"
+        },
+        "border-strong": {
+          "value": "#484C4C",
+          "role": "secondary button, chips"
+        },
+        "ink": {
+          "value": "#EDEEEE",
+          "role": "headings + body"
+        },
+        "ink-secondary": {
+          "value": "#B7BDBD",
+          "role": "supporting body"
+        },
+        "ink-muted": {
+          "value": "#929B9B",
+          "role": "mono labels, metadata"
+        },
+        "accent": {
+          "value": "#63C8BC",
+          "role": "interactive, kickers"
+        },
+        "accent-hover": {
+          "value": "#86D6CD",
+          "role": "hover"
+        },
+        "invert": {
+          "value": "#EDEEEE",
+          "role": "high-emphasis button fill on paper"
+        }
       }
     },
     "mark": {

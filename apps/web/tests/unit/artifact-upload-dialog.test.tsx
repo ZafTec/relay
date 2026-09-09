@@ -159,12 +159,12 @@ describe("ArtifactUploadDialog", () => {
     expect(screen.getByLabelText("MIME type")).toHaveValue("text/plain");
 
     await user.click(screen.getByRole("button", { name: "Upload artifact" }));
-    expect(await screen.findByRole("heading", { level: 3, name: "Hashing file" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: "Preparing file" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     await act(async () => hashes.resolve({ sha256: SHA256, contentMd5: CONTENT_MD5 }));
-    expect(await screen.findByRole("heading", { level: 3, name: "Reserving upload" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: "Preparing upload" })).toBeInTheDocument();
     expect(createUpload).toHaveBeenCalledTimes(1);
     const [request, createKey] = createUpload.mock.calls[0]!;
     expect(request).toEqual({
@@ -177,23 +177,23 @@ describe("ArtifactUploadDialog", () => {
     expect(createKey).toMatch(/^artifact-ui:upload-create:/);
 
     await act(async () => reservation.resolve({ kind: "created", upload, replayed: false }));
-    expect(await screen.findByRole("heading", { level: 3, name: "Uploading bytes" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: "Uploading file" })).toBeInTheDocument();
     expect(putUpload).toHaveBeenCalledWith(authorization, file);
     expect(putUpload.mock.calls[0]?.[0]).toBe(authorization);
     expect(putUpload.mock.calls[0]?.[1]).toBe(file);
 
     await act(async () => transfer.resolve({ kind: "uploaded", status: 200 }));
-    expect(await screen.findByRole("heading", { level: 3, name: "Verifying upload" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: "Checking upload" })).toBeInTheDocument();
     expect(completeUpload).toHaveBeenCalledTimes(1);
     const completeKey = completeUpload.mock.calls[0]?.[1];
     expect(completeUpload).toHaveBeenCalledWith(UPLOAD_ID, expect.stringMatching(/^artifact-ui:upload-complete:/));
     expect(completeKey).not.toBe(createKey);
 
     await act(async () => firstCompletion.resolve({ kind: "pending", replayed: false }));
-    expect(await screen.findByRole("heading", { level: 3, name: "Verification pending" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: "Finishing upload" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Upload artifact" })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Check verification again" }));
-    expect(await screen.findByRole("heading", { level: 3, name: "Verifying upload" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: "Checking upload" })).toBeInTheDocument();
     expect(completeUpload).toHaveBeenCalledTimes(2);
     expect(completeUpload.mock.calls[1]?.[1]).toBe(completeKey);
 

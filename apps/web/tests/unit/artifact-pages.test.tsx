@@ -1,13 +1,15 @@
 import axe from "axe-core";
 import { useState } from "react";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import {
-  MemoryRouter,
-  Route,
-  Routes,
-  useLocation,
-} from "react-router-dom";
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../../src/auth/AuthProvider";
 import { ProtectedRoute } from "../../src/auth/ProtectedRoute";
@@ -17,14 +19,14 @@ import { ArtifactDetailPage } from "../../src/features/artifacts/ArtifactDetailP
 import { ArtifactsPage } from "../../src/features/artifacts/ArtifactsPage";
 import {
   type ArtifactDetail,
+  type ArtifactsAdapter,
   type ArtifactSummary,
   type ArtifactVersionResource,
-  type ArtifactsAdapter,
   type CreateShareLinkAdapterResult,
-  type RevokeShareLinkAdapterResult,
   httpArtifactsAdapter,
   parseCreateShareLinkResponse,
   parseListArtifactsResponse,
+  type RevokeShareLinkAdapterResult,
 } from "../../src/lib/api/artifacts";
 
 const ARTIFACT_ID = "art_11111111111111111111111111111111";
@@ -36,7 +38,8 @@ const SHARE_ID = "share_55555555555555555555555555555555";
 const CREATED_SHARE_ID = "share_66666666666666666666666666666666";
 const TOKEN = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ";
 const PUBLIC_PATH = `/s/${TOKEN}`;
-const SHARE_CREATE_KEY = "artifact:share:create:00000000-0000-4000-8000-000000000000";
+const SHARE_CREATE_KEY =
+  "artifact:share:create:00000000-0000-4000-8000-000000000000";
 
 const currentVersion: ArtifactVersionResource = {
   id: VERSION_ID,
@@ -135,9 +138,15 @@ const workspace: RelayWorkspace = {
   slug: "artifacts",
 };
 
-function createArtifactsAdapter(overrides: Partial<ArtifactsAdapter> = {}): ArtifactsAdapter {
+function createArtifactsAdapter(
+  overrides: Partial<ArtifactsAdapter> = {},
+): ArtifactsAdapter {
   return {
-    list: vi.fn(async () => ({ kind: "ok", items: [artifactSummary], nextCursor: null })),
+    list: vi.fn(async () => ({
+      kind: "ok",
+      items: [artifactSummary],
+      nextCursor: null,
+    })),
     get: vi.fn(async () => ({ kind: "found", artifact: artifactDetail })),
     createUpload: vi.fn(async () => ({
       kind: "degraded",
@@ -190,7 +199,9 @@ function GalleryUnmountHarness({ adapter }: { adapter: ArtifactsAdapter }) {
   const [visible, setVisible] = useState(true);
   return (
     <>
-      <button type="button" onClick={() => setVisible(false)}>Remove gallery</button>
+      <button type="button" onClick={() => setVisible(false)}>
+        Remove gallery
+      </button>
       {visible ? <ArtifactsPage adapter={adapter} /> : <p>Gallery removed</p>}
     </>
   );
@@ -203,7 +214,12 @@ function renderProtectedPage(
 ) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <AuthProvider adapter={createTestAuthAdapter({ identity, activeWorkspace: workspace })}>
+      <AuthProvider
+        adapter={createTestAuthAdapter({
+          identity,
+          activeWorkspace: workspace,
+        })}
+      >
         <Routes>
           <Route path="/sign-in" element={<SignInProbe />} />
           <Route element={<ProtectedRoute />}>
@@ -230,36 +246,53 @@ async function completeSharePolicy(user: ReturnType<typeof userEvent.setup>) {
 
 describe("artifact response parsing", () => {
   it("strictly rejects unknown response fields and mismatched returned paths", () => {
-    expect(() => parseListArtifactsResponse({
-      kind: "ok",
-      items: [{ ...artifactSummary, provider: "invented" }],
-      nextCursor: null,
-    })).toThrow(/provider: is not supported/i);
+    expect(() =>
+      parseListArtifactsResponse({
+        kind: "ok",
+        items: [{ ...artifactSummary, provider: "invented" }],
+        nextCursor: null,
+      })
+    ).toThrow(/provider: is not supported/i);
 
-    expect(() => parseCreateShareLinkResponse({
-      kind: "created",
-      shareLinkId: CREATED_SHARE_ID,
-      token: TOKEN,
-      publicPath: `/s/${"z".repeat(43)}`,
-      replayed: false,
-    })).toThrow(/must identify the returned token/i);
+    expect(() =>
+      parseCreateShareLinkResponse({
+        kind: "created",
+        shareLinkId: CREATED_SHARE_ID,
+        token: TOKEN,
+        publicPath: `/s/${"z".repeat(43)}`,
+        replayed: false,
+      })
+    ).toThrow(/must identify the returned token/i);
   });
 
   it("posts the exact nested share payload and reports an uncertain result as exact-request retryable", async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        kind: "created",
-        shareLinkId: CREATED_SHARE_ID,
-        token: TOKEN,
-        publicPath: PUBLIC_PATH,
-        replayed: false,
-      }), {
-        status: 201,
-        headers: { "content-type": "application/json", location: PUBLIC_PATH },
-      }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        error: { code: "unavailable", message: "unavailable" },
-      }), { status: 503, headers: { "content-type": "application/json" } }));
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            kind: "created",
+            shareLinkId: CREATED_SHARE_ID,
+            token: TOKEN,
+            publicPath: PUBLIC_PATH,
+            replayed: false,
+          }),
+          {
+            status: 201,
+            headers: {
+              "content-type": "application/json",
+              location: PUBLIC_PATH,
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { code: "unavailable", message: "unavailable" },
+          }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        ),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     const request = {
@@ -271,7 +304,9 @@ describe("artifact response parsing", () => {
       requireAuth: true,
       contentDisposition: "inline" as const,
     };
-    await expect(httpArtifactsAdapter.createShareLink(request, SHARE_CREATE_KEY)).resolves.toEqual({
+    await expect(
+      httpArtifactsAdapter.createShareLink(request, SHARE_CREATE_KEY),
+    ).resolves.toEqual({
       kind: "created",
       shareLinkId: CREATED_SHARE_ID,
       token: TOKEN,
@@ -280,10 +315,18 @@ describe("artifact response parsing", () => {
     });
 
     const firstCall = fetchMock.mock.calls[0];
-    expect(firstCall?.[0]).toBe(`${"/api/v1/artifacts/"}${ARTIFACT_ID}/share-links`);
-    expect(new Headers((firstCall?.[1] as RequestInit | undefined)?.headers).get("idempotency-key"))
+    expect(firstCall?.[0]).toBe(
+      `${"/api/v1/artifacts/"}${ARTIFACT_ID}/share-links`,
+    );
+    expect(
+      new Headers((firstCall?.[1] as RequestInit | undefined)?.headers).get(
+        "idempotency-key",
+      ),
+    )
       .toBe(SHARE_CREATE_KEY);
-    expect(JSON.parse(String((firstCall?.[1] as RequestInit | undefined)?.body))).toEqual({
+    expect(
+      JSON.parse(String((firstCall?.[1] as RequestInit | undefined)?.body)),
+    ).toEqual({
       followCurrent: false,
       artifactVersionId: VERSION_ID,
       expiresAt: null,
@@ -292,7 +335,9 @@ describe("artifact response parsing", () => {
       contentDisposition: "inline",
     });
 
-    await expect(httpArtifactsAdapter.createShareLink(request, SHARE_CREATE_KEY)).resolves.toMatchObject({
+    await expect(
+      httpArtifactsAdapter.createShareLink(request, SHARE_CREATE_KEY),
+    ).resolves.toMatchObject({
       kind: "unknown_outcome",
       retryable: true,
       retryMode: "exact-request",
@@ -303,13 +348,18 @@ describe("artifact response parsing", () => {
   it("classifies transport and response parsing failures as unknown create outcomes", async () => {
     const fetchMock = vi.fn()
       .mockRejectedValueOnce(new TypeError("offline"))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        kind: "created",
-        shareLinkId: CREATED_SHARE_ID,
-        token: TOKEN,
-        publicPath: `/s/${"z".repeat(43)}`,
-        replayed: false,
-      }), { status: 201, headers: { "content-type": "application/json" } }));
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            kind: "created",
+            shareLinkId: CREATED_SHARE_ID,
+            token: TOKEN,
+            publicPath: `/s/${"z".repeat(43)}`,
+            replayed: false,
+          }),
+          { status: 201, headers: { "content-type": "application/json" } },
+        ),
+      );
     vi.stubGlobal("fetch", fetchMock);
     const request = {
       artifactId: ARTIFACT_ID,
@@ -321,11 +371,15 @@ describe("artifact response parsing", () => {
       contentDisposition: "inline" as const,
     };
 
-    await expect(httpArtifactsAdapter.createShareLink(request, SHARE_CREATE_KEY)).resolves.toMatchObject({
+    await expect(
+      httpArtifactsAdapter.createShareLink(request, SHARE_CREATE_KEY),
+    ).resolves.toMatchObject({
       kind: "unknown_outcome",
       retryMode: "exact-request",
     });
-    await expect(httpArtifactsAdapter.createShareLink(request, SHARE_CREATE_KEY)).resolves.toMatchObject({
+    await expect(
+      httpArtifactsAdapter.createShareLink(request, SHARE_CREATE_KEY),
+    ).resolves.toMatchObject({
       kind: "unknown_outcome",
       retryMode: "exact-request",
     });
@@ -335,8 +389,12 @@ describe("artifact response parsing", () => {
 
 describe("artifact gallery page", () => {
   it("renders contract data without fabricated previews, providers, URLs, or totals", async () => {
-    let resolveList!: (result: Awaited<ReturnType<ArtifactsAdapter["list"]>>) => void;
-    const listPromise = new Promise<Awaited<ReturnType<ArtifactsAdapter["list"]>>>((resolve) => {
+    let resolveList!: (
+      result: Awaited<ReturnType<ArtifactsAdapter["list"]>>,
+    ) => void;
+    const listPromise = new Promise<
+      Awaited<ReturnType<ArtifactsAdapter["list"]>>
+    >((resolve) => {
       resolveList = resolve;
     });
     const adapter = createArtifactsAdapter({ list: vi.fn(() => listPromise) });
@@ -347,21 +405,30 @@ describe("artifact gallery page", () => {
     );
 
     expect(await screen.findByText("Loading artifacts")).toBeInTheDocument();
-    await act(async () => resolveList({ kind: "ok", items: [artifactSummary], nextCursor: null }));
-    expect(await screen.findByRole("link", { name: "Open artifact Campaign master" })).toHaveAttribute(
+    await act(async () =>
+      resolveList({ kind: "ok", items: [artifactSummary], nextCursor: null })
+    );
+    expect(
+      await screen.findByRole("link", {
+        name: "Open artifact Campaign master",
+      }),
+    ).toHaveAttribute(
       "href",
       `/dashboard/artifacts/${ARTIFACT_ID}`,
     );
-    expect(await screen.findByText("Workspace workspace-artifacts")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Upload artifact" })).toBeInTheDocument();
-    expect(screen.getByText("Preview URL not provided")).toBeInTheDocument();
+    expect(await screen.findByText("Workspace workspace-artifacts"))
+      .toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload artifact" }))
+      .toBeInTheDocument();
+    expect(await screen.findByText("Preview unavailable")).toBeInTheDocument();
     expect(screen.getByText("1 artifact loaded")).toBeInTheDocument();
     expect(container.querySelector("img")).toHaveAttribute(
       "src",
       "/relay/brand/icon-artifact.svg",
     );
     expect(container.querySelector('a[href^="/s/"]')).toBeNull();
-    expect(screen.queryByText(/Halide|Aurora|provider/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Halide|Aurora|provider/i)).not
+      .toBeInTheDocument();
     await expectNoAxeViolations(container);
   });
 
@@ -379,11 +446,14 @@ describe("artifact gallery page", () => {
       "/dashboard/artifacts",
     );
 
-    expect(await screen.findByRole("heading", { name: "No artifacts yet" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "No artifacts yet" }))
+      .toBeInTheDocument();
     await user.type(screen.getByLabelText("Search"), "missing artifact");
     await user.click(screen.getByRole("button", { name: "Apply filters" }));
 
-    expect(await screen.findByRole("heading", { name: "No matching artifacts" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "No matching artifacts" }),
+    ).toBeInTheDocument();
     expect(list).toHaveBeenCalledTimes(2);
     expect(list).toHaveBeenLastCalledWith(
       { limit: 25, search: "missing artifact" },
@@ -409,12 +479,22 @@ describe("artifact gallery page", () => {
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
 
-    await act(async () => second.resolve({ kind: "ok", items: [artifactSummary], nextCursor: null }));
-    expect(await screen.findByRole("link", { name: "Open artifact Campaign master" })).toBeInTheDocument();
+    await act(async () =>
+      second.resolve({ kind: "ok", items: [artifactSummary], nextCursor: null })
+    );
+    expect(
+      await screen.findByRole("link", {
+        name: "Open artifact Campaign master",
+      }),
+    ).toBeInTheDocument();
 
-    await act(async () => first.resolve({ kind: "ok", items: [], nextCursor: null }));
-    expect(screen.getByRole("link", { name: "Open artifact Campaign master" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "No artifacts yet" })).not.toBeInTheDocument();
+    await act(async () =>
+      first.resolve({ kind: "ok", items: [], nextCursor: null })
+    );
+    expect(screen.getByRole("link", { name: "Open artifact Campaign master" }))
+      .toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No artifacts yet" })).not
+      .toBeInTheDocument();
   });
 
   it("expires the owning session when a late list response returns 401", async () => {
@@ -432,7 +512,11 @@ describe("artifact gallery page", () => {
     await user.click(screen.getByRole("button", { name: "Remove gallery" }));
     expect(screen.getByText("Gallery removed")).toBeInTheDocument();
     await act(async () => result.resolve({ kind: "auth-expired" }));
-    expect(await screen.findByRole("heading", { name: /Sign in .*reason=session-expired/i }))
+    expect(
+      await screen.findByRole("heading", {
+        name: /Sign in .*reason=session-expired/i,
+      }),
+    )
       .toBeInTheDocument();
   });
 
@@ -446,7 +530,11 @@ describe("artifact gallery page", () => {
       "/dashboard/artifacts",
     );
 
-    expect(await screen.findByRole("heading", { name: /Sign in .*reason=session-expired/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", {
+        name: /Sign in .*reason=session-expired/i,
+      }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -459,15 +547,25 @@ describe("artifact detail and sharing", () => {
       "/dashboard/artifacts/:artifactId",
     );
 
-    expect(await screen.findByRole("heading", { level: 1, name: "Campaign master" })).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByText("Version history", { selector: ".disclosure__title" }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Campaign master" }),
+    ).toBeInTheDocument();
+    await userEvent.setup().click(
+      screen.getByText("Version history", { selector: ".disclosure__title" }),
+    );
     await userEvent.setup().click(screen.getByText("File details"));
-    expect(screen.getByRole("table", { name: "Immutable versions for Campaign master" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("table", {
+        name: "Immutable versions for Campaign master",
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("table", {
-      name: /Share records for Campaign master.*do not expose the token value shown at creation/i,
+      name:
+        /Share records for Campaign master.*do not expose the token value shown at creation/i,
     })).toBeInTheDocument();
     expect(screen.getByText(SHARE_ID)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Upload new version" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload new version" }))
+      .toBeInTheDocument();
     const sourceRunLinks = screen.getAllByRole("link", { name: RUN_ID });
     expect(sourceRunLinks.length).toBeGreaterThanOrEqual(2);
     for (const link of sourceRunLinks) {
@@ -475,7 +573,7 @@ describe("artifact detail and sharing", () => {
     }
     expect(screen.queryByDisplayValue(TOKEN)).not.toBeInTheDocument();
     expect(container.querySelector('a[href^="/s/"]')).toBeNull();
-    expect(screen.getByText("Preview URL not provided")).toBeInTheDocument();
+    expect(await screen.findByText("Preview unavailable")).toBeInTheDocument();
     await expectNoAxeViolations(container);
   });
 
@@ -490,10 +588,15 @@ describe("artifact detail and sharing", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    await user.click(screen.getAllByRole("button", { name: "Create share link" })[0]!);
-    expect(screen.getByText("Advanced options").closest("details")).not.toHaveAttribute("open");
+    await user.click(
+      screen.getAllByRole("button", { name: "Create share link" })[0]!,
+    );
+    expect(screen.getByText("Advanced options").closest("details")).not
+      .toHaveAttribute("open");
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-    expect(screen.getByText(/Anyone with this link can view and download the file/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Anyone with this link can view and download the file/i),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create link" }));
 
     expect(createShareLink).toHaveBeenCalledWith({
@@ -514,13 +617,19 @@ describe("artifact detail and sharing", () => {
       "/dashboard/artifacts/:artifactId",
     );
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    const trigger = screen.getAllByRole("button", { name: "Create share link" })[0]!;
+    const trigger = screen.getAllByRole("button", {
+      name: "Create share link",
+    })[0]!;
     await user.click(trigger);
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Create share link" })).toHaveFocus());
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Create share link" }))
+        .toHaveFocus()
+    );
     await user.tab();
     expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
     await user.tab();
-    expect(screen.getByText("Advanced options").closest("summary")).toHaveFocus();
+    expect(screen.getByText("Advanced options").closest("summary"))
+      .toHaveFocus();
     await user.tab();
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
     await user.tab();
@@ -530,12 +639,16 @@ describe("artifact detail and sharing", () => {
     await user.click(screen.getByText("Advanced options"));
     await user.tab();
     expect(screen.getByLabelText("File version")).toHaveFocus();
-    expect(within(screen.getByLabelText("Link access")).getByRole("option", {
-      name: "Workspace members only (unavailable)",
-    })).toBeDisabled();
-    expect(within(screen.getByLabelText("Open limit")).getByRole("option", {
-      name: "Limited opens (unavailable)",
-    })).toBeDisabled();
+    expect(
+      within(screen.getByLabelText("Link access")).getByRole("option", {
+        name: "Workspace members only (unavailable)",
+      }),
+    ).toBeDisabled();
+    expect(
+      within(screen.getByLabelText("Open limit")).getByRole("option", {
+        name: "Limited opens (unavailable)",
+      }),
+    ).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(trigger).toHaveFocus();
   });
@@ -544,22 +657,35 @@ describe("artifact detail and sharing", () => {
     const user = userEvent.setup();
     const createShareLink = vi.fn(async () => ({ kind: "conflict" as const }));
     renderProtectedPage(
-      <ArtifactDetailPage adapter={createArtifactsAdapter({ createShareLink })} />,
+      <ArtifactDetailPage
+        adapter={createArtifactsAdapter({ createShareLink })}
+      />,
       `/dashboard/artifacts/${ARTIFACT_ID}`,
       "/dashboard/artifacts/:artifactId",
     );
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    await user.click(screen.getAllByRole("button", { name: "Create share link" })[0]!);
+    await user.click(
+      screen.getAllByRole("button", { name: "Create share link" })[0]!,
+    );
     await completeSharePolicy(user);
     await user.selectOptions(screen.getByLabelText("Link expiry"), "custom");
-    await user.selectOptions(screen.getByLabelText("When opened"), "attachment");
+    await user.selectOptions(
+      screen.getByLabelText("When opened"),
+      "attachment",
+    );
     await user.click(screen.getByText("Advanced options"));
     await user.click(screen.getByRole("button", { name: "Create link" }));
     expect(createShareLink).not.toHaveBeenCalled();
-    expect(screen.getByText("Advanced options").closest("details")).toHaveAttribute("open");
+    expect(screen.getByText("Advanced options").closest("details"))
+      .toHaveAttribute("open");
     expect(screen.getByLabelText("Expires at")).toHaveFocus();
-    expect(screen.getByLabelText("Expires at")).toHaveAttribute("aria-invalid", "true");
-    fireEvent.change(screen.getByLabelText("Expires at"), { target: { value: "2099-12-01T10:00" } });
+    expect(screen.getByLabelText("Expires at")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    fireEvent.change(screen.getByLabelText("Expires at"), {
+      target: { value: "2099-12-01T10:00" },
+    });
     await user.click(screen.getByRole("button", { name: "Create link" }));
     expect(createShareLink).toHaveBeenCalledWith({
       artifactId: ARTIFACT_ID,
@@ -584,15 +710,21 @@ describe("artifact detail and sharing", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    const createTrigger = screen.getAllByRole("button", { name: "Create share link" })[0]!;
+    const createTrigger = screen.getAllByRole("button", {
+      name: "Create share link",
+    })[0]!;
     await user.click(createTrigger);
-    expect(screen.getByRole("dialog", { name: "Create share link" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Create share link" }))
+      .toBeInTheDocument();
     await completeSharePolicy(user);
-    expect(screen.queryByRole("checkbox", { name: /Require sign-in/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Require sign-in/i })).not
+      .toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create link" }));
 
-    expect(screen.getByRole("dialog", { name: "Create share link" })).toHaveFocus();
-    expect(screen.getByRole("button", { name: "Creating link" })).toBeDisabled();
+    expect(screen.getByRole("dialog", { name: "Create share link" }))
+      .toHaveFocus();
+    expect(screen.getByRole("button", { name: "Creating link" }))
+      .toBeDisabled();
     const pendingDialog = screen.getByRole("dialog");
     await waitFor(() => expect(pendingDialog).toHaveFocus());
     const pendingClose = screen.getByRole("button", { name: "Close" });
@@ -602,20 +734,29 @@ describe("artifact detail and sharing", () => {
     pendingDialog.focus();
     await user.tab({ shift: true });
     expect(pendingClose).toHaveFocus();
-    for (const trigger of screen.getAllByRole("button", { name: "Create share link" })) {
+    for (
+      const trigger of screen.getAllByRole("button", {
+        name: "Create share link",
+      })
+    ) {
       expect(trigger).toHaveAttribute("aria-disabled", "true");
     }
-    expect(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` })).toBeDisabled();
+    expect(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` }))
+      .toBeDisabled();
     expect(createShareLink).toHaveBeenCalledTimes(1);
-    await act(async () => createResult.resolve({
-      kind: "created",
-      shareLinkId: CREATED_SHARE_ID,
-      token: TOKEN,
-      publicPath: PUBLIC_PATH,
-      replayed: false,
-    }));
+    await act(async () =>
+      createResult.resolve({
+        kind: "created",
+        shareLinkId: CREATED_SHARE_ID,
+        token: TOKEN,
+        publicPath: PUBLIC_PATH,
+        replayed: false,
+      })
+    );
 
-    const createdHeading = await screen.findByRole("heading", { name: "Share link created" });
+    const createdHeading = await screen.findByRole("heading", {
+      name: "Share link created",
+    });
     expect(createdHeading).toHaveFocus();
     await user.tab();
     expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
@@ -634,10 +775,14 @@ describe("artifact detail and sharing", () => {
     const absoluteShareUrl = new URL(PUBLIC_PATH, window.location.origin).href;
     expect(screen.getByLabelText("Share link")).toHaveAttribute("type", "text");
     expect(screen.getByLabelText("Share link")).toHaveValue(absoluteShareUrl);
-    expect(screen.getByLabelText("Share token").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByLabelText("Share token").closest("details")).not
+      .toHaveAttribute("open");
     expect(screen.getByLabelText("Share token")).toHaveValue(TOKEN);
     expect(screen.queryByText(TOKEN)).not.toBeInTheDocument();
-    const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    const clipboardDescriptor = Object.getOwnPropertyDescriptor(
+      navigator,
+      "clipboard",
+    );
     const writeText = vi.fn(async () => undefined);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -648,26 +793,38 @@ describe("artifact detail and sharing", () => {
     expect(screen.getByText("Link copied.")).toBeInTheDocument();
     writeText.mockRejectedValueOnce(new Error("Clipboard denied"));
     await user.click(screen.getByRole("button", { name: "Copy link" }));
-    expect(screen.getByText("Copy failed. Link is selected so you can copy it manually.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Copy failed. Link is selected so you can copy it manually.",
+      ),
+    ).toBeInTheDocument();
     const link = screen.getByLabelText<HTMLInputElement>("Share link");
     expect(link).toHaveFocus();
     expect(link.selectionStart).toBe(0);
     expect(link.selectionEnd).toBe(absoluteShareUrl.length);
-    if (clipboardDescriptor === undefined) Reflect.deleteProperty(navigator, "clipboard");
-    else Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
+    if (clipboardDescriptor === undefined) {
+      Reflect.deleteProperty(navigator, "clipboard");
+    } else Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
     await expectNoAxeViolations(container);
 
     await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
     expect(createTrigger).toHaveFocus();
     expect(adapter.get).toHaveBeenCalledTimes(2);
   });
 
   it("keeps revoke and create actions locked until post-create share reconciliation succeeds", async () => {
     const user = userEvent.setup();
-    const refreshResult = deferred<Awaited<ReturnType<ArtifactsAdapter["get"]>>>();
+    const refreshResult = deferred<
+      Awaited<ReturnType<ArtifactsAdapter["get"]>>
+    >();
     const get = vi.fn()
-      .mockResolvedValueOnce({ kind: "found" as const, artifact: artifactDetail })
+      .mockResolvedValueOnce({
+        kind: "found" as const,
+        artifact: artifactDetail,
+      })
       .mockReturnValueOnce(refreshResult.promise);
     const createShareLink = vi.fn(async () => ({
       kind: "created" as const,
@@ -676,8 +833,15 @@ describe("artifact detail and sharing", () => {
       publicPath: PUBLIC_PATH,
       replayed: false,
     }));
-    const revokeShareLink = vi.fn(async () => ({ kind: "revoked" as const, replayed: false }));
-    const adapter = createArtifactsAdapter({ get, createShareLink, revokeShareLink });
+    const revokeShareLink = vi.fn(async () => ({
+      kind: "revoked" as const,
+      replayed: false,
+    }));
+    const adapter = createArtifactsAdapter({
+      get,
+      createShareLink,
+      revokeShareLink,
+    });
     renderProtectedPage(
       <ArtifactDetailPage adapter={adapter} />,
       `/dashboard/artifacts/${ARTIFACT_ID}`,
@@ -685,37 +849,57 @@ describe("artifact detail and sharing", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    await user.click(screen.getAllByRole("button", { name: "Create share link" })[0]!);
+    await user.click(
+      screen.getAllByRole("button", { name: "Create share link" })[0]!,
+    );
     await completeSharePolicy(user);
     await user.click(screen.getByRole("button", { name: "Create link" }));
     await screen.findByRole("heading", { name: "Share link created" });
     await user.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
 
-    const revokeTrigger = screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` });
+    const revokeTrigger = screen.getByRole("button", {
+      name: `Revoke share ${SHARE_ID}`,
+    });
     expect(revokeTrigger).toBeDisabled();
-    for (const trigger of screen.getAllByRole("button", { name: "Create share link" })) {
+    for (
+      const trigger of screen.getAllByRole("button", {
+        name: "Create share link",
+      })
+    ) {
       expect(trigger).toHaveAttribute("aria-disabled", "true");
     }
     await user.click(revokeTrigger);
     expect(revokeShareLink).not.toHaveBeenCalled();
 
-    await act(async () => refreshResult.resolve({ kind: "found", artifact: artifactDetail }));
+    await act(async () =>
+      refreshResult.resolve({ kind: "found", artifact: artifactDetail })
+    );
     await waitFor(() => expect(revokeTrigger).toBeEnabled());
-    for (const trigger of screen.getAllByRole("button", { name: "Create share link" })) {
+    for (
+      const trigger of screen.getAllByRole("button", {
+        name: "Create share link",
+      })
+    ) {
       expect(trigger).not.toHaveAttribute("aria-disabled");
     }
     await user.click(revokeTrigger);
-    expect(screen.getByRole("button", { name: "Confirm revoke" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm revoke" }))
+      .toBeInTheDocument();
   });
 
   it("does not let a late share-table refresh overwrite a changed artifact route", async () => {
     const user = userEvent.setup();
-    const refreshResult = deferred<Awaited<ReturnType<ArtifactsAdapter["get"]>>>();
+    const refreshResult = deferred<
+      Awaited<ReturnType<ArtifactsAdapter["get"]>>
+    >();
     let originalArtifactReads = 0;
     const get = vi.fn((requestedArtifactId: string) => {
       if (requestedArtifactId === OTHER_ARTIFACT_ID) {
-        return Promise.resolve({ kind: "found" as const, artifact: otherArtifactDetail });
+        return Promise.resolve({
+          kind: "found" as const,
+          artifact: otherArtifactDetail,
+        });
       }
       originalArtifactReads += 1;
       return originalArtifactReads === 1
@@ -737,17 +921,30 @@ describe("artifact detail and sharing", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    await user.click(screen.getAllByRole("button", { name: "Create share link" })[0]!);
+    await user.click(
+      screen.getAllByRole("button", { name: "Create share link" })[0]!,
+    );
     await completeSharePolicy(user);
     await user.click(screen.getByRole("button", { name: "Create link" }));
     await screen.findByRole("heading", { name: "Share link created" });
     await user.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
 
-    await user.click(screen.getByRole("button", { name: "Switch artifact route" }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Alternate artifact" })).toBeInTheDocument();
-    await act(async () => refreshResult.resolve({ kind: "found", artifact: artifactDetail }));
-    expect(screen.getByRole("heading", { level: 1, name: "Alternate artifact" })).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Switch artifact route" }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Alternate artifact",
+      }),
+    ).toBeInTheDocument();
+    await act(async () =>
+      refreshResult.resolve({ kind: "found", artifact: artifactDetail })
+    );
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Alternate artifact" }),
+    ).toBeInTheDocument();
   });
 
   it("retries an unknown share creation with the exact frozen request and key", async () => {
@@ -755,7 +952,8 @@ describe("artifact detail and sharing", () => {
     const createShareLink = vi.fn()
       .mockResolvedValueOnce({
         kind: "unknown_outcome" as const,
-        message: "Relay could not confirm the create share result. Retry only the exact request with the same idempotency key.",
+        message:
+          "Relay could not confirm the create share result. Retry only the exact request with the same idempotency key.",
         retryable: true as const,
         retryMode: "exact-request" as const,
         retryAfterSeconds: null,
@@ -775,31 +973,42 @@ describe("artifact detail and sharing", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    const createTrigger = screen.getAllByRole("button", { name: "Create share link" })[0]!;
+    const createTrigger = screen.getAllByRole("button", {
+      name: "Create share link",
+    })[0]!;
     await user.click(createTrigger);
     await completeSharePolicy(user);
     await user.click(screen.getByRole("button", { name: "Create link" }));
 
-    expect(await screen.findByRole("heading", { name: "Creation outcome unknown" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Creation outcome unknown" }),
+    ).toBeInTheDocument();
     const unknownStatus = screen.getByRole("alert");
     expect(unknownStatus).toHaveTextContent("Retry only the exact request");
     expect(unknownStatus).toHaveFocus();
-    expect(screen.getByRole("button", { name: "Retry exact request" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Retry exact request" }))
+      .toBeEnabled();
     expect(screen.getByLabelText("File version")).toBeDisabled();
     await user.keyboard("{Escape}");
-    expect(screen.getByRole("dialog", { name: "Creation outcome unknown" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Creation outcome unknown" }))
+      .toBeInTheDocument();
     expect(createShareLink).toHaveBeenCalledTimes(1);
     const [firstRequest, firstKey] = createShareLink.mock.calls[0]!;
 
-    await user.click(screen.getByRole("button", { name: "Retry exact request" }));
-    expect(await screen.findByRole("heading", { name: "Share link created" })).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Retry exact request" }),
+    );
+    expect(await screen.findByRole("heading", { name: "Share link created" }))
+      .toBeInTheDocument();
     expect(screen.getByText(/Your link was recovered/i)).toBeInTheDocument();
     expect(createShareLink).toHaveBeenCalledTimes(2);
     expect(createShareLink.mock.calls[1]?.[0]).toBe(firstRequest);
     expect(createShareLink.mock.calls[1]?.[1]).toBe(firstKey);
 
     await user.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
     expect(createTrigger).toHaveFocus();
     await waitFor(() => expect(adapter.get).toHaveBeenCalledTimes(2));
   });
@@ -807,15 +1016,22 @@ describe("artifact detail and sharing", () => {
   it("keeps creation locked after a failed inspection and unlocks only after authoritative retry", async () => {
     const user = userEvent.setup();
     const get = vi.fn()
-      .mockResolvedValueOnce({ kind: "found" as const, artifact: artifactDetail })
+      .mockResolvedValueOnce({
+        kind: "found" as const,
+        artifact: artifactDetail,
+      })
       .mockResolvedValueOnce({
         kind: "degraded" as const,
         message: "Relay could not read the share records.",
       })
-      .mockResolvedValueOnce({ kind: "found" as const, artifact: artifactDetail });
+      .mockResolvedValueOnce({
+        kind: "found" as const,
+        artifact: artifactDetail,
+      });
     const createShareLink = vi.fn(async () => ({
       kind: "unknown_outcome" as const,
-      message: "Relay could not confirm the create share result. Retry only the exact request with the same idempotency key.",
+      message:
+        "Relay could not confirm the create share result. Retry only the exact request with the same idempotency key.",
       retryable: true as const,
       retryMode: "exact-request" as const,
       retryAfterSeconds: null,
@@ -828,25 +1044,45 @@ describe("artifact detail and sharing", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    await user.click(screen.getAllByRole("button", { name: "Create share link" })[0]!);
+    await user.click(
+      screen.getAllByRole("button", { name: "Create share link" })[0]!,
+    );
     await completeSharePolicy(user);
     await user.click(screen.getByRole("button", { name: "Create link" }));
     await screen.findByRole("heading", { name: "Creation outcome unknown" });
-    await user.click(screen.getByRole("button", { name: "Close and inspect shares" }));
+    await user.click(
+      screen.getByRole("button", { name: "Close and inspect shares" }),
+    );
 
-    expect(await screen.findByText(/Share mutations remain paused/i)).toBeInTheDocument();
-    const retryInspection = screen.getByRole("button", { name: "Inspect share records again" });
+    expect(await screen.findByText(/Share mutations remain paused/i))
+      .toBeInTheDocument();
+    const retryInspection = screen.getByRole("button", {
+      name: "Inspect share records again",
+    });
     expect(retryInspection).toBeEnabled();
-    expect(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` })).toBeDisabled();
-    for (const trigger of screen.getAllByRole("button", { name: "Create share link" })) {
+    expect(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` }))
+      .toBeDisabled();
+    for (
+      const trigger of screen.getAllByRole("button", {
+        name: "Create share link",
+      })
+    ) {
       expect(trigger).toHaveAttribute("aria-disabled", "true");
     }
 
     await user.click(retryInspection);
     await waitFor(() => expect(get).toHaveBeenCalledTimes(3));
-    await waitFor(() => expect(screen.queryByText(/Share mutations remain paused/i)).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` })).toBeEnabled();
-    for (const trigger of screen.getAllByRole("button", { name: "Create share link" })) {
+    await waitFor(() =>
+      expect(screen.queryByText(/Share mutations remain paused/i)).not
+        .toBeInTheDocument()
+    );
+    expect(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` }))
+      .toBeEnabled();
+    for (
+      const trigger of screen.getAllByRole("button", {
+        name: "Create share link",
+      })
+    ) {
       expect(trigger).not.toHaveAttribute("aria-disabled");
     }
   });
@@ -861,46 +1097,62 @@ describe("artifact detail and sharing", () => {
       label: "idempotency",
       result: {
         kind: "idempotency-conflict" as const,
-        message: "This idempotency key was already used for a different request.",
+        message:
+          "This idempotency key was already used for a different request.",
       },
       message: "The idempotency key conflicts with a different request.",
     },
-  ])("distinguishes a $label conflict in share creation", async ({ result, message }) => {
-    const user = userEvent.setup();
-    const createShareLink = vi.fn(async () => result);
-    const adapter = createArtifactsAdapter({ createShareLink });
-    renderProtectedPage(
-      <ArtifactDetailPage adapter={adapter} />,
-      `/dashboard/artifacts/${ARTIFACT_ID}`,
-      "/dashboard/artifacts/:artifactId",
-    );
+  ])(
+    "distinguishes a $label conflict in share creation",
+    async ({ result, message }) => {
+      const user = userEvent.setup();
+      const createShareLink = vi.fn(async () => result);
+      const adapter = createArtifactsAdapter({ createShareLink });
+      renderProtectedPage(
+        <ArtifactDetailPage adapter={adapter} />,
+        `/dashboard/artifacts/${ARTIFACT_ID}`,
+        "/dashboard/artifacts/:artifactId",
+      );
 
-    await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    await user.click(screen.getAllByRole("button", { name: "Create share link" })[0]!);
-    await completeSharePolicy(user);
-    await user.click(screen.getByRole("button", { name: "Create link" }));
+      await screen.findByRole("heading", { level: 1, name: "Campaign master" });
+      await user.click(
+        screen.getAllByRole("button", { name: "Create share link" })[0]!,
+      );
+      await completeSharePolicy(user);
+      await user.click(screen.getByRole("button", { name: "Create link" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(message);
-    expect(screen.queryByRole("button", { name: "Retry exact request" })).not.toBeInTheDocument();
-    expect(createShareLink.mock.calls[0]?.[1]).toMatch(/^artifact-ui:share-create:/);
-    if (result.kind === "idempotency-conflict") {
-      expect(screen.getByLabelText("File version")).toBeDisabled();
-      const refresh = screen.getByRole("button", { name: "Refresh authoritative records" });
-      expect(refresh).toBeEnabled();
-      await user.click(refresh);
-      await waitFor(() => expect(adapter.get).toHaveBeenCalledTimes(2));
-    } else {
-      expect(screen.getByLabelText("File version")).toBeEnabled();
-      expect(screen.queryByRole("button", { name: "Refresh authoritative records" })).not.toBeInTheDocument();
-    }
-  });
+      expect(await screen.findByRole("alert")).toHaveTextContent(message);
+      expect(screen.queryByRole("button", { name: "Retry exact request" })).not
+        .toBeInTheDocument();
+      expect(createShareLink.mock.calls[0]?.[1]).toMatch(
+        /^artifact-ui:share-create:/,
+      );
+      if (result.kind === "idempotency-conflict") {
+        expect(screen.getByLabelText("File version")).toBeDisabled();
+        const refresh = screen.getByRole("button", {
+          name: "Refresh authoritative records",
+        });
+        expect(refresh).toBeEnabled();
+        await user.click(refresh);
+        await waitFor(() => expect(adapter.get).toHaveBeenCalledTimes(2));
+      } else {
+        expect(screen.getByLabelText("File version")).toBeEnabled();
+        expect(
+          screen.queryByRole("button", {
+            name: "Refresh authoritative records",
+          }),
+        ).not.toBeInTheDocument();
+      }
+    },
+  );
 
   it("retries an ambiguous revocation with the exact stable key and surfaces replay", async () => {
     const user = userEvent.setup();
     const revokeShareLink = vi.fn()
       .mockResolvedValueOnce({
         kind: "unknown_outcome" as const,
-        message: "Relay could not confirm the revoke share result. Retry only the exact request with the same idempotency key.",
+        message:
+          "Relay could not confirm the revoke share result. Retry only the exact request with the same idempotency key.",
         retryable: true as const,
         retryMode: "exact-request" as const,
         retryAfterSeconds: null,
@@ -914,13 +1166,20 @@ describe("artifact detail and sharing", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    await user.click(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` }));
+    await user.click(
+      screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` }),
+    );
     await user.click(screen.getByRole("button", { name: "Confirm revoke" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Retry only the exact request");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Retry only the exact request",
+    );
     const firstCall = revokeShareLink.mock.calls[0]!;
 
-    await user.click(screen.getByRole("button", { name: "Retry exact request" }));
-    expect(await screen.findByText(/replayed the stored result/i)).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Retry exact request" }),
+    );
+    expect(await screen.findByText(/replayed the stored result/i))
+      .toBeInTheDocument();
     expect(revokeShareLink).toHaveBeenCalledTimes(2);
     expect(revokeShareLink.mock.calls[1]?.[0]).toBe(firstCall[0]);
     expect(revokeShareLink.mock.calls[1]?.[1]).toBe(firstCall[1]);
@@ -930,9 +1189,11 @@ describe("artifact detail and sharing", () => {
   it("restores revoke focus on cancel and focuses pending and success status", async () => {
     const user = userEvent.setup();
     let resolveRevoke!: (result: RevokeShareLinkAdapterResult) => void;
-    const revokePromise = new Promise<RevokeShareLinkAdapterResult>((resolve) => {
-      resolveRevoke = resolve;
-    });
+    const revokePromise = new Promise<RevokeShareLinkAdapterResult>(
+      (resolve) => {
+        resolveRevoke = resolve;
+      },
+    );
     const revokeShareLink = vi.fn(() => revokePromise);
     const adapter = createArtifactsAdapter({ revokeShareLink });
     renderProtectedPage(
@@ -942,9 +1203,13 @@ describe("artifact detail and sharing", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    const revokeTrigger = screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` });
+    const revokeTrigger = screen.getByRole("button", {
+      name: `Revoke share ${SHARE_ID}`,
+    });
     await user.click(revokeTrigger);
-    const confirmButton = screen.getByRole("button", { name: "Confirm revoke" });
+    const confirmButton = screen.getByRole("button", {
+      name: "Confirm revoke",
+    });
     expect(confirmButton).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Keep share" }));
     await waitFor(() => expect(revokeTrigger).toHaveFocus());
@@ -952,11 +1217,17 @@ describe("artifact detail and sharing", () => {
 
     await user.click(revokeTrigger);
     await user.click(screen.getByRole("button", { name: "Confirm revoke" }));
-    const pendingCopy = screen.getByText("Revoking share link with the frozen request and stable idempotency key.");
+    const pendingCopy = screen.getByText(
+      "Revoking share link with the frozen request and stable idempotency key.",
+    );
     const pendingStatus = pendingCopy.closest<HTMLElement>("[role='status']");
     expect(pendingStatus).not.toBeNull();
     expect(pendingStatus).toHaveFocus();
-    for (const trigger of screen.getAllByRole("button", { name: "Create share link" })) {
+    for (
+      const trigger of screen.getAllByRole("button", {
+        name: "Create share link",
+      })
+    ) {
       expect(trigger).toHaveAttribute("aria-disabled", "true");
     }
     expect(revokeShareLink).toHaveBeenCalledTimes(1);
@@ -967,7 +1238,9 @@ describe("artifact detail and sharing", () => {
     );
 
     await act(async () => resolveRevoke({ kind: "revoked", replayed: false }));
-    const successCopy = await screen.findByText("Share link revoked. Future Relay resolutions are blocked.");
+    const successCopy = await screen.findByText(
+      "Share link revoked. Future Relay resolutions are blocked.",
+    );
     const successStatus = successCopy.closest<HTMLElement>("[role='status']");
     expect(successStatus).not.toBeNull();
     expect(successStatus).toHaveFocus();
@@ -982,9 +1255,9 @@ describe("artifact detail and sharing", () => {
     const user = userEvent.setup();
     const first = deferred<Awaited<ReturnType<ArtifactsAdapter["get"]>>>();
     const second = deferred<Awaited<ReturnType<ArtifactsAdapter["get"]>>>();
-    const get = vi.fn((requestedArtifactId: string) => requestedArtifactId === ARTIFACT_ID
-      ? first.promise
-      : second.promise);
+    const get = vi.fn((requestedArtifactId: string) =>
+      requestedArtifactId === ARTIFACT_ID ? first.promise : second.promise
+    );
     const adapter = createArtifactsAdapter({ get });
     renderProtectedPage(
       <DetailRouteHarness adapter={adapter} />,
@@ -993,23 +1266,39 @@ describe("artifact detail and sharing", () => {
     );
 
     await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
-    await user.click(screen.getByRole("button", { name: "Switch artifact route" }));
+    await user.click(
+      screen.getByRole("button", { name: "Switch artifact route" }),
+    );
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
-    await act(async () => second.resolve({ kind: "found", artifact: otherArtifactDetail }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Alternate artifact" })).toBeInTheDocument();
+    await act(async () =>
+      second.resolve({ kind: "found", artifact: otherArtifactDetail })
+    );
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Alternate artifact",
+      }),
+    ).toBeInTheDocument();
 
-    await act(async () => first.resolve({ kind: "found", artifact: artifactDetail }));
-    expect(screen.getByRole("heading", { level: 1, name: "Alternate artifact" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { level: 1, name: "Campaign master" })).not.toBeInTheDocument();
+    await act(async () =>
+      first.resolve({ kind: "found", artifact: artifactDetail })
+    );
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Alternate artifact" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: "Campaign master" }))
+      .not.toBeInTheDocument();
   });
 
   it("ignores a revoke completion after the artifact route changes", async () => {
     const user = userEvent.setup();
     const revokeResult = deferred<RevokeShareLinkAdapterResult>();
     const revokeShareLink = vi.fn(() => revokeResult.promise);
-    const get = vi.fn(async (requestedArtifactId: string) => requestedArtifactId === ARTIFACT_ID
-      ? { kind: "found" as const, artifact: artifactDetail }
-      : { kind: "found" as const, artifact: otherArtifactDetail });
+    const get = vi.fn(async (requestedArtifactId: string) =>
+      requestedArtifactId === ARTIFACT_ID
+        ? { kind: "found" as const, artifact: artifactDetail }
+        : { kind: "found" as const, artifact: otherArtifactDetail }
+    );
     const adapter = createArtifactsAdapter({ get, revokeShareLink });
     renderProtectedPage(
       <DetailRouteHarness adapter={adapter} />,
@@ -1018,14 +1307,31 @@ describe("artifact detail and sharing", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    await user.click(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` }));
+    await user.click(
+      screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` }),
+    );
     await user.click(screen.getByRole("button", { name: "Confirm revoke" }));
-    await user.click(screen.getByRole("button", { name: "Switch artifact route" }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Alternate artifact" })).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Switch artifact route" }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Alternate artifact",
+      }),
+    ).toBeInTheDocument();
 
-    await act(async () => revokeResult.resolve({ kind: "revoked", replayed: false }));
-    expect(screen.getByRole("heading", { level: 1, name: "Alternate artifact" })).toBeInTheDocument();
-    expect(screen.queryByText("Share link revoked. Future Relay resolutions are blocked.")).not.toBeInTheDocument();
+    await act(async () =>
+      revokeResult.resolve({ kind: "revoked", replayed: false })
+    );
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Alternate artifact" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Share link revoked. Future Relay resolutions are blocked.",
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it("surfaces a revoke idempotency conflict without offering an unsafe retry", async () => {
@@ -1042,13 +1348,16 @@ describe("artifact detail and sharing", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    await user.click(screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` }));
+    await user.click(
+      screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` }),
+    );
     await user.click(screen.getByRole("button", { name: "Confirm revoke" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "revocation idempotency key conflicts with a different request",
     );
-    expect(screen.queryByRole("button", { name: "Retry exact request" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry exact request" })).not
+      .toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Dismiss" })).toBeEnabled();
   });
 
@@ -1056,7 +1365,8 @@ describe("artifact detail and sharing", () => {
     const user = userEvent.setup();
     const revokeShareLink = vi.fn(async () => ({
       kind: "degraded" as const,
-      message: "Relay could not reach the share service. The operation was not repeated.",
+      message:
+        "Relay could not reach the share service. The operation was not repeated.",
     }));
     const adapter = createArtifactsAdapter({ revokeShareLink });
     renderProtectedPage(
@@ -1066,11 +1376,15 @@ describe("artifact detail and sharing", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: "Campaign master" });
-    const revokeTrigger = screen.getByRole("button", { name: `Revoke share ${SHARE_ID}` });
+    const revokeTrigger = screen.getByRole("button", {
+      name: `Revoke share ${SHARE_ID}`,
+    });
     await user.click(revokeTrigger);
     await user.click(screen.getByRole("button", { name: "Confirm revoke" }));
 
-    const errorCopy = await screen.findByText("Relay could not reach the share service. The operation was not repeated.");
+    const errorCopy = await screen.findByText(
+      "Relay could not reach the share service. The operation was not repeated.",
+    );
     const errorStatus = errorCopy.closest<HTMLElement>("[role='alert']");
     expect(errorStatus).not.toBeNull();
     expect(errorStatus).toHaveFocus();
@@ -1086,7 +1400,8 @@ describe("artifact detail and sharing", () => {
       "/dashboard/artifacts/:artifactId",
     );
 
-    expect(await screen.findByRole("heading", { name: "Artifact not found" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Artifact not found" }))
+      .toBeInTheDocument();
     expect(adapter.get).not.toHaveBeenCalled();
   });
 
@@ -1094,7 +1409,8 @@ describe("artifact detail and sharing", () => {
     const adapter = createArtifactsAdapter({
       get: vi.fn(async () => ({
         kind: "degraded" as const,
-        message: "Relay returned an unreadable artifact record. No artifact details were shown.",
+        message:
+          "Relay returned an unreadable artifact record. No artifact details were shown.",
       })),
     });
     renderProtectedPage(
@@ -1103,8 +1419,11 @@ describe("artifact detail and sharing", () => {
       "/dashboard/artifacts/:artifactId",
     );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Artifact unavailable");
-    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Artifact unavailable",
+    );
+    expect(screen.getByRole("button", { name: "Try again" }))
+      .toBeInTheDocument();
     expect(adapter.get).toHaveBeenCalledTimes(1);
   });
 });

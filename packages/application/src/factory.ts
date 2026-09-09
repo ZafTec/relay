@@ -1,4 +1,5 @@
 import type { HandlerRegistry } from "@relay/catalog";
+import { createOverviewService } from "./overview.ts";
 import type {
   CancelRunResult,
   CreateRunRequest,
@@ -117,6 +118,7 @@ export function createPostgresApplicationServices(
   );
   const commands = new ArtifactCommandAdapter(options.artifactCommands);
   return {
+    overview: createOverviewService(options.pool, reads.runs, reads.artifacts),
     tools: reads.tools,
     runs: createPostgresRunService(options),
     artifacts: {

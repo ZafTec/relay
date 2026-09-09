@@ -9,6 +9,74 @@
   color: var(--surface-ink);
 }
 
+.artifact-preview {
+  min-width: 0;
+  background: var(--surface-bg-alt);
+}
+.artifact-preview__content {
+  min-height: 180px;
+  height: 220px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.artifact-preview__content > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.artifact-preview__fallback {
+  padding: 24px;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  color: var(--surface-muted);
+  font-size: 0.85rem;
+}
+.artifact-preview--detail {
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.artifact-preview--detail .artifact-preview__content {
+  height: auto;
+  min-height: 240px;
+  max-height: 520px;
+}
+.artifact-preview--detail .artifact-preview__content > img,
+.artifact-preview__content video {
+  max-height: 480px;
+  width: 100%;
+  object-fit: contain;
+}
+.artifact-preview__content audio {
+  max-width: 100%;
+}
+.artifact-preview__content pre {
+  width: 100%;
+  max-height: 440px;
+  margin: 0;
+  padding: 20px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  text-align: left;
+}
+.artifact-preview__actions {
+  padding: 12px;
+  border-top: 1px solid var(--surface-border);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.artifact-preview__actions p {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
 .artifact-page-header {
   min-height: 84px;
   border-bottom: 1px solid var(--surface-border);
@@ -39,7 +107,8 @@
   border-bottom: 1px solid var(--surface-border);
   padding: 16px 32px;
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(168px, 0.42fr) minmax(168px, 0.42fr) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(168px, 0.42fr) minmax(168px,
+    0.42fr) auto;
   align-items: start;
   gap: 12px;
   background: var(--surface-bg-alt);
@@ -809,7 +878,6 @@
   gap: 8px;
 }
 
-
 .share-dialog__actions {
   display: flex;
   justify-content: flex-end;
@@ -1202,7 +1270,6 @@
     border-color: var(--surface-accent);
     color: var(--surface-accent);
   }
-
 }
 
 @media (max-width: 1120px) {
@@ -1422,4 +1489,22 @@
   .artifact-table-scroll:focus-visible {
     outline-color: Highlight;
   }
+}
+.artifact-upload-source {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 24px;
+}
+.artifact-import-form {
+  display: grid;
+  gap: 20px;
+}
+.artifact-import-form > p {
+  margin: 0;
+  color: var(--surface-copy);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+.artifact-import-form > .button {
+  justify-self: end;
 }

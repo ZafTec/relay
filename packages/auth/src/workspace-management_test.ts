@@ -132,14 +132,23 @@ Deno.test({
         WorkspaceManagementError,
         "owner_required",
       );
+      await assertRejects(
+        () =>
+          updateManagedWorkspace(pool, sessions[0], created.workspace.id, {
+            ...details,
+            slug: "changed-handle",
+          }),
+        WorkspaceManagementError,
+        "handle_immutable",
+      );
       const renamed = await updateManagedWorkspace(
         pool,
         sessions[0],
         created.workspace.id,
-        { name: "North studio", slug: `north-${suffix}` },
+        { name: "North studio", slug: details.slug },
       );
       assertEquals(renamed.id, created.workspace.id);
-      assertEquals(renamed.slug, `north-${suffix}`);
+      assertEquals(renamed.slug, details.slug);
       assertEquals(
         (await pool.query(
           'select role from auth.member where "organizationId"=$1 order by role',
@@ -147,11 +156,12 @@ Deno.test({
         )).rows,
         [{ role: "member" }, { role: "owner" }],
       );
+      const personalSlug = list.find((item) => item.id === personalId)!.slug;
       const personal = await updateManagedWorkspace(
         pool,
         sessions[0],
         personalId,
-        { name: "My research", slug: `research-${suffix}` },
+        { name: "My research", slug: personalSlug },
       );
       assertEquals(personal.personal, true);
       assertEquals(await ensurePersonalWorkspace(pool, users[0]), personalId);
@@ -160,7 +170,7 @@ Deno.test({
           "select name,slug from auth.organization where id=$1",
           [personalId],
         )).rows,
-        [{ name: "My research", slug: `research-${suffix}` }],
+        [{ name: "My research", slug: personalSlug }],
       );
       await assertRejects(
         () =>
@@ -169,7 +179,7 @@ Deno.test({
             slug: renamed.slug,
           }),
         WorkspaceManagementError,
-        "slug_taken",
+        "handle_immutable",
       );
       assertEquals(
         (await pool.query(

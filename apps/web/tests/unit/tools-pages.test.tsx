@@ -360,9 +360,9 @@ describe("tool detail page", () => {
     ).toBeVisible();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(await screen.findByText(
-      "Execution is unavailable until a real provider and meter policy are configured.",
+      "This tool is not ready to run yet. You can view its details below.",
     )).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Contract facts" }))
+    expect(screen.getByRole("heading", { name: "Tool details" }))
       .toBeVisible();
     expect(screen.getByRole("heading", { name: "Input schema" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Output schema" }))
@@ -394,7 +394,7 @@ describe("tool detail page", () => {
       await screen.findByRole("heading", { level: 1, name: "Tool not found" }),
     )
       .toBeVisible();
-    expect(screen.getByText("No matching tool contract")).toBeVisible();
+    expect(screen.getByText("No matching tool")).toBeVisible();
     expect(screen.getByRole("link", { name: "Back to tools" }))
       .toHaveAttribute("href", "/dashboard/tools");
   });
@@ -456,7 +456,7 @@ describe("tool detail page", () => {
     expect(
       await screen.findByRole("heading", {
         level: 1,
-        name: "Tool contract unavailable",
+        name: "Tool details unavailable",
       }),
     ).toBeVisible();
     expect(screen.getByRole("alert")).toHaveTextContent(

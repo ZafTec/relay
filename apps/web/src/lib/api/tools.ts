@@ -498,14 +498,14 @@ function detailFailure(error: unknown): ToolDetailLoadResult {
     return {
       kind: "degraded",
       message:
-        "Relay returned an unreadable tool contract. No contract data was shown.",
+        "Couldn’t read this tool’s details. Please try again.",
     };
   }
   return {
     kind: "degraded",
     message: error instanceof TypeError
       ? "Relay could not reach the tool catalog. Check the connection and try again."
-      : "Relay could not load the tool contract. No contract data was shown.",
+      : "Couldn’t load this tool’s details. Please try again.",
   };
 }
 
@@ -548,7 +548,7 @@ export const httpToolDetailAdapter: ToolDetailAdapter = {
         return {
           kind: "degraded",
           message:
-            "Relay returned a different tool contract than the one requested. No contract data was shown.",
+            "The requested tool’s details are unavailable. Please try again.",
         };
       }
       return payload;

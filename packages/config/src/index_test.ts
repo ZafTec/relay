@@ -542,11 +542,7 @@ Deno.test("storage errors never echo configured secrets", () => {
 });
 
 Deno.test("loadArtifactLifecycleConfig requires a positive workspace limit", () => {
-  assertThrows(
-    () => loadArtifactLifecycleConfig({}),
-    Error,
-    "ARTIFACT_WORKSPACE_MAX_BYTES",
-  );
+  assertEquals(loadArtifactLifecycleConfig({}).workspaceMaxBytes, 100_000_000);
   assertThrows(
     () => loadArtifactLifecycleConfig({ ARTIFACT_WORKSPACE_MAX_BYTES: "0" }),
     Error,
@@ -559,8 +555,8 @@ Deno.test("loadArtifactLifecycleConfig applies service-aligned defaults", () => 
     ARTIFACT_WORKSPACE_MAX_BYTES: String(1024 * 1024 * 1024),
   });
   assertEquals(config, {
-    workspaceMaxBytes: 1024 * 1024 * 1024,
-    maxUploadBytes: 100 * 1024 * 1024,
+    workspaceMaxBytes: 100_000_000,
+    maxUploadBytes: 100_000_000,
     uploadTtlSeconds: 15 * 60,
     downloadTtlSeconds: 5 * 60,
     purgeDelaySeconds: 7 * 24 * 60 * 60,

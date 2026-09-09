@@ -37,6 +37,12 @@ Rotating a secret requires updating the agent. Deleting a client invalidates its
 authorizations. If a creation response is lost, refresh the list and rotate the
 client’s secret to obtain a new copy.
 
+**Connected apps** lists your approved connections, including clients registered
+automatically by Claude or another agent. Expand a connection to see its
+workspace and permissions, or disconnect it. Disconnecting revokes access and
+refresh tokens; a later reconnection cannot reactivate an old token. Manual
+client registrations remain a separate list.
+
 ## Discover and execute tools
 
 Claude and other agents see a stable catalog interface instead of one MCP tool
@@ -80,6 +86,19 @@ name and slug before saving, switch between your workspaces, or rename one you
 own. Each account can own up to 20 workspaces. Creating a workspace grants
 ownership; it does not grant execution access or usage allowances.
 
+A workspace's handle cannot change after creation. Owners can update its name
+and logo, or delete a shared workspace by entering its exact handle. Deletion
+is blocked while runs or uploads are active. It removes memberships, agent
+connections, and share links immediately; stored files are then purged by the
+cleanup worker. Personal workspaces cannot be deleted. Audit and run history
+remain for accounting, without giving former members access.
+
+The **Overview** shows current run and file counts, recent work, and storage.
+Each workspace has at most **100 MB (100,000,000 bytes)** of storage, including
+retained versions and pending uploads. A lower operator limit is respected.
+Existing files above the cap are retained; no new storage can be reserved until
+enough space is available.
+
 Existing generated personal workspace labels are upgraded during migration.
 Custom names and slugs are preserved. Workspace IDs, memberships, files, tokens,
 and allowances remain attached to the same workspace.
@@ -93,7 +112,38 @@ as upload enforcement. A failed capacity lookup is shown as unavailable.
 Agents with `usage:read` can call `relay.usage.storage` without arguments. The
 HTTP equivalent is `GET /api/v1/usage/storage`. Both use the current workspace
 and return exact decimal byte strings, including stored, reserved, cleanup,
-limit, and available bytes. A null limit means explicitly unlimited storage.
+limit, and available bytes. Storage labels in the UI use decimal MB.
+
+## File previews, URL imports, and photos
+
+Saved images appear in the artifact gallery. File details can preview supported
+images, audio, video, and text up to 256 KiB; other files remain downloadable.
+Previews use short-lived access URLs without making the artifact public.
+
+Choose **Upload artifact → From URL**, or call `relay.artifacts.import_url`:
+
+```json
+{
+  "url": "https://example.com/report.pdf",
+  "name": "Quarterly report.pdf",
+  "idempotencyKey": "64ae828e-77bd-4242-8053-e6749d637101"
+}
+```
+
+The MCP tool requires `artifacts:write` and `artifacts:read`. Temporary access is
+the default; `access: "permanent"` additionally requires `artifacts:share`.
+The HTTP equivalent is `POST /api/v1/artifacts/import` with an
+`Idempotency-Key` header. Imports validate public HTTP(S) destinations on every
+redirect, pin DNS addresses, check file type and size, and store the actual
+bytes. The per-file import limit is 20 MB and the request timeout is 15 seconds.
+Files must be available without sign-in. Retry with the same key and input;
+if the source file has changed, Relay reports a conflict instead of saving a
+duplicate under the old key.
+
+In **Profile → Change profile photo**, upload a PNG, JPEG, or WebP image, paste an
+HTTPS image URL, or choose the photo from a linked Google/GitHub account.
+Uploaded identity images are cropped to a square; provider images keep their
+hosted URL. Workspace logos use the same image controls.
 
 ## Administration through MCP
 

@@ -1904,12 +1904,12 @@ export function ToolExecutionComposer({
         <header className="tool-composer__header">
           <div>
             <h2 id="tool-composer-title">Create run</h2>
-            <p>Configure an asynchronous run from the published tool contract.</p>
+            <p>Choose your settings, then start the run.</p>
           </div>
           <StatusBadge tone="warning">Deprecated</StatusBadge>
         </header>
         <InlineNotice title="Execution disabled for deprecated tool" tone="warning">
-          <p>This tool remains visible for contract history, but Relay will not create new runs from it.</p>
+          <p>This tool is no longer available for new runs. You can still view its details.</p>
         </InlineNotice>
       </section>
     );

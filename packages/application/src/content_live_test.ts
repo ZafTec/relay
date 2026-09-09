@@ -9,6 +9,8 @@ import {
 import { createS3ObjectStorage } from "@relay/storage";
 import { ArtifactCommandAdapter } from "./artifact-commands.ts";
 import { PostgresArtifactReadService } from "./postgres/artifacts.ts";
+import { fetchRemoteContent } from "./remote-content.ts";
+import { deleteManagedWorkspace } from "../../auth/src/workspace-management.ts";
 import {
   createContentService,
   decodeUploadedContent,
@@ -69,12 +71,14 @@ Deno.test({
       workspaceId: `content-workspace-${suffix}`,
       actorUserId: `content-user-${suffix}`,
     };
+    let storageLimit = "64";
     const domain = new ArtifactService({
       pool,
       storage,
       quota: new PostgresArtifactQuota({
         limitProvider: {
-          getLimit: () => Promise.resolve({ kind: "limited", maxBytes: "64" }),
+          getLimit: () =>
+            Promise.resolve({ kind: "limited", maxBytes: storageLimit }),
         },
       }),
       idempotencyRepository:
@@ -86,7 +90,7 @@ Deno.test({
     });
     const reads = new PostgresArtifactReadService(pool);
     const commands = new ArtifactCommandAdapter(domain);
-    const service = createContentService(domain, {
+    const artifactServices = {
       get: reads.get.bind(reads),
       list: reads.list.bind(reads),
       createDownload: commands.createDownload.bind(commands),
@@ -95,7 +99,12 @@ Deno.test({
       createShareLink: commands.createShareLink.bind(commands),
       revokeShareLink: commands.revokeShareLink.bind(commands),
       resolveShareLink: commands.resolveShareLink.bind(commands),
-    }, "http://localhost:8000");
+    };
+    const service = createContentService(
+      domain,
+      artifactServices,
+      "http://localhost:8000",
+    );
     try {
       await pool.query(
         'insert into auth."user"(id,name,email,"emailVerified") values($1,\'Content test\',$2,true)',
@@ -179,6 +188,85 @@ Deno.test({
         (await commands.resolveShareLink(token)).kind,
         "unavailable",
       );
+      let remoteBytes = new TextEncoder().encode("Imported notes");
+      const imports = createContentService(
+        domain,
+        artifactServices,
+        "http://localhost:8000",
+        (raw) =>
+          fetchRemoteContent(raw, {
+            resolve: () =>
+              Promise.resolve([{ address: "93.184.216.34", family: 4 }]),
+            request: () =>
+              Promise.resolve({
+                status: 200,
+                type: "text/plain",
+                body: (async function* () {
+                  yield remoteBytes;
+                })(),
+                close() {},
+              }),
+          }),
+      );
+      const imported = await imports.importUrl!(context, {
+        url: "https://files.example.test/notes.txt",
+      }, "url-import");
+      assert(imported.kind === "authorized");
+      assertEquals(await (await fetch(imported.url)).text(), "Imported notes");
+      const importReplay = await imports.importUrl!(context, {
+        url: "https://files.example.test/notes.txt",
+      }, "url-import");
+      assert(importReplay.kind === "authorized");
+      assertEquals(importReplay.artifactVersionId, imported.artifactVersionId);
+      remoteBytes = new TextEncoder().encode("Changed notes");
+      assertEquals(
+        (await imports.importUrl!(context, {
+          url: "https://files.example.test/notes.txt",
+        }, "url-import")).kind,
+        "idempotency_conflict",
+      );
+      remoteBytes = new Uint8Array(65).fill(65);
+      assertEquals(
+        (await imports.importUrl!(context, {
+          url: "https://files.example.test/large.txt",
+        }, "url-overflow")).kind,
+        "quota_exceeded",
+      );
+      // Deleting a workspace revokes permanent links and marks its stored files for cleanup.
+      storageLimit = "100000000";
+      remoteBytes = new Uint8Array(5_000_001).fill(65);
+      const largeImport = await imports.importUrl!(context, {
+        url: "https://files.example.test/large.txt",
+      }, "url-above-inline-limit");
+      assert(largeImport.kind === "authorized");
+      assertEquals(
+        (await (await fetch(largeImport.url)).arrayBuffer()).byteLength,
+        5_000_001,
+      );
+      const activeShare = await service.access(context, {
+        artifactId: imported.artifactId,
+        access: "permanent",
+      }, "workspace-share");
+      assert(activeShare.kind === "authorized");
+      const session = `content-session-${suffix}`;
+      await pool.query(
+        'insert into auth.session(id,"userId",token,"expiresAt","createdAt","updatedAt") values($1,$2,$1,now()+interval \'1 day\',now(),now())',
+        [session, context.actorUserId],
+      );
+      await deleteManagedWorkspace(pool, session, context.workspaceId, suffix);
+      assertEquals(
+        (await commands.resolveShareLink(activeShare.url.split("/").at(-1)!))
+          .kind,
+        "unavailable",
+      );
+      assertEquals(
+        (await pool.query(
+          "select count(*)::integer as count from relay.artifacts where workspace_id=$1 and deleted_at is not null and purge_status='pending'",
+          [context.workspaceId],
+        )).rows[0].count,
+        3,
+      );
+      await pool.query("delete from auth.session where id=$1", [session]);
       await pool.query('delete from auth.member where "organizationId"=$1', [
         context.workspaceId,
       ]);

@@ -9,9 +9,11 @@ import { createTestAuth, withTestAuthContext } from "./test-utils.ts";
 import {
   authorizeMcpAccessTokenClaims,
   RELAY_ADMIN_SESSION_CLAIM,
+  RELAY_CONSENT_CLAIM,
   RELAY_WORKSPACE_ID_CLAIM,
 } from "./oauth.ts";
 import { createPostgresSuperadminAccessService } from "../../../apps/api/src/routes/admin_access.ts";
+import { listMcpConnections, revokeMcpConnection } from "./connections.ts";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
 const ownerUrl = Deno.env.get("AUTH_SECURITY_TEST_DATABASE_URL");
@@ -278,6 +280,26 @@ Deno.test({
       );
       assertEquals(reduced?.status, 200);
       const reducedTokens = await reduced!.json();
+      const decodeClaims = (token: string) =>
+        JSON.parse(
+          atob(token.split(".")[1].replaceAll("-", "+").replaceAll("_", "/")),
+        );
+      const oldClaims = decodeClaims(reducedTokens.access_token);
+      const connected = await listMcpConnections(pool, member.sessionId);
+      assertEquals(connected.length, 1);
+      assertEquals(connected[0].clientId, client.client_id);
+      assertEquals(connected[0].name, "Automatic local agent");
+      assertEquals(oldClaims[RELAY_CONSENT_CLAIM], connected[0].id);
+      assert(await authorizeMcpAccessTokenClaims(pool, resource, oldClaims));
+      await revokeMcpConnection(pool, admin.sessionId, connected[0].id);
+      assert(await authorizeMcpAccessTokenClaims(pool, resource, oldClaims));
+      await revokeMcpConnection(pool, member.sessionId, connected[0].id);
+      await revokeMcpConnection(pool, member.sessionId, connected[0].id);
+      assertEquals(await listMcpConnections(pool, member.sessionId), []);
+      assertEquals(
+        await authorizeMcpAccessTokenClaims(pool, resource, oldClaims),
+        null,
+      );
       assertEquals(
         new Set(reducedTokens.scope.split(" ")),
         new Set(["tools:read"]),
@@ -285,6 +307,20 @@ Deno.test({
       await flow(member, "openid tools:read", false);
       const defaultScopes = await flow(member, undefined, "openid tools:read");
       assertEquals(defaultScopes?.status, 200);
+      const reconnected = decodeClaims(
+        (await defaultScopes!.json()).access_token,
+      );
+      assert(await authorizeMcpAccessTokenClaims(pool, resource, reconnected));
+      assertEquals(
+        await authorizeMcpAccessTokenClaims(pool, resource, oldClaims),
+        null,
+      );
+      const legacyClaims = { ...oldClaims };
+      delete legacyClaims[RELAY_CONSENT_CLAIM];
+      assertEquals(
+        await authorizeMcpAccessTokenClaims(pool, resource, legacyClaims),
+        null,
+      );
       const unauthorizedAdmin = await flow(
         member,
         "openid admin:allowances:read",

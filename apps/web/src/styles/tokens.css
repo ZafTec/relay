@@ -51,8 +51,7 @@
   --relay-space-15: 104px;
 }
 
-/* The product surface (dashboard, admin) follows the viewer's OS/browser color-scheme preference.
-   The public marketing surface stays on its paper palette in both modes. */
+/* Public and product surfaces follow the viewer's OS/browser color-scheme preference. */
 @media (prefers-color-scheme: dark) {
   :root {
     --relay-product-bg: #0F1010;
@@ -66,5 +65,15 @@
     --relay-product-ink-muted: #929B9B;
     --relay-product-accent: #63C8BC;
     --relay-product-accent-hover: #86D6CD;
+    --relay-public-paper: #0F1010;
+    --relay-public-paper-2: #171919;
+    --relay-public-border: #2B2E2E;
+    --relay-public-border-strong: #484C4C;
+    --relay-public-ink: #EDEEEE;
+    --relay-public-ink-secondary: #B7BDBD;
+    --relay-public-ink-muted: #929B9B;
+    --relay-public-accent: #63C8BC;
+    --relay-public-accent-hover: #86D6CD;
+    --relay-public-invert: #EDEEEE;
   }
 }

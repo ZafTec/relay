@@ -4,7 +4,7 @@ import {
   type RequireMcpAuthOptions,
 } from "@better-auth/mcp";
 import { betterAuth } from "better-auth";
-import { createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { RELAY_MCP_WORKSPACE_SCOPES } from "@relay/contracts";
 import {
   requireS256Authorization,
@@ -34,6 +34,7 @@ import {
   RELAY_CLIENT_IP_HEADER,
 } from "./proxy.ts";
 import { ensurePersonalWorkspace } from "./workspaces.ts";
+import { parseImageSource } from "./image-source.ts";
 import {
   createMcpOAuthClientManager,
   type ManageMcpOAuthClient,
@@ -192,6 +193,19 @@ export function createAuthOptions(pool: DatabasePool, config: AuthConfig) {
       // Better Auth requires an asynchronous middleware signature.
       // deno-lint-ignore require-await
       before: createAuthMiddleware(async (context) => {
+        if (
+          context.path === "/update-user" && context.body &&
+          "image" in context.body
+        ) {
+          try {
+            context.body.image = parseImageSource(context.body.image);
+          } catch {
+            throw new APIError("BAD_REQUEST", {
+              message:
+                "Choose a PNG, JPEG or WebP photo, or an HTTPS image URL.",
+            });
+          }
+        }
         if (
           ["/oauth2/register", "/oauth2/create-client", "/oauth2/update-client"]
             .includes(context.path)

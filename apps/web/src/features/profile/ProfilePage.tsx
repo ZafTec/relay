@@ -7,6 +7,7 @@ import { InlineNotice } from "../../components/ui/InlineNotice";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import "./profile.css";
+import { ProfilePhotoEditor } from "./ProfilePhotoEditor";
 
 const sessionExpiryFormatter = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
@@ -29,7 +30,9 @@ interface ProfileAvatarProps {
   name: string;
 }
 
-function ProfileAvatar({ image, initials: fallbackInitials, name }: ProfileAvatarProps) {
+function ProfileAvatar(
+  { image, initials: fallbackInitials, name }: ProfileAvatarProps,
+) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const showsImage = Boolean(image && image !== failedSource);
   const label = showsImage
@@ -38,17 +41,26 @@ function ProfileAvatar({ image, initials: fallbackInitials, name }: ProfileAvata
 
   return (
     <span className="profile-avatar" role="img" aria-label={label}>
-      {showsImage ? (
-        <img src={image ?? undefined} alt="" onError={() => setFailedSource(image)} />
-      ) : (
-        <span aria-hidden="true">{fallbackInitials}</span>
-      )}
+      {showsImage
+        ? (
+          <img
+            src={image ?? undefined}
+            alt=""
+            referrerPolicy="no-referrer"
+            onError={() => setFailedSource(image)}
+          />
+        )
+        : <span aria-hidden="true">{fallbackInitials}</span>}
     </span>
   );
 }
 
-function sessionExpiry(expiresAt: Date | null): { dateTime: string; label: string } | null {
-  if (!(expiresAt instanceof Date) || Number.isNaN(expiresAt.valueOf())) return null;
+function sessionExpiry(
+  expiresAt: Date | null,
+): { dateTime: string; label: string } | null {
+  if (!(expiresAt instanceof Date) || Number.isNaN(expiresAt.valueOf())) {
+    return null;
+  }
   return {
     dateTime: expiresAt.toISOString(),
     label: sessionExpiryFormatter.format(expiresAt),
@@ -65,52 +77,72 @@ function WorkspacePanel({ state, onRetry }: WorkspacePanelProps) {
   const status = state.status === "ready"
     ? <StatusBadge>Current</StatusBadge>
     : state.status === "degraded"
-      ? <StatusBadge tone="warning">Unavailable</StatusBadge>
-      : state.status === "empty"
-        ? <StatusBadge tone="muted">None</StatusBadge>
-        : <StatusBadge tone="pending">Loading</StatusBadge>;
+    ? <StatusBadge tone="warning">Unavailable</StatusBadge>
+    : state.status === "empty"
+    ? <StatusBadge tone="muted">None</StatusBadge>
+    : <StatusBadge tone="pending">Loading</StatusBadge>;
 
   return (
-    <section className="profile-panel" aria-labelledby="profile-workspace-title" aria-busy={loading || undefined}>
+    <section
+      className="profile-panel"
+      aria-labelledby="profile-workspace-title"
+      aria-busy={loading || undefined}
+    >
       <header className="profile-panel__header">
         <h2 id="profile-workspace-title">Active workspace</h2>
         {status}
       </header>
       <div className="profile-panel__body">
-        {state.status === "ready" ? (
-          <dl className="profile-facts">
-            <div>
-              <dt>Name</dt>
-              <dd>{state.workspace.name}</dd>
-            </div>
-            <div>
-              <dt>Slug</dt>
-              <dd><code>{state.workspace.slug}</code></dd>
-            </div>
-            <div>
-              <dt>Workspace ID</dt>
-              <dd><code>{state.workspace.id}</code></dd>
-            </div>
-          </dl>
-        ) : null}
+        {state.status === "ready"
+          ? (
+            <dl className="profile-facts">
+              <div>
+                <dt>Name</dt>
+                <dd>{state.workspace.name}</dd>
+              </div>
+              <div>
+                <dt>Slug</dt>
+                <dd>
+                  <code>{state.workspace.slug}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Workspace ID</dt>
+                <dd>
+                  <code>{state.workspace.id}</code>
+                </dd>
+              </div>
+            </dl>
+          )
+          : null}
 
-        {loading ? <Skeleton label="Loading active workspace" lines={2} /> : null}
+        {loading
+          ? <Skeleton label="Loading active workspace" lines={2} />
+          : null}
 
-        {state.status === "empty" ? (
-          <p className="profile-panel__empty">
-            No active workspace is attached to this session.
-          </p>
-        ) : null}
+        {state.status === "empty"
+          ? (
+            <p className="profile-panel__empty">
+              No active workspace is attached to this session.
+            </p>
+          )
+          : null}
 
-        {state.status === "degraded" ? (
-          <InlineNotice
-            title="Active workspace unavailable"
-            tone="error"
-            action={<Button variant="outline" onClick={onRetry}>Retry active workspace</Button>}
-          >
-            <p>{state.message}</p>
-          </InlineNotice>
-        ) : null}
+        {state.status === "degraded"
+          ? (
+            <InlineNotice
+              title="Active workspace unavailable"
+              tone="error"
+              action={
+                <Button variant="outline" onClick={onRetry}>
+                  Retry active workspace
+                </Button>
+              }
+            >
+              <p>{state.message}</p>
+            </InlineNotice>
+          )
+          : null}
       </div>
     </section>
   );
@@ -129,17 +161,24 @@ export function ProfilePage() {
 
   return (
     <div className="profile-page product-surface">
-      <a className="skip-link" href="#profile-content">Skip to profile details</a>
+      <a className="skip-link" href="#profile-content">
+        Skip to profile details
+      </a>
 
       <header className="profile-page__header">
-        <Link className="profile-page__back" to="/dashboard">Back to dashboard</Link>
+        <Link className="profile-page__back" to="/dashboard">
+          Back to dashboard
+        </Link>
         <span className="profile-page__divider" aria-hidden="true" />
         <h1>Profile</h1>
         <span className="profile-page__scope">Account scope</span>
       </header>
 
       <main className="profile-page__main" id="profile-content">
-        <section className="profile-identity" aria-labelledby="profile-identity-title">
+        <section
+          className="profile-identity"
+          aria-labelledby="profile-identity-title"
+        >
           <ProfileAvatar
             image={user.image}
             initials={initials(user.name)}
@@ -158,13 +197,18 @@ export function ProfilePage() {
               </div>
             </dl>
             <p className="profile-identity__note">
-              Name, email, and profile image come from the OAuth provider used to sign in.
+              Your name and email come from the account you use to sign in.
+              Choose your own profile photo below.
             </p>
           </div>
         </section>
 
+        <ProfilePhotoEditor image={user.image} />
         <div className="profile-ledger">
-          <section className="profile-panel" aria-labelledby="profile-session-title">
+          <section
+            className="profile-panel"
+            aria-labelledby="profile-session-title"
+          >
             <header className="profile-panel__header">
               <h2 id="profile-session-title">Current session</h2>
               <StatusBadge>Authenticated</StatusBadge>
@@ -178,28 +222,40 @@ export function ProfilePage() {
                 <div>
                   <dt>Expires</dt>
                   <dd>
-                    {expiry ? (
-                      <>
-                        <time dateTime={expiry.dateTime}>{expiry.label}</time>
-                        <span className="profile-facts__caption">Your local time</span>
-                      </>
-                    ) : (
-                      <span className="profile-facts__muted">Not provided by this session</span>
-                    )}
+                    {expiry
+                      ? (
+                        <>
+                          <time dateTime={expiry.dateTime}>{expiry.label}</time>
+                          <span className="profile-facts__caption">
+                            Your local time
+                          </span>
+                        </>
+                      )
+                      : (
+                        <span className="profile-facts__muted">
+                          Not provided by this session
+                        </span>
+                      )}
                   </dd>
                 </div>
               </dl>
             </div>
           </section>
 
-          <WorkspacePanel state={workspace} onRetry={() => void refreshWorkspace()} />
+          <WorkspacePanel
+            state={workspace}
+            onRetry={() => void refreshWorkspace()}
+          />
         </div>
 
-        <section className="profile-password" aria-labelledby="profile-password-title">
+        <section
+          className="profile-password"
+          aria-labelledby="profile-password-title"
+        >
           <h2 id="profile-password-title">No Relay password</h2>
           <p>
-            Relay uses OAuth sign-in and does not store a password for this account.
-            Manage sign-in credentials with your OAuth provider.
+            Relay uses OAuth sign-in and does not store a password for this
+            account. Manage sign-in credentials with your OAuth provider.
           </p>
         </section>
       </main>

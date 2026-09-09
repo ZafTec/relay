@@ -75,6 +75,8 @@ export type {
 export {
   contentAccessSchema,
   createContentService,
+  importUrlSchema,
   MAX_INLINE_CONTENT_BYTES,
   uploadContentSchema,
 } from "./content.ts";
+export { RemoteContentError } from "./remote-content.ts";

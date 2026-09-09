@@ -50,3 +50,10 @@ export type {
   SuperadminOperator,
   SystemRoleGrant,
 } from "./system-roles.ts";
+export { listMcpConnections, revokeMcpConnection } from "./connections.ts";
+export type { McpConnection } from "./connections.ts";
+export {
+  deleteManagedWorkspace,
+  parseWorkspaceUpdate,
+} from "./workspace-management.ts";
+export type { WorkspaceUpdate } from "./workspace-management.ts";

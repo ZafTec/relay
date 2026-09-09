@@ -21,6 +21,7 @@ import {
   RELAY_MCP_TOOL_NAMES,
 } from "./adapter.ts";
 import { IDEMPOTENCY_INPUT_MESSAGE } from "./idempotency.ts";
+import { RemoteContentError } from "@relay/application/content";
 
 const publicId = (prefix: string, character: string) =>
   `${prefix}_${character.repeat(32)}`;
@@ -35,6 +36,72 @@ const ARTIFACT_VERSION_ID = publicId("aver", "5");
 const UPLOAD_ID = publicId("upl", "6");
 const SHARE_LINK_ID = publicId("share", "7");
 const NOW = "2026-08-24T10:00:00.000Z";
+
+Deno.test("URL imports accept ordinary retry keys, preserve workspace identity and enforce sharing scope before download", async () => {
+  const calls: unknown[] = [];
+  const services = {
+    ...createServices(),
+    content: {
+      upload: () => Promise.resolve({ kind: "not_found" as const }),
+      access: () => Promise.resolve({ kind: "not_found" as const }),
+      importUrl: (identity: unknown, request: unknown, key: string) => {
+        calls.push({ identity, request, key });
+        if ((request as { url: string }).url.includes("private")) {
+          throw new RemoteContentError();
+        }
+        return Promise.resolve({
+          kind: "authorized" as const,
+          artifactId: ARTIFACT_ID,
+          artifactVersionId: ARTIFACT_VERSION_ID,
+          access: "temporary" as const,
+          url: "https://storage.example.test/signed",
+          expiresAt: "2030-01-01T00:00:00Z",
+        });
+      },
+    },
+  };
+  const server = await createRelayMcpServer({
+    services,
+    principal: {
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      scopes: ["artifacts:read", "artifacts:write"],
+    },
+  });
+  const connection = await connectClient(server);
+  const args = {
+    url: "https://files.example.test/image.png",
+    idempotencyKey: "url-import-test",
+  };
+  try {
+    const permanent = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.importUrl,
+      arguments: { ...args, access: "permanent" },
+    });
+    assertEquals(permanent.isError, true);
+    assertEquals(calls, []);
+    const saved = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.importUrl,
+      arguments: args,
+    });
+    assertEquals(saved.isError, undefined);
+    assertEquals(calls, [{
+      identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+      request: { url: args.url, access: "temporary" },
+      key: args.idempotencyKey,
+    }]);
+    const denied = await connection.client.callTool({
+      name: RELAY_MCP_TOOL_NAMES.importUrl,
+      arguments: { ...args, url: "https://private.example.test/secret" },
+    });
+    assertEquals(denied.isError, true);
+    assertEquals(
+      JSON.stringify(denied).includes("private.example.test"),
+      false,
+    );
+  } finally {
+    await connection.close();
+  }
+});
 
 const TOOL: ToolDetail = {
   id: TOOL_ID,
@@ -208,6 +275,7 @@ Deno.test("management tool names and scopes are stable", () => {
     "relay.artifacts.create_share_link",
     "relay.artifacts.revoke_share_link",
     "relay.artifacts.upload_content",
+    "relay.artifacts.import_url",
     "relay.artifacts.get_access",
     "relay.notifications.get",
     "relay.notifications.configure",
@@ -227,6 +295,7 @@ Deno.test("management tool names and scopes are stable", () => {
     "relay.artifacts.create_share_link": ["artifacts:share"],
     "relay.artifacts.revoke_share_link": ["artifacts:share"],
     "relay.artifacts.upload_content": ["artifacts:write", "artifacts:read"],
+    "relay.artifacts.import_url": ["artifacts:write", "artifacts:read"],
     "relay.artifacts.get_access": ["artifacts:read"],
     "relay.notifications.get": ["notifications:read"],
     "relay.notifications.configure": ["notifications:write"],

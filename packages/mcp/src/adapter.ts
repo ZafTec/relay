@@ -11,6 +11,8 @@ import {
 import type { ApplicationServices } from "@relay/application/services";
 import {
   contentAccessSchema,
+  importUrlSchema,
+  RemoteContentError,
   uploadContentSchema,
 } from "@relay/application/content";
 import { notificationSettingsSchema } from "@relay/notifications";
@@ -88,6 +90,7 @@ export const RELAY_MCP_TOOL_NAMES: Readonly<{
   createShareLink: "relay.artifacts.create_share_link";
   revokeShareLink: "relay.artifacts.revoke_share_link";
   uploadContent: "relay.artifacts.upload_content";
+  importUrl: "relay.artifacts.import_url";
   getAccess: "relay.artifacts.get_access";
   getNotifications: "relay.notifications.get";
   configureNotifications: "relay.notifications.configure";
@@ -106,6 +109,7 @@ export const RELAY_MCP_TOOL_NAMES: Readonly<{
   createShareLink: "relay.artifacts.create_share_link",
   revokeShareLink: "relay.artifacts.revoke_share_link",
   uploadContent: "relay.artifacts.upload_content",
+  importUrl: "relay.artifacts.import_url",
   getAccess: "relay.artifacts.get_access",
   getNotifications: "relay.notifications.get",
   configureNotifications: "relay.notifications.configure",
@@ -135,6 +139,7 @@ export const RELAY_MCP_MANAGEMENT_TOOL_SCOPES: Readonly<
   [RELAY_MCP_TOOL_NAMES.createShareLink]: ["artifacts:share"],
   [RELAY_MCP_TOOL_NAMES.revokeShareLink]: ["artifacts:share"],
   [RELAY_MCP_TOOL_NAMES.uploadContent]: ["artifacts:write", "artifacts:read"],
+  [RELAY_MCP_TOOL_NAMES.importUrl]: ["artifacts:write", "artifacts:read"],
   [RELAY_MCP_TOOL_NAMES.getAccess]: ["artifacts:read"],
   [RELAY_MCP_TOOL_NAMES.getNotifications]: ["notifications:read"],
   [RELAY_MCP_TOOL_NAMES.configureNotifications]: ["notifications:write"],
@@ -995,6 +1000,9 @@ export function createRelayMcpServer(
           details: { field: "idempotencyKey" },
         });
       }
+      if (error instanceof RemoteContentError) {
+        return toolErrorResult("invalid_request", error.message);
+      }
       if (
         error instanceof TypeError || error instanceof RangeError ||
         error instanceof z.ZodError
@@ -1037,6 +1045,38 @@ export function createRelayMcpServer(
             request,
             requireMcpIdempotencyKey(context, idempotencyKey),
           );
+        },
+      ),
+  );
+  server.registerTool(
+    RELAY_MCP_TOOL_NAMES.importUrl,
+    {
+      title: "Import a file from a URL",
+      description:
+        "Download a public HTTP or HTTPS file URL, validate it, and save its bytes in this workspace. Maximum 20 MB. Local/private network addresses and sign-in pages are not supported. Defaults to private storage with a temporary access URL. Permanent access creates a revocable public link and requires artifacts:share. Reuse the same idempotencyKey and URL when retrying.",
+      inputSchema: importUrlSchema.safeExtend({
+        idempotencyKey: idempotencyKeySchema,
+      }),
+      annotations: {
+        readOnlyHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+      _meta: requiredScopeMetadata(
+        RELAY_MCP_MANAGEMENT_TOOL_SCOPES[RELAY_MCP_TOOL_NAMES.importUrl],
+      ),
+    },
+    (args, context) =>
+      callExtension(
+        RELAY_MCP_TOOL_NAMES.importUrl,
+        args.access === "permanent",
+        async () => {
+          const { idempotencyKey, ...request } = args;
+          return await services.content?.importUrl?.(
+            identity,
+            request,
+            requireMcpIdempotencyKey(context, idempotencyKey),
+          ) ?? { kind: "not_found" };
         },
       ),
   );
