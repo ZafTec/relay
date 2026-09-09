@@ -170,16 +170,19 @@ imagery or the sole brand device.
 The user does not need to source stock imagery for the first landing design.
 Later, provide real product captures rather than stock whenever possible.
 
-## Public route hierarchy
+## Route hierarchy
 
 ```text
 /             Marketing landing page
 /dashboard    Authenticated application
 /docs         Documentation
 /changelog    Published product changes
-/status       Operational status
+/admin/status Operational status (superadmins only)
 /sign-in      Browser sign-in
 ```
+
+Operational status belongs only in the superadmin console. Do not link it from
+public navigation or workspace navigation.
 
 The public landing page must not use dashboard navigation or look like an
 authenticated application shell.

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
@@ -30,15 +31,15 @@ function setup() {
   auth.getActiveWorkspace = vi.fn(async () => items.find((item) => item.id === selected) ?? null);
   auth.setActiveWorkspace = vi.fn(async (id: string) => { selected = id; });
   const mount = () => render(
-    <MemoryRouter>
+    <StrictMode><MemoryRouter>
       <AuthProvider adapter={auth}>
         <Routes>
           <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<main><WorkspaceSwitcher /></main>} />
+            <Route path="/" element={<main><WorkspaceSwitcher /><input aria-label="Outside field" /></main>} />
           </Route>
         </Routes>
       </AuthProvider>
-    </MemoryRouter>,
+    </MemoryRouter></StrictMode>,
   );
   return { auth, mount };
 }
@@ -92,7 +93,7 @@ it("closes the panel on Escape without switching, and returns focus to the trigg
   expect(trigger).toHaveFocus();
 });
 
-it("closes the panel on an outside click and returns focus to the trigger", async () => {
+it("closes on an outside click without stealing focus from the clicked field", async () => {
   vi.mocked(httpWorkspaceAdapter.list).mockResolvedValue({ items, maxOwnedWorkspaces: 20 });
   const user = userEvent.setup();
   const { auth, mount } = setup();
@@ -100,8 +101,58 @@ it("closes the panel on an outside click and returns focus to the trigger", asyn
   const trigger = await screen.findByRole("button", { name: "Zaftech" });
   await user.click(trigger);
   await screen.findByRole("listbox");
-  await user.click(document.body);
+  const field = screen.getByRole("textbox", { name: "Outside field" });
+  await user.click(field);
   await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
   expect(auth.setActiveWorkspace).not.toHaveBeenCalled();
+  expect(field).toHaveFocus();
+  await user.type(field, "Still typing");
+  expect(field).toHaveValue("Still typing");
+});
+
+it("supports arrow, Home, and End keys and returns focus after selecting the current workspace", async () => {
+  vi.mocked(httpWorkspaceAdapter.list).mockResolvedValue({ items, maxOwnedWorkspaces: 20 });
+  const user = userEvent.setup();
+  const { mount } = setup();
+  mount();
+  const trigger = await screen.findByRole("button", { name: "Zaftech" });
+  trigger.focus();
+  await user.keyboard("{ArrowDown}");
+  await screen.findByRole("option", { name: /Gabi/ });
+  expect(screen.getByRole("option", { name: /Zaftech/ })).toHaveFocus();
+  await user.keyboard("{Home}");
+  expect(screen.getByRole("option", { name: /Euael/ })).toHaveFocus();
+  await user.keyboard("{ArrowDown}");
+  expect(screen.getByRole("option", { name: /Gabi/ })).toHaveFocus();
+  await user.keyboard("{End}{Enter}");
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   expect(trigger).toHaveFocus();
+});
+
+it("recovers from a failed switch in Strict Mode and allows retry", async () => {
+  vi.mocked(httpWorkspaceAdapter.list).mockResolvedValue({ items, maxOwnedWorkspaces: 20 });
+  const user = userEvent.setup();
+  const { auth, mount } = setup();
+  vi.mocked(auth.setActiveWorkspace).mockRejectedValueOnce(new Error("Network unavailable"));
+  mount();
+  await user.click(await screen.findByRole("button", { name: "Zaftech" }));
+  await user.click(await screen.findByRole("option", { name: /Gabi/ }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("could not be changed");
+  const option = screen.getByRole("option", { name: /Gabi/ });
+  expect(option).toBeEnabled();
+  await user.click(option);
+  expect(await screen.findByRole("button", { name: "Gabi" })).toBeInTheDocument();
+});
+
+it("refreshes the workspace list after the panel is reopened", async () => {
+  vi.mocked(httpWorkspaceAdapter.list).mockResolvedValueOnce({ items, maxOwnedWorkspaces: 20 })
+    .mockResolvedValue({ items: [...items, { ...gabi, id: "new-workspace", name: "New project" }], maxOwnedWorkspaces: 20 });
+  const user = userEvent.setup();
+  const { mount } = setup();
+  mount();
+  await user.click(await screen.findByRole("button", { name: "Zaftech" }));
+  await screen.findByRole("option", { name: /Gabi/ });
+  await user.keyboard("{Escape}");
+  await user.click(screen.getByRole("button", { name: "Zaftech" }));
+  expect(await screen.findByRole("option", { name: /New project/ })).toBeInTheDocument();
 });

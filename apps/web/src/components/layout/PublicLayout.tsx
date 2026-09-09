@@ -20,7 +20,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
               <NavLink className="public-nav__section-link" end to="/#platform">Platform</NavLink>
               <NavLink className="public-nav__section-link" to="/changelog">Changelog</NavLink>
               <NavLink className="public-nav__section-link" to="/docs">Docs</NavLink>
-              <NavLink className="public-nav__section-link" to="/status">Status</NavLink>
+              <a className="public-nav__section-link" href="/#faq">FAQ</a>
             </div>
             <details className="public-nav__menu">
               <summary>Menu</summary>
@@ -28,7 +28,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                 <NavLink end to="/#platform">Platform</NavLink>
                 <NavLink to="/changelog">Changelog</NavLink>
                 <NavLink to="/docs">Docs</NavLink>
-                <NavLink to="/status">Status</NavLink>
+                <a href="/#faq">FAQ</a>
               </div>
             </details>
             <LinkButton variant="outline" to="/sign-in">Sign in</LinkButton>
@@ -46,7 +46,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
             <Link to="/#platform">Platform</Link>
             <Link to="/changelog">Changelog</Link>
             <Link to="/docs">Docs</Link>
-            <Link to="/status">Status</Link>
+            <a href="/#faq">FAQ</a>
             <Link to="/sign-in">Sign in</Link>
             <span>ZafTech</span>
           </nav><LegalLinks /></div>

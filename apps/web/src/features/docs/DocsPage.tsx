@@ -101,7 +101,6 @@ function DocsHeader() {
         <nav className="docs-header__nav" aria-label="Primary">
           <Link className="docs-header__link" to="/changelog">Changelog</Link>
           <Link className="docs-header__link" to="/docs" aria-current="page">Docs</Link>
-          <Link className="docs-header__link" to="/status">Status</Link>
           <LinkButton className="docs-header__dashboard" to="/dashboard">Open dashboard</LinkButton>
         </nav>
       </div>
@@ -339,13 +338,11 @@ export function DocsPage() {
             <a href="#http-contracts">HTTP API</a>
             <a href="#mcp-contracts">MCP tools</a>
           </nav>
-          <Link className="docs-on-page__status" to="/status">Service status <span aria-hidden="true">→</span></Link>
         </aside>
       </div>
 
       <footer className="docs-footer">
         <p>Relay documentation distinguishes adapter contracts from deployed availability.</p>
-        <Link to="/status">Check service status</Link>
       </footer>
     </div>
   );

@@ -1,5 +1,5 @@
 .service-status-page {
-  min-height: 100dvh;
+  min-width: 0;
   background: var(--surface-bg);
   color: var(--surface-ink);
 }

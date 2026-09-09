@@ -679,8 +679,11 @@ describe("run detail page", () => {
       `/dashboard/runs/${RUN_ID}`,
     );
 
-    expect(await screen.findByRole("heading", { level: 1, name: RUN_ID })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: runningRun.tool.name })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Current state" })).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByText("Run details", { selector: ".disclosure__title" }));
+    await user.click(screen.getByText("Input and reservation"));
     expect(screen.getByLabelText(`Input for ${RUN_ID}`)).toHaveTextContent("test-only lighthouse");
     expect(screen.getByText("images.generated")).toBeInTheDocument();
     expect(screen.getByText("1 produced · 2 requested")).toBeInTheDocument();
@@ -710,7 +713,7 @@ describe("run detail page", () => {
       `/dashboard/runs/${RUN_ID}`,
     );
 
-    await screen.findByRole("heading", { level: 1, name: RUN_ID });
+    await screen.findByRole("heading", { level: 1, name: runningRun.tool.name });
     const trigger = screen.getByRole("button", { name: "Request cancellation" });
     await user.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "Request cancellation?" });
@@ -759,7 +762,7 @@ describe("run detail page", () => {
       `/dashboard/runs/${RUN_ID}`,
     );
 
-    await screen.findByRole("heading", { level: 1, name: RUN_ID });
+    await screen.findByRole("heading", { level: 1, name: runningRun.tool.name });
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
     await user.click(screen.getByRole("button", { name: "Request cancellation" }));
@@ -835,7 +838,7 @@ describe("run detail page", () => {
   it("ignores a detail response that resolves after the route changes", async () => {
     const eventHarness = createEventHarness();
     const first = deferred<GetRunAdapterResult>();
-    const secondRun: RunDetail = { ...runningRun, id: SECOND_RUN_ID, status: "queued" };
+    const secondRun: RunDetail = { ...runningRun, id: SECOND_RUN_ID, status: "queued", tool: { ...runningRun.tool, name: "Second fixture tool" } };
     const get = vi.fn((requestedRunId: string) => requestedRunId === RUN_ID
       ? first.promise
       : Promise.resolve({ kind: "found" as const, run: secondRun }));
@@ -850,13 +853,13 @@ describe("run detail page", () => {
 
     await waitFor(() => expect(get).toHaveBeenCalledWith(RUN_ID, expect.any(AbortSignal)));
     await user.click(screen.getByRole("button", { name: "Switch run route" }));
-    expect(await screen.findByRole("heading", { level: 1, name: SECOND_RUN_ID }))
+    expect(await screen.findByRole("heading", { level: 1, name: secondRun.tool.name }))
       .toBeInTheDocument();
 
     await act(async () => first.resolve({ kind: "found", run: runningRun }));
-    expect(screen.getByRole("heading", { level: 1, name: SECOND_RUN_ID }))
+    expect(screen.getByRole("heading", { level: 1, name: secondRun.tool.name }))
       .toBeInTheDocument();
-    expect(screen.queryByRole("heading", { level: 1, name: RUN_ID })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: runningRun.tool.name })).not.toBeInTheDocument();
   });
 
   it("renders malformed IDs as not found without requesting them", async () => {

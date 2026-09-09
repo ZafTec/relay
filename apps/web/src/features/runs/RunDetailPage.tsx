@@ -10,6 +10,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { Button, LinkButton } from "../../components/ui/Button";
 import { InlineNotice, type NoticeTone } from "../../components/ui/InlineNotice";
 import { Skeleton } from "../../components/ui/Skeleton";
+import { Disclosure } from "../../components/ui/Disclosure";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import {
   httpRunsAdapter,
@@ -64,11 +65,11 @@ function stateDescription(status: RunStatus): string {
     case "queued":
       return "Relay accepted this run and is waiting to begin execution.";
     case "running":
-      return "Execution is active. Live events invalidate this view, then Relay reloads the durable record.";
+      return "Your tool is running. This page updates as work progresses.";
     case "succeeded":
-      return "The run reached a successful terminal state.";
+      return "Your run is complete. Open the results below.";
     case "failed":
-      return "The run reached a failed terminal state. Only returned output and error fields are shown.";
+      return "The run could not finish. Review any returned results and error details below.";
     case "cancel_requested":
       return "Cancellation was requested. A terminal result can still win if it completes first.";
     case "cancelled":
@@ -545,12 +546,12 @@ export function RunDetailPage({
           <nav className="run-breadcrumb" aria-label="Breadcrumb">
             <Link to="/dashboard/runs">Runs</Link>
             <span aria-hidden="true">/</span>
-            <span aria-current="page">{runId ?? "Run"}</span>
+            <span aria-current="page">Run details</span>
           </nav>
           <div className="run-detail-title">
             <div>
-              <h1>{run === null ? "Run detail" : run.id}</h1>
-              {run === null ? null : <p>{run.tool.name}</p>}
+              <h1>{run === null ? "Run detail" : run.tool.name}</h1>
+              {run === null ? null : <p>Accepted {formatRunTimestamp(run.acceptedAt)}</p>}
             </div>
             {run === null ? null : <RunStatusBadge status={run.status} />}
           </div>
@@ -654,8 +655,13 @@ export function RunDetailPage({
               </div>
             </section>
 
-            <RunFacts run={run} />
+            <OutputPanel outputSet={run.outputSet} />
 
+            <Disclosure title="Run details" description="Timing, completeness, and reference IDs">
+              <RunFacts run={run} />
+            </Disclosure>
+
+            <Disclosure title="Input and reservation" description="Review the submitted input and reserved usage">
             <div className="run-detail-ledger">
               <section className="run-ledger-section" aria-labelledby="run-input-heading">
                 <header className="run-section-heading">
@@ -673,7 +679,7 @@ export function RunDetailPage({
               <ReservationPanel reservation={run.reservation} />
             </div>
 
-            <OutputPanel outputSet={run.outputSet} />
+            </Disclosure>
           </>
         ) : null}
       </div>

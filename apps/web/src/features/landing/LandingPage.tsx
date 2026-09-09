@@ -2,11 +2,22 @@ import { usePageMetadata } from "../../app/usePageMetadata";
 import { PublicLayout } from "../../components/layout/PublicLayout";
 import { Diagram } from "../../components/ui/Diagram";
 import { LinkButton } from "../../components/ui/Button";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { Disclosure } from "../../components/ui/Disclosure";
+import { Link } from "react-router-dom";
+import "./landing.css";
 
 const heroAlt = "An AI agent calls a registry tool, Relay runs the work asynchronously, stores an output set as durable artifacts, and returns a managed URL.";
 const meterAlt = "Usage moves from an estimate to a held reservation, provider use, and final settlement, with release after an early failure.";
 const retryAlt = "Relay retries only before provider submission, reconciles confirmed submissions, and does not retry deterministic validation or policy failures.";
+
+const questions = [
+  { question: "What can I do with Relay?", answer: "Connect an AI agent to a curated tool catalog, run work in the background, and keep the resulting files in a workspace. Your dashboard brings tools, runs, files, and usage together." },
+  { question: "How do I connect my AI agent?", answer: "Sign in with Google or GitHub, then copy the MCP URL from Settings into your agent’s connected-app settings. Compatible agents register automatically. If your agent asks for a client ID and secret, create an OAuth client using the callback URL it provides. You choose the workspace and approve permissions when connecting." },
+  { question: "Does signing in give me tool access?", answer: "Signing in creates or resumes your personal workspace. Running a tool also requires permission to execute it and an allowance for its usage. Check the Tools page and Usage page for your workspace’s current access, and contact an administrator if you need an allowance." },
+  { question: "Can I keep different projects separate?", answer: "Yes. Create a workspace in Settings and use the workspace switcher to move between projects. Runs, files, and usage belong to the workspace where the work happens. An agent’s connection stays bound to the workspace you approved for it." },
+  { question: "Are my result files public?", answer: "Files stay in your workspace. You can create a share link when you want to give someone access, choose its access policy, and revoke it later. New file versions preserve the earlier versions so you can review what changed." },
+  { question: "What happens if a run fails?", answer: "Open the run to see its status, any returned results, and the recorded usage. Relay releases reservations after eligible early failures. Work already submitted to a provider may still consume usage, so a failure does not always mean zero usage." },
+] as const;
 
 export function LandingPage() {
   usePageMetadata("Relay | Metered tools for AI agents", "#F5F4ED");
@@ -36,7 +47,7 @@ export function LandingPage() {
               alt={heroAlt}
               label="Agent to artifact delivery flow"
               minWidth={900}
-              caption="Illustrative architecture. Production image providers, tool names, and public share paths are not announced."
+              caption="From tool discovery to a stored result, every step stays connected to your workspace."
             />
           </div>
         </section>
@@ -117,23 +128,37 @@ export function LandingPage() {
         <section className="landing-section" id="availability">
           <div className="landing-container">
             <p className="kicker"><span>// 05</span> Availability</p>
-            <h2 className="availability-heading">The platform model is established. Provider features are not presented as shipped.</h2>
+            <h2 className="availability-heading">Start with a workspace. Connect the tools you need.</h2>
             <div className="availability-ledger">
               <article>
-                <StatusBadge tone="ready">Foundation</StatusBadge>
-                <h3>OAuth and workspace foundation</h3>
-                <p>Google and GitHub are the only supported browser sign-in methods. Each session carries an active workspace context.</p>
+                <span className="landing-step">01</span>
+                <h3>Sign in to your workspace</h3>
+                <p>Use Google or GitHub. Keep each project’s files, runs, and usage together.</p>
               </article>
               <article>
-                <StatusBadge tone="pending">Planned, not shipped</StatusBadge>
-                <h3>Provider-backed image tools</h3>
-                <p>Provider names, model names, pricing, latency, and fallback behavior remain unannounced.</p>
+                <span className="landing-step">02</span>
+                <h3>Connect your agent</h3>
+                <p>Add your MCP URL, choose a workspace, and approve the permissions your agent needs.</p>
               </article>
               <article>
-                <StatusBadge tone="warning">Asset required</StatusBadge>
-                <h3>Generated image examples</h3>
-                <p>No sample output is shown until licensed images and provenance are supplied.</p>
+                <span className="landing-step">03</span>
+                <h3>Check your tool access</h3>
+                <p>Your catalog shows the tools available to your workspace. Execution requires an explicit usage allowance.</p>
               </article>
+            </div>
+          </div>
+        </section>
+
+        <section className="landing-section landing-section--paper-2" id="faq" aria-labelledby="faq-title">
+          <div className="landing-container landing-faq">
+            <div className="landing-faq__intro">
+              <p className="kicker">Before you get started</p>
+              <h2 id="faq-title">Frequently asked questions</h2>
+              <p>A few useful answers about connecting agents, workspace access, and your results.</p>
+              <Link to="/docs">Explore the documentation <span aria-hidden="true">→</span></Link>
+            </div>
+            <div className="landing-faq__questions">
+              {questions.map(({ question, answer }) => <Disclosure key={question} title={question}><p>{answer}</p></Disclosure>)}
             </div>
           </div>
         </section>
@@ -141,7 +166,7 @@ export function LandingPage() {
         <section className="landing-cta product-surface">
           <div className="landing-container landing-cta__inner">
             <div>
-              <p className="kicker kicker--product"><span>// 06</span> Enter Relay</p>
+              <p className="kicker kicker--product">Enter Relay</p>
               <h2>Authorize once. Keep every result accountable.</h2>
             </div>
             <LinkButton to="/sign-in" endGlyph="→">Sign in</LinkButton>

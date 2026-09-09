@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { httpWorkspaceAdapter, type ManagedWorkspace } from "../../lib/api/workspaces";
@@ -16,24 +16,24 @@ export function WorkspaceSwitcher() {
   const [items, setItems] = useState<ManagedWorkspace[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [switching, setSwitching] = useState<string | null>(null);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const alive = useRef(true);
 
-  useEffect(() => () => { alive.current = false; }, []);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+
+  function closeAndRestoreFocus() {
+    setOpen(false);
+    triggerRef.current?.focus();
+  }
 
   useEffect(() => {
     if (!open) return;
-    function closeAndRestoreFocus() {
-      setOpen(false);
-      // Deferred: a click outside the panel still has its own default focus
-      // handling to run (e.g. blurring onto a non-focusable target), which
-      // would otherwise override a synchronous focus() call made here.
-      setTimeout(() => triggerRef.current?.focus(), 0);
-    }
     function onPointerDown(event: PointerEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) closeAndRestoreFocus();
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
     }
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") closeAndRestoreFocus();
@@ -47,20 +47,36 @@ export function WorkspaceSwitcher() {
   }, [open]);
 
   useEffect(() => {
-    if (!open || items !== null) return;
+    if (!open) return;
     const controller = new AbortController();
+    setError(null);
     void httpWorkspaceAdapter.list(controller.signal).then((result) => {
       if (!controller.signal.aborted) setItems(result.items);
     }).catch(() => {
       if (!controller.signal.aborted) setError("Your workspaces could not be loaded.");
     });
     return () => controller.abort();
-  }, [open, items]);
+  }, [open]);
 
-  useEffect(() => { if (open) panelRef.current?.querySelector<HTMLElement>("[role='option']")?.focus(); }, [open]);
+  useEffect(() => {
+    if (open) {
+      setFocusedId(active?.id ?? null);
+      panelRef.current?.querySelector<HTMLElement>("[aria-selected='true']")?.focus();
+    }
+  }, [open, active?.id]);
+
+  function navigateOptions(event: ReactKeyboardEvent<HTMLUListElement>) {
+    const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("[role='option']:not(:disabled)"));
+    const current = options.indexOf(document.activeElement as HTMLButtonElement);
+    const next = event.key === "ArrowDown" ? (current + 1) % options.length
+      : event.key === "ArrowUp" ? (current - 1 + options.length) % options.length
+      : event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : -1;
+    if (next >= 0) { event.preventDefault(); options[next]?.focus(); }
+  }
 
   async function switchTo(workspace: SwitchableWorkspace) {
-    if (switching || workspace.id === active?.id) { setOpen(false); return; }
+    if (switching) return;
+    if (workspace.id === active?.id) { closeAndRestoreFocus(); return; }
     setSwitching(workspace.id);
     setError(null);
     try {
@@ -102,14 +118,20 @@ export function WorkspaceSwitcher() {
   }
 
   return (
-    <div className="workspace-switcher" ref={rootRef}>
+    <div className="workspace-switcher" ref={rootRef} onBlur={(event) => {
+      if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) setOpen(false);
+    }}>
       <button
         type="button"
         ref={triggerRef}
         className="workspace-switcher__trigger"
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? listId : undefined}
         onClick={() => setOpen((value) => !value)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); }
+        }}
       >
         <span className="workspace-switcher__avatar" aria-hidden="true">{initial(active.name)}</span>
         <span className="workspace-switcher__name">{active.name}</span>
@@ -119,13 +141,15 @@ export function WorkspaceSwitcher() {
         <div className="workspace-switcher__panel" ref={panelRef}>
           <p className="workspace-switcher__eyebrow">Organizations</p>
           {error ? <p className="workspace-switcher__error" role="alert">{error}</p> : null}
-          <ul className="workspace-switcher__list" role="listbox" aria-label="Your workspaces">
+          <ul id={listId} className="workspace-switcher__list" role="listbox" aria-label="Your workspaces" aria-busy={switching !== null} onKeyDown={navigateOptions}>
             {(items ?? [active]).map((workspace) => (
-              <li key={workspace.id}>
+              <li key={workspace.id} role="presentation">
                 <button
                   type="button"
                   role="option"
                   aria-selected={workspace.id === active.id}
+                  tabIndex={workspace.id === (focusedId ?? active.id) ? 0 : -1}
+                  onFocus={() => setFocusedId(workspace.id)}
                   className="workspace-switcher__option"
                   disabled={switching !== null}
                   onClick={() => void switchTo(workspace)}

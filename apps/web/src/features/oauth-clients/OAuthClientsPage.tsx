@@ -5,6 +5,7 @@ import { usePageMetadata } from "../../app/usePageMetadata";
 import { Button } from "../../components/ui/Button";
 import { InlineNotice } from "../../components/ui/InlineNotice";
 import { Skeleton } from "../../components/ui/Skeleton";
+import { Disclosure } from "../../components/ui/Disclosure";
 import { type ManagedOAuthClient, type OAuthClientCredentials, oauthClientError, oauthClients } from "../../lib/api/oauth-clients";
 import { ApiError } from "../../lib/api/client";
 import { checkAdminAccess } from "../../lib/api/admin-access";
@@ -136,7 +137,10 @@ function ClientManager() {
     </header>
     <section className="oauth-connection" aria-label="MCP connection address">
       <CopyValue label="MCP URL" value={endpoint} />
-      <p>Add this URL in your agent’s connected-app settings and choose Connect. Compatible agents register automatically, then open Relay for sign-in, workspace selection, and permissions. If your agent asks for a client ID and secret, create a client below using its callback URL.</p>
+      <p>Add this URL in your agent’s connected-app settings and choose Connect.</p>
+      <Disclosure title="Connection help">
+        <p>Compatible agents register automatically, then open Relay for sign-in, workspace selection, and permissions. If your agent asks for a client ID and secret, create a client below using its callback URL.</p>
+      </Disclosure>
     </section>
     {error ? <InlineNotice title="Action needs attention" tone="error"><p>{error}</p><Button variant="quiet" disabled={busy} onClick={() => void refresh()}>Refresh clients</Button></InlineNotice> : null}
     {credentials ? <section className="oauth-credentials" aria-labelledby="credentials-heading">
@@ -161,11 +165,15 @@ function ClientManager() {
       {clients === null && !error ? <Skeleton label="Loading OAuth clients" lines={3} /> : null}
       {clients?.length === 0 ? <div className="oauth-clients-empty"><h3>No registered clients</h3><p>For automatic setup, add the MCP URL above in your agent. Create a client here only if your agent asks for a client ID and secret.</p></div> : null}
       {clients?.map((client) => <article className="oauth-client-row" key={client.client_id}>
-        <div><h3>{client.client_name || "Unnamed client"}</h3><code>{client.client_id}</code><ul>{client.redirect_uris.map((url) => <li key={url}>{url}</li>)}</ul><p>{client.token_endpoint_auth_method === "none" ? "Public client · PKCE" : "Confidential client · PKCE"}</p></div>
+        <div className="oauth-client-row__identity"><h3>{client.client_name || "Unnamed client"}</h3><p>{client.token_endpoint_auth_method === "none" ? "Public client · PKCE" : "Confidential client · PKCE"}</p></div>
+        <Disclosure title="Manage client" className="oauth-client-manage" description="Credentials, callbacks, and actions">
+        <CopyValue label="Registered client ID" value={client.client_id} />
+        <p>Redirect URLs</p><ul>{client.redirect_uris.map((url) => <li key={url}>{url}</li>)}</ul>
         <div className="oauth-client-actions">
           <Button variant="quiet" disabled={busy || mustRefresh || !!credentials || client.token_endpoint_auth_method === "none"} onClick={() => setConfirm({ client, action: "rotate" })}>Rotate secret</Button>
-          <Button variant="quiet" disabled={busy || mustRefresh || clients === null || !!credentials} onClick={() => setConfirm({ client, action: "delete" })}>Delete client</Button>
+          <Button variant="quiet" className="oauth-client-delete" disabled={busy || mustRefresh || clients === null || !!credentials} onClick={() => setConfirm({ client, action: "delete" })}>Delete client</Button>
         </div>
+        </Disclosure>
         {confirm?.client.client_id === client.client_id ? <div className="oauth-client-confirm" role="alert">
           <p>{confirm.action === "delete" ? "Delete this client and revoke its authorizations? The agent will need a new client to reconnect." : "Replace this client’s secret? Update the agent with the new secret to keep it connected."}</p>
           <Button disabled={mustRefresh} pending={busy} onClick={() => void change(() => confirm.action === "delete" ? oauthClients.remove(client.client_id) : oauthClients.rotate(client))}>{confirm.action === "delete" ? "Delete client" : "Replace secret"}</Button><Button variant="quiet" disabled={busy} onClick={() => setConfirm(null)}>Cancel</Button>

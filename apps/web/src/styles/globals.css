@@ -98,6 +98,7 @@ code {
 }
 
 .public-surface {
+  color-scheme: light;
   --surface-bg: var(--relay-public-paper);
   --surface-bg-alt: var(--relay-public-paper-2);
   --surface-panel: var(--relay-public-paper);
@@ -115,6 +116,7 @@ code {
 }
 
 .product-surface {
+  color-scheme: light;
   --surface-bg: var(--relay-product-bg);
   --surface-bg-alt: var(--relay-product-rail);
   --surface-panel: var(--relay-product-surface);
@@ -127,9 +129,24 @@ code {
   --surface-accent-hover: var(--relay-product-accent-hover);
   --surface-accent-ink: var(--relay-product-bg);
   --surface-focus: var(--relay-product-accent);
+  --surface-danger: #b42318;
   background: var(--surface-bg);
   color: var(--surface-ink);
 }
+
+@media (prefers-color-scheme: dark) {
+  .product-surface { color-scheme: dark; --surface-danger: #ffaaa2; }
+}
+
+.product-surface .button {
+  border-radius: 6px;
+  font-family: var(--relay-font-sans);
+  font-size: 0.8rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.product-surface .status-badge { border-radius: 4px; letter-spacing: 0; text-transform: none; }
+.product-surface .mono-label { letter-spacing: 0.02em; text-transform: none; }
 
 .relay-brand {
   min-height: 44px;

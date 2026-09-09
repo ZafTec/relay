@@ -217,7 +217,6 @@ describe("protected routing", () => {
   it.each([
     ["/changelog", "Changelog"],
     ["/docs", "Quickstart"],
-    ["/status", "All reported checks operational"],
   ])("renders public route %s without authentication", async (path, heading) => {
     mockPublicEndpoints();
     const router = createRelayMemoryRouter([path]);

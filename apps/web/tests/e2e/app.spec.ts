@@ -539,7 +539,7 @@ test("landing explains the product honestly across required widths", async ({ pa
     await page.setViewportSize({ width, height: width <= 390 ? 844 : 900 });
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Metered tools for agents/);
-    await expect(page.getByText("Planned, not shipped")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Check your tool access" })).toBeVisible();
     await expectNoPageOverflow(page);
   }
 
@@ -551,6 +551,88 @@ test("landing explains the product honestly across required widths", async ({ pa
     path: path.join(process.cwd(), "artifacts", "screenshots", "landing-1440.png"),
     fullPage: true,
   });
+});
+
+test("FAQ answers are keyboard accessible in both themes and on mobile", async ({ page }) => {
+  await mockSession(page, false);
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+      const faq = page.getByRole("region", { name: "Frequently asked questions" });
+      if (width === 390) await page.locator(".public-nav__menu > summary").click();
+      await page.locator('.public-nav a[href="/#faq"]:visible').click();
+      await expect(page.getByRole("heading", { name: "Frequently asked questions" })).toBeInViewport();
+      const question = faq.locator("summary").filter({ hasText: "Does signing in give me tool access?" });
+      const answer = faq.getByText(/Signing in creates or resumes your personal workspace/);
+      await expect(answer).toBeHidden();
+      await question.focus();
+      await page.keyboard.press("Enter");
+      await expect(answer).toBeVisible();
+      await expectNoPageOverflow(page);
+      await expectNoSeriousAxeViolations(page);
+      await faq.screenshot({ path: path.join("artifacts", "review", `faq-${colorScheme}-${width}.png`) });
+      await page.keyboard.press("Space");
+      await expect(answer).toBeHidden();
+    }
+  }
+});
+
+test("compact settings and workspace switching preserve keyboard and mouse actions", async ({ page }) => {
+  test.setTimeout(90_000);
+  await mockAuthenticatedWorkspace(page, { adminAccess: false });
+  await mockRegistryResources(page);
+  const other = { ...workspace, id: "ws_other", name: "Second workspace", slug: "second-workspace" };
+  let selected = workspace;
+  let failSwitch = true;
+  await page.route("**/api/v1/workspaces", (route) => route.fulfill({
+    json: { items: [workspace, other].map((item) => ({ ...item, role: "owner", personal: item.id === workspace.id })), maxOwnedWorkspaces: 20 },
+  }));
+  await page.route("**/api/auth/get-session**", (route) => route.fulfill({
+    json: { ...identity, session: { ...identity.session, activeOrganizationId: selected.id } },
+  }));
+  await page.route("**/api/auth/organization/get-organization**", (route) => route.fulfill({ json: selected }));
+  await page.route("**/api/auth/organization/set-active", (route) => {
+    if (failSwitch) { failSwitch = false; return route.fulfill({ status: 503, json: { message: "Temporary failure" } }); }
+    selected = route.request().postDataJSON().organizationId === other.id ? other : workspace;
+    return route.fulfill({ json: selected });
+  });
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/dashboard/settings");
+      const rail = page.locator(".workspace-switcher:visible");
+      await rail.getByRole("button", { name: selected.name, exact: true }).click();
+      await expect(page.getByRole("option")).toHaveCount(2);
+      await expectNoSeriousAxeViolations(page);
+      await page.screenshot({ path: path.join("artifacts", "review", `switcher-${colorScheme}-${width}.png`) });
+      await page.keyboard.press("Escape");
+      await expect(rail.getByRole("button", { name: selected.name, exact: true })).toBeFocused();
+      for (const label of ["Connection instructions", "Permission reference", "Current session", "Legal and privacy"]) {
+        const summary = page.locator("summary").filter({ hasText: label });
+        await summary.click();
+        await expect(summary.locator("..")).toHaveAttribute("open", "");
+      }
+      await expect(page.getByRole("table", { name: "Supported MCP authorization scopes" })).toBeVisible();
+      await expect(page.getByRole("checkbox", { name: /Run completed/ })).toBeEnabled();
+      await expectNoPageOverflow(page);
+      await expectNoSeriousAxeViolations(page);
+      await page.screenshot({ path: path.join("artifacts", "review", `settings-expanded-${colorScheme}-${width}.png`), fullPage: true });
+    }
+  }
+  await page.goto("/dashboard/settings");
+  const trigger = page.locator(".workspace-switcher:visible").getByRole("button", { name: workspace.name, exact: true });
+  await trigger.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("option")).toHaveCount(2);
+  await page.keyboard.press("End");
+  await expect(page.getByRole("option", { name: /Second workspace/ })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("alert")).toHaveText(/could not be changed/);
+  await page.getByRole("option", { name: /Second workspace/ }).click();
+  await expect(page.locator(".workspace-switcher:visible").getByRole("button", { name: "Second workspace", exact: true })).toBeVisible();
 });
 
 test("sign-in is OAuth-only and anonymous dashboard navigation is protected", async ({ page }) => {
@@ -642,7 +724,7 @@ test("product resource routes expose real contract data across required widths",
     await expectNoPageOverflow(page);
 
     await page.goto(`/dashboard/runs/${runId}`);
-    await expect(page.getByRole("heading", { level: 1, name: runId })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: browserRun.tool.name })).toBeVisible();
     await expect(page.getByRole("link", { name: artifactId })).toBeVisible();
     await expectNoPageOverflow(page);
 
@@ -653,6 +735,7 @@ test("product resource routes expose real contract data across required widths",
 
     await page.goto(`/dashboard/artifacts/${artifactId}`);
     await expect(page.getByRole("heading", { level: 1, name: "Test-only artifact" })).toBeVisible();
+    await page.locator("summary").filter({ hasText: "Version history" }).click();
     await expect(page.getByRole("table", { name: /Immutable versions/ })).toBeVisible();
     await expectNoPageOverflow(page);
 
@@ -811,7 +894,6 @@ test("public information routes stay factual, searchable, and responsive", async
     { path: "/changelog", heading: "Changelog" },
     { path: `/changelog/${browserPublicRelease.slug}`, heading: "1.2.3-test" },
     { path: "/docs", heading: "Quickstart" },
-    { path: "/status", heading: "All reported checks operational" },
   ] as const;
 
   for (const width of [320, 390, 768, 1024, 1440]) {
@@ -838,12 +920,6 @@ test("public information routes stay factual, searchable, and responsive", async
   await expect(page.getByRole("link", { name: "relay.runs.cancel" })).toBeVisible();
   await expect(page.getByText("/api/v1/runs", { exact: true }).first()).toBeVisible();
 
-  await page.goto("/status");
-  await expect(page.getByText("test", { exact: true })).toBeVisible();
-  await expect(page.getByText("browser-revision", { exact: true })).toBeVisible();
-  await page.getByText("What this page can verify", { exact: true }).click();
-  await expect(page.getByText(/historical uptime percentages/i)).toBeVisible();
-
   for (const route of routes) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(route.path);
@@ -859,6 +935,36 @@ test("public information routes stay factual, searchable, and responsive", async
       path: path.join(process.cwd(), "artifacts", "screenshots", `${route.path.slice(1)}-390.png`),
       fullPage: true,
     });
+  }
+});
+
+test("operational status is available only inside the superadmin console", async ({ page }) => {
+  await mockSession(page, false);
+  for (const path of ["/", "/docs", "/status"]) {
+    await page.goto(path);
+    await expect(page.locator('a[href="/status"], a[href="/admin/status"]')).toHaveCount(0);
+  }
+  await expect(page.getByRole("heading", { name: "This Relay route does not exist" })).toBeVisible();
+  await page.goto("/admin/status");
+  await expect(page.getByRole("heading", { name: "Sign in to Relay" })).toBeVisible();
+  await mockAuthenticatedWorkspace(page, { adminAccess: false });
+  const diagnostics: string[] = [];
+  page.on("request", (request) => { if (/\/(health\/ready|version)$/.test(request.url())) diagnostics.push(request.url()); });
+  await page.goto("/admin/status");
+  await expect(page.getByRole("heading", { name: "Admin access unavailable" })).toBeVisible();
+  expect(diagnostics).toEqual([]);
+  await mockAuthenticatedWorkspace(page, { adminAccess: true });
+  await mockPublicInformation(page);
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/admin/status");
+    await expect(page.getByRole("heading", { name: "All reported checks operational" })).toBeVisible();
+    await expect(page.getByText("browser-revision", { exact: true })).toBeVisible();
+    await page.getByText("What this page can verify", { exact: true }).click();
+    await expect(page.getByText(/historical uptime percentages/i)).toBeVisible();
+    await expectNoPageOverflow(page);
+    await expectNoSeriousAxeViolations(page);
+    await page.screenshot({ path: path.join("artifacts", "review", `admin-status-${width}.png`), fullPage: true });
   }
 });
 

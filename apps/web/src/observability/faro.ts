@@ -18,7 +18,7 @@ const staticRoutes = new Set([
   "/",
   "/sign-in",
   "/docs",
-  "/status",
+  "/admin/status",
   "/changelog",
   "/dashboard",
   "/dashboard/tools",
