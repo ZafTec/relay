@@ -8,55 +8,51 @@
   },
   "color": {
     "product": {
-      "$comment": "Authenticated surfaces: /dashboard, /admin. Dark onyx.",
+      "$comment": "Authenticated surfaces: /dashboard, /admin. Deep neutral charcoal with restrained teal accents.",
       "bg": {
-        "value": "#141A16",
-        "oklch": "oklch(18.53% 0.010 145.15)",
+        "value": "#0F1010",
         "role": "page background"
       },
       "bg-rail": {
-        "value": "#121815",
+        "value": "#0C0D0D",
         "role": "sidebar / rail"
       },
       "surface": {
-        "value": "#1D251F",
-        "oklch": "oklch(22.10% 0.017 144.97)",
+        "value": "#171919",
         "role": "raised panel"
       },
       "surface-2": {
-        "value": "#2E3830",
-        "oklch": "oklch(33.12% 0.031 144.85)",
+        "value": "#232626",
         "role": "hairline divider, avatar tile"
       },
       "border": {
-        "value": "#2E3830",
+        "value": "#2B2E2E",
         "role": "default 1px border"
       },
       "border-strong": {
-        "value": "#414D45",
-        "oklch": "oklch(43.12% 0.039 144.86)",
+        "value": "#484C4C",
         "role": "input + secondary button border"
       },
       "ink": {
-        "value": "#F5F4ED",
+        "value": "#EDEEEE",
         "role": "primary text",
-        "contrastOnBg": "16.3:1"
+        "contrastOnBg": "16.4:1"
       },
       "ink-secondary": {
-        "value": "#B4C0B6",
+        "value": "#B7BDBD",
         "role": "body text",
-        "contrastOnBg": "9.9:1"
+        "contrastOnBg": "10.0:1"
       },
       "ink-muted": {
-        "value": "#8E9A92",
+        "value": "#929B9B",
         "role": "mono labels, metadata",
-        "contrastOnBg": "6.2:1"
+        "contrastOnBg": "6.7:1"
       },
       "accent": {
         "value": "#63C8BC",
         "oklch": "oklch(75.87% 0.087 178.41)",
         "role": "interactive, current, primary button",
-        "contrastOnBg": "9.0:1"
+        "contrastOnBg": "9.5:1"
       },
       "accent-hover": {
         "value": "#86D6CD",
@@ -115,7 +111,7 @@
       }
     },
     "public": {
-      "$comment": "Marketing + public docs/changelog. Paper. Keeps /  visually distinct from /dashboard.",
+      "$comment": "Public pages follow the browser theme: warm paper in light mode and neutral charcoal in dark mode.",
       "paper": {
         "value": "#F5F4ED",
         "role": "page background"
@@ -160,6 +156,48 @@
       "invert": {
         "value": "#141A16",
         "role": "high-emphasis button fill on paper"
+      },
+      "dark": {
+        "paper": {
+          "value": "#0F1010",
+          "role": "page background"
+        },
+        "paper-2": {
+          "value": "#171919",
+          "role": "alternating section"
+        },
+        "border": {
+          "value": "#2B2E2E",
+          "role": "default 1px border"
+        },
+        "border-strong": {
+          "value": "#484C4C",
+          "role": "secondary button, chips"
+        },
+        "ink": {
+          "value": "#EDEEEE",
+          "role": "headings + body"
+        },
+        "ink-secondary": {
+          "value": "#B7BDBD",
+          "role": "supporting body"
+        },
+        "ink-muted": {
+          "value": "#929B9B",
+          "role": "mono labels, metadata"
+        },
+        "accent": {
+          "value": "#63C8BC",
+          "role": "interactive, kickers"
+        },
+        "accent-hover": {
+          "value": "#86D6CD",
+          "role": "hover"
+        },
+        "invert": {
+          "value": "#EDEEEE",
+          "role": "high-emphasis button fill on paper"
+        }
       }
     },
     "mark": {

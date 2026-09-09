@@ -1,3 +1,4 @@
+import { Avatar } from "../ui/Avatar";
 import { lazy, type ReactNode, Suspense, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
@@ -37,9 +38,13 @@ function SectionNavigation({
   readonly children?: ReactNode;
 }) {
   return (
-    <nav className={mobile ? "product-tabs" : "product-nav"} aria-label="Sections">
+    <nav
+      className={mobile ? "product-tabs" : "product-nav"}
+      aria-label="Sections"
+    >
       <NavLink
-        className={({ isActive }) => `product-nav__item${isActive ? " is-active" : ""}`}
+        className={({ isActive }) =>
+          `product-nav__item${isActive ? " is-active" : ""}`}
         end
         to="/dashboard"
       >
@@ -47,7 +52,8 @@ function SectionNavigation({
       </NavLink>
       {sections.map((section) => (
         <NavLink
-          className={({ isActive }) => `product-nav__item${isActive ? " is-active" : ""}`}
+          className={({ isActive }) =>
+            `product-nav__item${isActive ? " is-active" : ""}`}
           key={section.label}
           to={section.to}
         >
@@ -77,9 +83,11 @@ export function ProductLayout() {
       await signOut();
       navigate("/", { replace: true });
     } catch (error) {
-      setSignOutError(error instanceof AuthAdapterError
-        ? "Relay could not end the session. Try again."
-        : "Relay could not end the session. No account data was changed.");
+      setSignOutError(
+        error instanceof AuthAdapterError
+          ? "Relay could not end the session. Try again."
+          : "Relay could not end the session. No account data was changed.",
+      );
       setSigningOut(false);
       setConfirmingSignOut(false);
     }
@@ -89,8 +97,12 @@ export function ProductLayout() {
     <div className="product-shell product-surface">
       <a className="skip-link" href="#main-content">Skip to content</a>
       <aside className="product-rail" aria-label="Workspace navigation">
-        <div className="product-rail__brand"><RelayBrand surface="product" compact showParent={false} /></div>
-        <div className="product-rail__workspace"><WorkspaceSwitcher /></div>
+        <div className="product-rail__brand">
+          <RelayBrand surface="product" compact showParent={false} />
+        </div>
+        <div className="product-rail__workspace">
+          <WorkspaceSwitcher />
+        </div>
         <SectionNavigation>
           <Suspense fallback={null}>
             <AdminAccessLink className="product-nav__item" />
@@ -102,7 +114,11 @@ export function ProductLayout() {
             to="/profile"
             aria-label={`Open profile for ${session.identity.user.name}`}
           >
-            <span className="session-avatar" aria-hidden="true">{userInitials}</span>
+            <Avatar
+              className="session-avatar"
+              src={session.identity.user.image}
+              fallback={userInitials}
+            />
             <span className="session-copy">
               <strong>{session.identity.user.name}</strong>
               <span>{session.identity.user.email}</span>
@@ -124,7 +140,9 @@ export function ProductLayout() {
         <header className="product-mobile-header">
           <RelayBrand surface="product" compact showParent={false} />
           <div className="product-mobile-header__actions">
-            <Link className="product-mobile-profile" to="/profile">Profile</Link>
+            <Link className="product-mobile-profile" to="/profile">
+              Profile
+            </Link>
             <Button
               variant="quiet"
               pending={signingOut}
@@ -135,44 +153,61 @@ export function ProductLayout() {
             </Button>
           </div>
         </header>
-        <div className="product-mobile-workspace"><WorkspaceSwitcher /></div>
+        <div className="product-mobile-workspace">
+          <WorkspaceSwitcher />
+        </div>
         <SectionNavigation mobile>
           <Suspense fallback={null}>
             <AdminAccessLink className="product-nav__item" />
           </Suspense>
         </SectionNavigation>
-        {workspace.status === "degraded" ? (
-          <div className="product-global-notice">
-            <InlineNotice
-              title="Workspace context unavailable"
-              tone="error"
-              action={<Button variant="outline" onClick={() => void refreshWorkspace()}>Retry</Button>}
-            >
-              <p>{workspace.message}</p>
-            </InlineNotice>
-          </div>
-        ) : null}
-        {signOutError ? (
-          <div className="product-global-notice">
-            <InlineNotice title="Sign-out failed" tone="error"><p>{signOutError}</p></InlineNotice>
-          </div>
-        ) : null}
+        {workspace.status === "degraded"
+          ? (
+            <div className="product-global-notice">
+              <InlineNotice
+                title="Workspace context unavailable"
+                tone="error"
+                action={
+                  <Button
+                    variant="outline"
+                    onClick={() => void refreshWorkspace()}
+                  >
+                    Retry
+                  </Button>
+                }
+              >
+                <p>{workspace.message}</p>
+              </InlineNotice>
+            </div>
+          )
+          : null}
+        {signOutError
+          ? (
+            <div className="product-global-notice">
+              <InlineNotice title="Sign-out failed" tone="error">
+                <p>{signOutError}</p>
+              </InlineNotice>
+            </div>
+          )
+          : null}
         <main className="product-content" id="main-content" tabIndex={0}>
           <Outlet />
         </main>
       </div>
 
-      {confirmingSignOut ? (
-        <ConfirmDialog
-          title="Sign out of Relay?"
-          description="You'll need to sign in again with Google or GitHub to continue."
-          confirmLabel="Sign out"
-          confirmPendingLabel="Signing out"
-          pending={signingOut}
-          onConfirm={() => void handleSignOut()}
-          onCancel={() => setConfirmingSignOut(false)}
-        />
-      ) : null}
+      {confirmingSignOut
+        ? (
+          <ConfirmDialog
+            title="Sign out of Relay?"
+            description="You'll need to sign in again with Google or GitHub to continue."
+            confirmLabel="Sign out"
+            confirmPendingLabel="Signing out"
+            pending={signingOut}
+            onConfirm={() => void handleSignOut()}
+            onCancel={() => setConfirmingSignOut(false)}
+          />
+        )
+        : null}
     </div>
   );
 }

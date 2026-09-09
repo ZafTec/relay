@@ -984,7 +984,7 @@ function createRunUnknownOutcome(
 ): RunUnknownOutcomeResult {
   return {
     kind: "unknown-outcome",
-    message: "Relay could not confirm whether the run was accepted. Retry only the exact request with the same idempotency key.",
+    message: "We couldn't confirm whether your run was created. Use Retry request to check again with your saved inputs.",
     retryable: true,
     retryMode: "exact-request",
     retryAfterSeconds,
@@ -1121,7 +1121,7 @@ function createRunHttpFailure(
 
   if (isMeteringUnavailable(error)) {
     return createRunDegraded(
-      "Usage admission is temporarily unavailable. Retry the exact request with the same idempotency key.",
+      "We couldn't check your available usage. Use Retry request to try again with your saved inputs.",
       true,
       error.retryAfterSeconds,
     );
@@ -1143,7 +1143,7 @@ export const httpRunsAdapter: RunsAdapter = {
       parsedKey = idempotencyKeyValue(idempotencyKey);
     } catch {
       return createRunDegraded(
-        "Relay could not prepare the run request. Review the fields and reuse a stable idempotency key.",
+        "We couldn't prepare your run. Review the fields and try again.",
       );
     }
 

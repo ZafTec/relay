@@ -484,6 +484,25 @@ jobs:
           TAG: ${{ steps.identity.outputs.tag }}
         run: gh release upload "$TAG" evidence/* --clobber
 
+      - name: Prepare detailed release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.identity.outputs.release_id }}
+          TAG: ${{ steps.identity.outputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            > "$RUNNER_TEMP/release-notes-source.json"
+          deno run --allow-read --allow-write --allow-run=git scripts/release/notes.ts \
+            evidence/release-manifest.json \
+            "$RUNNER_TEMP/release-notes-source.json" \
+            "$RUNNER_TEMP/releases.json" \
+            "$GITHUB_REPOSITORY" \
+            "$RUNNER_TEMP/release-notes.md"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
+
       - name: Confirm release is still a draft
         shell: bash
         env:

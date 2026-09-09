@@ -872,9 +872,12 @@ export class ArtifactService {
   > {
     if (
       !(input.bytes instanceof Uint8Array) ||
-      input.bytes.byteLength > 4 * 1024 * 1024
+      input.bytes.byteLength > this.#maxUploadBytes
     ) {
-      throw new ArtifactInputError("content", "must contain at most 4 MiB");
+      throw new ArtifactInputError(
+        "content",
+        "exceeds the configured upload limit",
+      );
     }
     const bytes = new Uint8Array(input.bytes);
     const sha256 = await sha256Hex(bytes);

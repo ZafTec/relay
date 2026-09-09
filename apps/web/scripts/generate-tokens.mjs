@@ -32,17 +32,23 @@ function productVariableLines(tokens) {
   ];
 }
 
+function publicVariableLines(publicSurface) {
+  return [
+    ["--relay-public-paper", publicSurface.paper.value],
+    ["--relay-public-paper-2", publicSurface["paper-2"].value],
+    ["--relay-public-border", publicSurface.border.value],
+    ["--relay-public-border-strong", publicSurface["border-strong"].value],
+    ["--relay-public-ink", publicSurface.ink.value],
+    ["--relay-public-ink-secondary", publicSurface["ink-secondary"].value],
+    ["--relay-public-ink-muted", publicSurface["ink-muted"].value],
+    ["--relay-public-accent", publicSurface.accent.value],
+    ["--relay-public-accent-hover", publicSurface["accent-hover"].value],
+    ["--relay-public-invert", publicSurface.invert.value],
+  ];
+}
+
 const variableLines = [
-  ["--relay-public-paper", publicSurface.paper.value],
-  ["--relay-public-paper-2", publicSurface["paper-2"].value],
-  ["--relay-public-border", publicSurface.border.value],
-  ["--relay-public-border-strong", publicSurface["border-strong"].value],
-  ["--relay-public-ink", publicSurface.ink.value],
-  ["--relay-public-ink-secondary", publicSurface["ink-secondary"].value],
-  ["--relay-public-ink-muted", publicSurface["ink-muted"].value],
-  ["--relay-public-accent", publicSurface.accent.value],
-  ["--relay-public-accent-hover", publicSurface["accent-hover"].value],
-  ["--relay-public-invert", publicSurface.invert.value],
+  ...publicVariableLines(publicSurface),
   ...productVariableLines(productLight),
   ["--relay-font-sans", source.typography.families.sans.stack],
   ["--relay-font-mono", source.typography.families.mono.stack],
@@ -55,24 +61,36 @@ const variableLines = [
   ["--relay-section-y", source.space.sectionY],
   ["--relay-motion-press", source.motion.duration.press],
   ["--relay-motion-hover", source.motion.duration.hover],
-  ["--relay-motion-stage", cssDuration(source.motion.duration.stage, "motion.duration.stage")],
+  [
+    "--relay-motion-stage",
+    cssDuration(source.motion.duration.stage, "motion.duration.stage"),
+  ],
   ["--relay-ease-out", source.motion.easing["out-strong"]],
   ...spaces.map((space, index) => [`--relay-space-${index + 1}`, `${space}px`]),
 ];
 
-const darkProductLines = productVariableLines(product);
-const generated = `/* Generated from the approved Relay v3 token copy. Do not edit by hand. */\n`
-  + `:root {\n${variableLines.map(([name, value]) => `  ${name}: ${value};`).join("\n")}\n}\n\n`
-  + `/* The product surface (dashboard, admin) follows the viewer's OS/browser color-scheme preference.\n`
-  + `   The public marketing surface stays on its paper palette in both modes. */\n`
-  + `@media (prefers-color-scheme: dark) {\n  :root {\n${darkProductLines
-    .map(([name, value]) => `    ${name}: ${value};`)
-    .join("\n")}\n  }\n}\n`;
+const darkProductLines = [
+  ...productVariableLines(product),
+  ...publicVariableLines(publicSurface.dark),
+];
+const generated =
+  `/* Generated from the approved Relay v3 token copy. Do not edit by hand. */\n` +
+  `:root {\n${
+    variableLines.map(([name, value]) => `  ${name}: ${value};`).join("\n")
+  }\n}\n\n` +
+  `/* Public and product surfaces follow the viewer's OS/browser color-scheme preference. */\n` +
+  `@media (prefers-color-scheme: dark) {\n  :root {\n${
+    darkProductLines
+      .map(([name, value]) => `    ${name}: ${value};`)
+      .join("\n")
+  }\n  }\n}\n`;
 
 if (process.argv.includes("--check")) {
   const existing = await readFile(outputUrl, "utf8").catch(() => "");
   if (existing !== generated) {
-    console.error("src/styles/tokens.css is out of date. Run npm run tokens:generate.");
+    console.error(
+      "src/styles/tokens.css is out of date. Run npm run tokens:generate.",
+    );
     process.exitCode = 1;
   }
 } else {

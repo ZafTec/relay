@@ -1,6 +1,7 @@
 import { type DatabasePool, withTransaction } from "@relay/database";
 import { recordAuditEvent } from "@relay/audit";
 import type pg from "pg";
+import { parseImageSource } from "./image-source.ts";
 import {
   suggestWorkspaceDetails,
   type WorkspaceDetails,
@@ -10,6 +11,26 @@ export interface ManagedWorkspace extends WorkspaceDetails {
   readonly id: string;
   readonly role: string;
   readonly personal: boolean;
+  readonly logo?: string | null;
+}
+
+export interface WorkspaceUpdate extends WorkspaceDetails {
+  readonly logo?: string | null;
+}
+
+export function parseWorkspaceUpdate(value: unknown): WorkspaceUpdate {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new WorkspaceManagementError("invalid_input");
+  }
+  const { logo, ...details } = value as Record<string, unknown>;
+  const parsed = parseWorkspaceDetails(details);
+  try {
+    return logo === undefined
+      ? parsed
+      : { ...parsed, logo: parseImageSource(logo) };
+  } catch {
+    throw new WorkspaceManagementError("invalid_input");
+  }
 }
 
 export class WorkspaceManagementError extends Error {
@@ -20,6 +41,10 @@ export class WorkspaceManagementError extends Error {
       | "invalid_input"
       | "not_found"
       | "owner_required"
+      | "handle_immutable"
+      | "personal_workspace"
+      | "workspace_busy"
+      | "confirmation_required"
       | "slug_taken"
       | "idempotency_conflict"
       | "workspace_limit",
@@ -51,7 +76,7 @@ export function parseWorkspaceDetails(value: unknown): WorkspaceDetails {
   return { name, slug };
 }
 
-async function withWorkspaceSession<T>(
+export async function withWorkspaceSession<T>(
   pool: DatabasePool,
   sessionId: string,
   action: (client: pg.PoolClient, userId: string) => Promise<T>,
@@ -72,7 +97,7 @@ async function withWorkspaceSession<T>(
   });
 }
 
-const WORKSPACE_FIELDS = `o.id,o.name,o.slug,m.role,
+const WORKSPACE_FIELDS = `o.id,o.name,o.slug,o.logo,m.role,
   exists(select 1 from relay.personal_workspaces p where p.organization_id=o.id) as personal`;
 
 export function listManagedWorkspaces(
@@ -155,6 +180,13 @@ export function createManagedWorkspace(
       ) throw new WorkspaceManagementError("idempotency_conflict");
       return { workspace, replayed: true };
     }
+    const existing = await client.query(
+      "select id from auth.organization where id=$1",
+      [id],
+    );
+    if (existing.rows.length) {
+      throw new WorkspaceManagementError("idempotency_conflict");
+    }
     const count = await client.query<{ count: number }>(
       `select count(*)::integer as count from auth.member where "userId"=$1 and role='owner'`,
       [userId],
@@ -195,9 +227,9 @@ export function updateManagedWorkspace(
   pool: DatabasePool,
   sessionId: string,
   workspaceId: string,
-  input: WorkspaceDetails,
+  input: WorkspaceUpdate,
 ): Promise<ManagedWorkspace> {
-  const details = parseWorkspaceDetails(input);
+  const details = parseWorkspaceUpdate(input);
   return withWorkspaceSession(pool, sessionId, async (client, userId) => {
     const result = await client.query<ManagedWorkspace>(
       `select ${WORKSPACE_FIELDS} from auth.organization o
@@ -210,13 +242,19 @@ export function updateManagedWorkspace(
     if (workspace.role !== "owner") {
       throw new WorkspaceManagementError("owner_required");
     }
-    if (workspace.name === details.name && workspace.slug === details.slug) {
+    if (workspace.slug !== details.slug) {
+      throw new WorkspaceManagementError("handle_immutable");
+    }
+    const logo = details.logo === undefined
+      ? workspace.logo ?? null
+      : details.logo;
+    if (workspace.name === details.name && (workspace.logo ?? null) === logo) {
       return workspace;
     }
     try {
       await client.query(
-        "update auth.organization set name=$2,slug=$3 where id=$1",
-        [workspaceId, details.name, details.slug],
+        "update auth.organization set name=$2,logo=$3 where id=$1",
+        [workspaceId, details.name, logo],
       );
     } catch (error) {
       if (
@@ -234,6 +272,87 @@ export function updateManagedWorkspace(
       targetId: workspaceId,
       outcome: "success",
     });
-    return { ...workspace, ...details };
+    return { ...workspace, ...details, logo };
+  });
+}
+
+export function deleteManagedWorkspace(
+  pool: DatabasePool,
+  sessionId: string,
+  workspaceId: string,
+  confirmation: string,
+): Promise<void> {
+  return withWorkspaceSession(pool, sessionId, async (db, userId) => {
+    const { rows } = await db.query<
+      {
+        slug: string;
+        personal: boolean;
+        deletedAt: Date | null;
+        role: string | null;
+      }
+    >(
+      `select o.slug,o."deletedAt",m.role, exists(select 1 from relay.personal_workspaces p where p.organization_id=o.id) as personal
+       from auth.organization o left join auth.member m on m."organizationId"=o.id and m."userId"=$2
+       where o.id=$1 and (m.id is not null or o."deletedBy"=$2) for update of o`,
+      [workspaceId, userId],
+    );
+    const org = rows[0];
+    if (!org) throw new WorkspaceManagementError("not_found");
+    if (confirmation !== org.slug) {
+      throw new WorkspaceManagementError("confirmation_required");
+    }
+    if (org.deletedAt) return;
+    if (org.role !== "owner") {
+      throw new WorkspaceManagementError("owner_required");
+    }
+    if (org.personal) throw new WorkspaceManagementError("personal_workspace");
+    const busy = await db.query(
+      `select 1 from relay.tool_runs where workspace_id=$1 and status in ('queued','running','cancel_requested')
+      union all select 1 from relay.artifact_uploads where workspace_id=$1 and status='pending' limit 1`,
+      [workspaceId],
+    );
+    if (busy.rows.length) throw new WorkspaceManagementError("workspace_busy");
+    await db.query(
+      'update auth.organization set "deletedAt"=now(),"deletedBy"=$2,logo=null where id=$1',
+      [workspaceId, userId],
+    );
+    await db.query(
+      `update relay.artifacts set deleted_at=now(),purge_after=now(),purge_status='pending',purge_last_error=null where workspace_id=$1 and deleted_at is null`,
+      [workspaceId],
+    );
+    await db.query(
+      "update relay.share_links set revoked_at=coalesce(revoked_at,now()) where workspace_id=$1",
+      [workspaceId],
+    );
+    await db.query(
+      'update auth."oauthAccessToken" set revoked=coalesce(revoked,now()) where "referenceId"=$1',
+      [workspaceId],
+    );
+    await db.query(
+      'update auth."oauthRefreshToken" set revoked=coalesce(revoked,now()) where "referenceId"=$1',
+      [workspaceId],
+    );
+    await db.query('delete from auth."oauthConsent" where "referenceId"=$1', [
+      workspaceId,
+    ]);
+    await db.query('delete from auth.invitation where "organizationId"=$1', [
+      workspaceId,
+    ]);
+    await db.query('delete from auth.member where "organizationId"=$1', [
+      workspaceId,
+    ]);
+    await db.query(
+      `update auth.session s set "activeOrganizationId"=(select p.organization_id from relay.personal_workspaces p where p.user_id=s."userId"),"updatedAt"=now() where s."activeOrganizationId"=$1`,
+      [workspaceId],
+    );
+    await recordAuditEvent(db, {
+      actorType: "user",
+      actorUserId: userId,
+      workspaceId,
+      action: "workspace.delete",
+      targetType: "workspace",
+      targetId: workspaceId,
+      outcome: "success",
+    });
   });
 }

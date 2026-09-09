@@ -153,7 +153,7 @@ describe("run creation adapter", () => {
       input: {},
     }, IDEMPOTENCY_KEY)).resolves.toEqual({
       kind: "unknown-outcome",
-      message: expect.stringMatching(/same idempotency key/i),
+      message: expect.stringMatching(/Retry request.*saved inputs/i),
       retryable: true,
       retryMode: "exact-request",
       retryAfterSeconds: null,

@@ -135,6 +135,7 @@ export interface WorkspaceEventApplicationService {
 }
 
 export interface ApplicationServices {
+  readonly overview?: import("./overview.ts").OverviewApplicationService;
   readonly notifications?: NotificationService;
   readonly content?: ContentApplicationService;
   readonly tools: ToolApplicationService;

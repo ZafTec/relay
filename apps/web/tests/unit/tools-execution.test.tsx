@@ -266,10 +266,12 @@ describe("production tool run composers", () => {
     expect(Object.isFrozen(request)).toBe(true);
     expect(Object.isFrozen(request?.input)).toBe(true);
     expect(key).toMatch(/^tool-run:image\.generate\.gpt-image-2:/);
-    expect(await screen.findByRole("link", { name: "Open run" })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: "View run" })).toHaveAttribute(
       "href",
       `/dashboard/runs/run_${"7".repeat(32)}`,
     );
+    expect(screen.getByRole("region", { name: "Run accepted" })).toHaveFocus();
+    expect(screen.getByLabelText("Prompt")).toHaveValue("A graphite observatory at dawn");
     await expectNoAxeViolations(container);
   });
 
@@ -383,14 +385,14 @@ describe("production tool run composers", () => {
 
     await configureGptPrompt(user);
     await user.click(screen.getByRole("button", { name: "Create run" }));
-    expect(await screen.findByText("Run outcome unknown")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Retry exact request" }));
+    expect(await screen.findByText("Still waiting for confirmation")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Retry request" }));
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
     expect(create.mock.calls[1]?.[0]).toBe(create.mock.calls[0]?.[0]);
     expect(create.mock.calls[1]?.[1]).toBe(create.mock.calls[0]?.[1]);
     expect(Object.isFrozen(create.mock.calls[1]?.[0])).toBe(true);
-    expect(await screen.findByText("Stored run replayed")).toBeVisible();
+    expect(await screen.findByText("Run already created")).toBeVisible();
   });
 
   it("blocks invalid provider dimensions before creating a run", async () => {
@@ -517,7 +519,7 @@ describe("production tool run composers", () => {
     [
       "idempotency-conflict",
       { kind: "idempotency-conflict" } satisfies CreateRunAdapterResult,
-      "Request key conflict",
+      "Request could not be reused",
     ],
   ])("renders the %s admission result", async (_name, result, title) => {
     const user = userEvent.setup();

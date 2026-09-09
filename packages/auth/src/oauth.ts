@@ -24,6 +24,7 @@ export const RELAY_OAUTH_SCOPES = [
 
 export const RELAY_WORKSPACE_ID_CLAIM = "urn:relay:workspace_id";
 export const RELAY_ADMIN_SESSION_CLAIM = "urn:relay:admin_session_id";
+export const RELAY_CONSENT_CLAIM = "urn:relay:consent_id";
 const ADMIN_SCOPES = new Set<string>(RELAY_MCP_ADMIN_SCOPES);
 
 export interface AuthorizedMcpPrincipal {
@@ -32,6 +33,7 @@ export interface AuthorizedMcpPrincipal {
   readonly clientId: string;
   readonly scopes: readonly string[];
   readonly adminSessionId?: string;
+  readonly consentId?: string;
 }
 
 const MAX_MCP_CLAIM_LENGTH = 255;
@@ -70,6 +72,10 @@ export function parseMcpAccessTokenClaims(
   const workspaceId = claimIdentity(payload[RELAY_WORKSPACE_ID_CLAIM]);
   const clientId = claimIdentity(payload.client_id);
   const scopes = claimScopes(payload.scope);
+  const consentId = claimIdentity(payload[RELAY_CONSENT_CLAIM]);
+  if (payload[RELAY_CONSENT_CLAIM] !== undefined && consentId === null) {
+    return null;
+  }
   if (
     actorUserId === null || workspaceId === null || clientId === null ||
     scopes === null
@@ -84,6 +90,7 @@ export function parseMcpAccessTokenClaims(
     workspaceId,
     clientId,
     scopes,
+    ...(consentId ? { consentId } : {}),
     ...(requestsAdmin ? { adminSessionId: adminSessionId! } : {}),
   };
 }
@@ -116,6 +123,13 @@ export async function authorizeMcpAccessTokenClaims(
            on member."organizationId" = $2 and member."userId" = $3
         where client."clientId" = $1
           and client.disabled is not true
+          and exists (
+            select 1 from auth."oauthConsent" consent
+             where consent."clientId"=client."clientId"
+               and consent."userId"=$3 and consent."referenceId"=$2
+               and (consent.id=$5 or ($5::text is null and consent."legacyTokensAllowed"))
+               and consent.scopes @> to_jsonb($6::text[])
+          )
           and resource.identifier = $4
           and resource.disabled is not true
      ) as authorized`,
@@ -124,6 +138,8 @@ export async function authorizeMcpAccessTokenClaims(
       principal.workspaceId,
       principal.actorUserId,
       resource,
+      principal.consentId ?? null,
+      principal.scopes,
     ],
   );
   if (result.rows[0]?.authorized !== true) return null;
@@ -287,8 +303,24 @@ export function createMcpOAuthOptions(
     refreshTokenReuseInterval: 30,
     extensions: [{
       claims: {
-        accessToken: async ({ user, sessionId, scopes }) => {
-          if (!scopes.some((scope) => ADMIN_SCOPES.has(scope))) return {};
+        accessToken: async (
+          { user, sessionId, scopes, client, referenceId },
+        ) => {
+          const claims: Record<string, string> = {};
+          if (requestsRelayResource(scopes)) {
+            const consent = await queryable.query<{ id: string }>(
+              `select id from auth."oauthConsent" where "clientId"=$1 and "userId"=$2 and "referenceId"=$3`,
+              [client.clientId, user?.id, referenceId],
+            );
+            if (!consent.rows[0]) {
+              throw new APIError("FORBIDDEN", {
+                error: "access_denied",
+                error_description: "Connect this app again to restore access.",
+              });
+            }
+            claims[RELAY_CONSENT_CLAIM] = consent.rows[0].id;
+          }
+          if (!scopes.some((scope) => ADMIN_SCOPES.has(scope))) return claims;
           if (
             !user || !sessionId ||
             !await currentAdminSession(queryable, user.id, sessionId, true)
@@ -299,7 +331,7 @@ export function createMcpOAuthOptions(
                 "Platform permissions require a current superadmin and a recent sign-in.",
             });
           }
-          return { [RELAY_ADMIN_SESSION_CLAIM]: sessionId };
+          return { ...claims, [RELAY_ADMIN_SESSION_CLAIM]: sessionId };
         },
       },
     }],

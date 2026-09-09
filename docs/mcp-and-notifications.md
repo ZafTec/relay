@@ -29,13 +29,54 @@ session IDs.
 
 Registration does not grant usage allowances. Execution still needs an explicit
 `tools.execute` capability and the applicable image or OCR allowance. Client
-creation, rotation, and deletion require a recently authenticated superadmin
-session when managed manually. Managed clients belong to the superadmin who
+creation, rotation, and deletion require a recently authenticated owner
+session when managed manually. Managed clients belong to the signed-in user who
 registered them. Client-credentials grants are disabled.
 
 Rotating a secret requires updating the agent. Deleting a client invalidates its
 authorizations. If a creation response is lost, refresh the list and rotate the
-client's secret to obtain a new copy.
+client’s secret to obtain a new copy.
+
+**Connected apps** lists your approved connections, including clients registered
+automatically by Claude or another agent. Expand a connection to see its
+workspace and permissions, or disconnect it. Disconnecting revokes access and
+refresh tokens; a later reconnection cannot reactivate an old token. Manual
+client registrations remain a separate list.
+
+## Discover and execute tools
+
+Claude and other agents see a stable catalog interface instead of one MCP tool
+per image model:
+
+1. Call `relay.tools.list` to find an available tool.
+2. Call `relay.tools.get` with its `toolKey` to inspect the real `inputSchema`,
+   `outputSchema`, limits, and `activeVersionId`.
+3. Call `relay.tools.execute` with that key, matching `input`, and a unique
+   `idempotencyKey`. Optionally pass `toolVersionId` from the inspected contract
+   to prevent execution if the contract changes.
+4. Poll `relay.runs.get` with the returned `runId`. Use
+   `relay.artifacts.get_access` for completed output files.
+
+Example `relay.tools.execute` arguments, after inspecting GPT Image 2:
+
+```json
+{
+  "toolKey": "image.generate.gpt-image-2",
+  "input": { "prompt": "A quiet mountain lake at sunrise" },
+  "idempotencyKey": "4c9e9e75-9910-44b1-949a-e82bc6633f35"
+}
+```
+
+Generate a new key for a new operation and reuse the same key and arguments for
+retries. The executor requires the key as an ordinary argument, so clients do
+not need to attach custom metadata. Input validation, workspace tool access,
+and usage allowance failures are returned separately. OAuth consent alone does
+not grant an execution allowance.
+
+Existing connections may cache the previous per-model tool list. Refresh or
+reconnect Relay in the client after upgrading. Integrations calling model names
+directly must switch to `relay.tools.execute`. Run, file, notification, and
+authorized administration tools remain available.
 
 ## Workspaces and storage usage
 
@@ -44,6 +85,19 @@ Workspaces have a readable name and a memorable slug, such as **Calm Cedar** and
 name and slug before saving, switch between your workspaces, or rename one you
 own. Each account can own up to 20 workspaces. Creating a workspace grants
 ownership; it does not grant execution access or usage allowances.
+
+A workspace's handle cannot change after creation. Owners can update its name
+and logo, or delete a shared workspace by entering its exact handle. Deletion
+is blocked while runs or uploads are active. It removes memberships, agent
+connections, and share links immediately; stored files are then purged by the
+cleanup worker. Personal workspaces cannot be deleted. Audit and run history
+remain for accounting, without giving former members access.
+
+The **Overview** shows current run and file counts, recent work, and storage.
+Each workspace has at most **100 MB (100,000,000 bytes)** of storage, including
+retained versions and pending uploads. A lower operator limit is respected.
+Existing files above the cap are retained; no new storage can be reserved until
+enough space is available.
 
 Existing generated personal workspace labels are upgraded during migration.
 Custom names and slugs are preserved. Workspace IDs, memberships, files, tokens,
@@ -58,7 +112,38 @@ as upload enforcement. A failed capacity lookup is shown as unavailable.
 Agents with `usage:read` can call `relay.usage.storage` without arguments. The
 HTTP equivalent is `GET /api/v1/usage/storage`. Both use the current workspace
 and return exact decimal byte strings, including stored, reserved, cleanup,
-limit, and available bytes. A null limit means explicitly unlimited storage.
+limit, and available bytes. Storage labels in the UI use decimal MB.
+
+## File previews, URL imports, and photos
+
+Saved images appear in the artifact gallery. File details can preview supported
+images, audio, video, and text up to 256 KiB; other files remain downloadable.
+Previews use short-lived access URLs without making the artifact public.
+
+Choose **Upload artifact → From URL**, or call `relay.artifacts.import_url`:
+
+```json
+{
+  "url": "https://example.com/report.pdf",
+  "name": "Quarterly report.pdf",
+  "idempotencyKey": "64ae828e-77bd-4242-8053-e6749d637101"
+}
+```
+
+The MCP tool requires `artifacts:write` and `artifacts:read`. Temporary access is
+the default; `access: "permanent"` additionally requires `artifacts:share`.
+The HTTP equivalent is `POST /api/v1/artifacts/import` with an
+`Idempotency-Key` header. Imports validate public HTTP(S) destinations on every
+redirect, pin DNS addresses, check file type and size, and store the actual
+bytes. The per-file import limit is 20 MB and the request timeout is 15 seconds.
+Files must be available without sign-in. Retry with the same key and input;
+if the source file has changed, Relay reports a conflict instead of saving a
+duplicate under the old key.
+
+In **Profile → Change profile photo**, upload a PNG, JPEG, or WebP image, paste an
+HTTPS image URL, or choose the photo from a linked Google/GitHub account.
+Uploaded identity images are cropped to a square; provider images keep their
+hosted URL. Workspace logos use the same image controls.
 
 ## Administration through MCP
 
@@ -79,12 +164,13 @@ authentication; sign in again and reconnect when prompted.
 Tools use the `relay.admin.` prefix, for example
 `relay.admin.allowances.workspaces` and `relay.admin.oauth.create`. The agent
 discovers only administrative operations covered by its consented scopes.
-Writes require a stable 16–128 character `io.relay/idempotency-key` in call
-metadata. Allowance, capacity, changelog, and invitation mutations retain their
+Writes require a stable 16–128 character `idempotencyKey` argument (a UUID is
+suitable). Legacy `io.relay/idempotency-key` call metadata is also accepted;
+when both supply a key, they must match. Allowance, capacity, changelog, and invitation mutations retain their
 existing replay protection and audit boundaries.
 
 OAuth client operations use Better Auth's native management endpoints, which
-do not deduplicate requests using that metadata key. Creation and secret rotation
+do not deduplicate requests using that key. Creation and secret rotation
 return a secret once. Never automatically retry an uncertain creation or
 rotation: inspect the client list and obtain the user's instruction before
 creating another client or rotating again. OAuth tools are marked
@@ -140,12 +226,15 @@ Example upload arguments:
   "encoding": "text",
   "content": "Notes to keep in my workspace.",
   "access": "temporary",
-  "expiresInSeconds": 300
+  "expiresInSeconds": 300,
+  "idempotencyKey": "7c9a4467-7247-4f1b-bbae-a2566518b229"
 }
 ```
 
-Supply a stable `io.relay/idempotency-key` in the MCP call's `_meta`, and reuse
-it when retrying the same operation. Upload requires `artifacts:write` and
+Supply a stable `idempotencyKey` argument and reuse it when retrying the same
+operation. Existing file clients may continue supplying
+`io.relay/idempotency-key` in `_meta`; both keys must match when present.
+Upload requires `artifacts:write` and
 `artifacts:read`.
 
 `relay.artifacts.get_access` also creates an access URL for an existing upload

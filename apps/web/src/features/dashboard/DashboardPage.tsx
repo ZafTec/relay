@@ -1,124 +1,240 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { usePageMetadata } from "../../app/usePageMetadata";
 import { useAuth } from "../../auth/AuthProvider";
-import { Button } from "../../components/ui/Button";
-import { EmptyState } from "../../components/ui/EmptyState";
+import { Button, LinkButton } from "../../components/ui/Button";
 import { InlineNotice } from "../../components/ui/InlineNotice";
 import { Skeleton } from "../../components/ui/Skeleton";
-import { StatusBadge } from "../../components/ui/StatusBadge";
 import {
   type DashboardOverviewAdapter,
   type DashboardOverviewResult,
   httpDashboardOverviewAdapter,
 } from "../../lib/api/dashboard";
+import { httpStorageUsageAdapter } from "../../lib/api/storage-usage";
+import { formatRunTimestamp, RunStatusBadge } from "../runs/run-display";
+import { StorageUsagePanel } from "../usage/StorageUsagePanel";
+import { formatBytes } from "../artifacts/artifact-display";
+import "../usage/usage.css";
+import "./overview.css";
 
-interface DashboardPageProps {
-  overviewAdapter?: DashboardOverviewAdapter;
-}
-
-export function DashboardPage({ overviewAdapter = httpDashboardOverviewAdapter }: DashboardPageProps) {
-  usePageMetadata("Overview | Relay", "#141A16");
+export function DashboardPage(
+  { overviewAdapter = httpDashboardOverviewAdapter }: {
+    overviewAdapter?: DashboardOverviewAdapter;
+  },
+) {
+  usePageMetadata("Overview | Relay", "#0F1010");
   const { session, workspace, expireSession } = useAuth();
-  const sessionId = session.status === "authenticated" ? session.identity.session.id : undefined;
-  const [state, setState] = useState<DashboardOverviewResult | { kind: "loading" }>({ kind: "loading" });
+  const sessionId = session.status === "authenticated"
+    ? session.identity.session.id
+    : undefined;
+  const workspaceId = workspace.status === "ready"
+    ? workspace.workspace.id
+    : undefined;
+  const [state, setState] = useState<
+    DashboardOverviewResult | { kind: "loading" }
+  >({ kind: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
-
   useEffect(() => {
     const controller = new AbortController();
     setState({ kind: "loading" });
-    void overviewAdapter.load(controller.signal).then((result) => {
-      if (result.kind === "auth-expired") {
-        expireSession(sessionId);
-        return;
-      }
-      setState(result);
-    }).catch((error: unknown) => {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      setState({
-        kind: "degraded",
-        message: "Relay could not load the overview. No workspace data was changed.",
+    if (workspaceId) {
+      void overviewAdapter.load(controller.signal).then((result) => {
+        if (controller.signal.aborted) return;
+        if (result.kind === "auth-expired") expireSession(sessionId);
+        else setState(result);
+      }).catch(() => {
+        if (!controller.signal.aborted) {
+          setState({
+            kind: "degraded",
+            message: "Your overview couldn’t be loaded. Please try again.",
+          });
+        }
       });
-    });
+    }
     return () => controller.abort();
-  }, [expireSession, overviewAdapter, reloadKey, sessionId]);
-
-  const workspaceId = workspace.status === "ready" ? workspace.workspace.id : null;
-
+  }, [expireSession, overviewAdapter, reloadKey, sessionId, workspaceId]);
+  const data = state.kind === "ok" ? state.overview : null;
   return (
-    <div className="dashboard-page">
+    <div className="dashboard-page overview-page">
       <header className="dashboard-header">
         <div>
-          <p className="mono-label">{workspaceId ? `Workspace ${workspaceId}` : "Workspace context"}</p>
+          <p className="mono-label">
+            {workspace.status === "ready"
+              ? workspace.workspace.name
+              : "Your workspace"}
+          </p>
           <h1>Overview</h1>
         </div>
-        <Button variant="outline" onClick={() => setReloadKey((value) => value + 1)}>Refresh</Button>
+        <div className="overview-actions">
+          <Button
+            variant="quiet"
+            disabled={state.kind === "loading"}
+            onClick={() => setReloadKey((value) => value + 1)}
+          >
+            Refresh
+          </Button>
+          <LinkButton to="/dashboard/tools">Explore tools</LinkButton>
+        </div>
       </header>
-
       <div className="dashboard-body">
-        {workspace.status === "empty" ? (
-          <InlineNotice title="No active workspace" tone="error">
-            <p>Relay could not resolve a workspace for this session. Sign out, then sign in again.</p>
-          </InlineNotice>
-        ) : null}
-
-        {state.kind === "loading" ? <Skeleton label="Loading dashboard overview" lines={4} /> : null}
-
-        {state.kind === "degraded" ? (
-          <InlineNotice
-            title="Overview unavailable"
-            tone="error"
-            action={<Button variant="outline" onClick={() => setReloadKey((value) => value + 1)}>Try again</Button>}
-          >
-            <p>{state.message}</p>
-          </InlineNotice>
-        ) : null}
-
-        {state.kind === "empty" ? (
-          <EmptyState
-            label="API connected / summary contract pending"
-            title="No overview data is exposed yet"
-            actions={<Button variant="outline" onClick={() => setReloadKey((value) => value + 1)}>Check again</Button>}
-            aside={
-              <div className="connection-ledger">
-                <StatusBadge tone="ready">API available</StatusBadge>
-                <dl>
-                  <div><dt>Service</dt><dd>{state.serviceName}</dd></div>
-                  <div><dt>Counts</dt><dd>Not requested</dd></div>
-                  <div><dt>Fallback data</dt><dd>None</dd></div>
-                </dl>
+        {workspace.status === "empty"
+          ? (
+            <InlineNotice title="Choose a workspace">
+              <p>
+                <Link to="/dashboard/settings#workspaces">
+                  Select or create a workspace
+                </Link>{" "}
+                to see your activity.
+              </p>
+            </InlineNotice>
+          )
+          : null}
+        {state.kind === "loading" && workspace.status !== "empty"
+          ? <Skeleton label="Loading workspace overview" lines={5} />
+          : null}
+        {state.kind === "degraded"
+          ? (
+            <InlineNotice
+              title="Overview unavailable"
+              tone="error"
+              action={
+                <Button
+                  variant="outline"
+                  onClick={() => setReloadKey((value) => value + 1)}
+                >
+                  Try again
+                </Button>
+              }
+            >
+              <p>{state.message}</p>
+            </InlineNotice>
+          )
+          : null}
+        {data
+          ? (
+            <>
+              <dl className="overview-stats">
+                {[
+                  ["Total runs", data.counts.runs, "/dashboard/runs"],
+                  ["In progress", data.counts.activeRuns, "/dashboard/runs"],
+                  ["Failed runs", data.counts.failedRuns, "/dashboard/runs"],
+                  [
+                    "Saved files",
+                    data.counts.artifacts,
+                    "/dashboard/artifacts",
+                  ],
+                ].map(([label, value, url]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>
+                      <Link to={String(url)}>
+                        {Number(value).toLocaleString()}
+                      </Link>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {data.counts.runs === 0 && data.counts.artifacts === 0
+                ? (
+                  <section className="overview-welcome">
+                    <h2>Your workspace is ready</h2>
+                    <p>
+                      Choose a tool to create your first run, or add files to
+                      use with your agent.
+                    </p>
+                    <div className="overview-actions">
+                      <LinkButton to="/dashboard/tools">Find a tool</LinkButton>
+                      <LinkButton variant="outline" to="/dashboard/artifacts">
+                        Add files
+                      </LinkButton>
+                      <Link to="/dashboard/oauth-clients">
+                        Connect an agent
+                      </Link>
+                    </div>
+                  </section>
+                )
+                : null}
+              <div className="overview-columns">
+                <section
+                  className="overview-panel"
+                  aria-labelledby="overview-runs"
+                >
+                  <header>
+                    <h2 id="overview-runs">Recent runs</h2>
+                    <Link to="/dashboard/runs">View all</Link>
+                  </header>
+                  {data.runs.length
+                    ? (
+                      <ul className="overview-list">
+                        {data.runs.map((run) => (
+                          <li key={run.id}>
+                            <Link to={"/dashboard/runs/" + run.id}>
+                              <span>
+                                <strong>{run.tool.name}</strong>
+                                <time dateTime={run.acceptedAt}>
+                                  {formatRunTimestamp(run.acceptedAt)}
+                                </time>
+                              </span>
+                              <RunStatusBadge status={run.status} />
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                    : (
+                      <p className="overview-empty">
+                        Your runs will appear here when you start using a tool.
+                      </p>
+                    )}
+                </section>
+                <section
+                  className="overview-panel"
+                  aria-labelledby="overview-files"
+                >
+                  <header>
+                    <h2 id="overview-files">Recent files</h2>
+                    <Link to="/dashboard/artifacts">View all</Link>
+                  </header>
+                  {data.artifacts.length
+                    ? (
+                      <ul className="overview-list">
+                        {data.artifacts.map((file) => (
+                          <li key={file.id}>
+                            <Link to={"/dashboard/artifacts/" + file.id}>
+                              <span>
+                                <strong>{file.name}</strong>
+                                <small>{file.mediaKind}</small>
+                              </span>
+                              <small>
+                                {file.currentVersion
+                                  ? formatBytes(file.currentVersion.sizeBytes)
+                                  : "Preparing"}
+                              </small>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                    : (
+                      <p className="overview-empty">
+                        Upload a file or create one with a tool to see it here.
+                      </p>
+                    )}
+                </section>
               </div>
-            }
-          >
-            <p>
-              The current API confirms service availability but does not publish a dashboard
-              summary. Relay does not invent run, artifact, tool, or usage counts.
-            </p>
-          </EmptyState>
-        ) : null}
-
-        <section className="dashboard-contract" aria-labelledby="dashboard-contract-title">
-          <div>
-            <p className="mono-label">Resource views</p>
-            <h2 id="dashboard-contract-title">The rail exposes only implemented web routes.</h2>
-          </div>
-          <div className="dashboard-contract__rows">
-            {[
-              ["Tools", "Catalog and contract views", "Available"],
-              ["Runs", "Run and live-event views", "Available"],
-              ["Artifacts", "Registry and share views", "Available"],
-              ["Usage", "Usage summary view", "Available"],
-              ["Settings", "Workspace context view", "Available"],
-            ].map(([name, description, status]) => (
-              <div key={name}>
-                <strong>{name}</strong>
-                <span>{description}</span>
-                {status === "Available"
-                  ? <StatusBadge>Available</StatusBadge>
-                  : <StatusBadge tone="pending">Soon</StatusBadge>}
-              </div>
-            ))}
-          </div>
-        </section>
+              <StorageUsagePanel
+                adapter={httpStorageUsageAdapter}
+                reloadKey={reloadKey}
+              />
+              <p className="overview-updated">
+                Updated{" "}
+                <time dateTime={data.generatedAt}>
+                  {formatRunTimestamp(data.generatedAt)}
+                </time>
+              </p>
+            </>
+          )
+          : null}
       </div>
     </div>
   );

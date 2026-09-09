@@ -2,7 +2,9 @@ import { Hono } from "@hono/hono";
 import { notificationSettingsSchema } from "@relay/notifications";
 import {
   type ApplicationServices,
+  importUrlSchema,
   InvalidCursorError,
+  RemoteContentError,
   validateIdempotencyKey,
 } from "@relay/application";
 import {
@@ -239,6 +241,17 @@ export function createV1Routes(
       context.get("requestId"),
     )
   );
+
+  routes.get("/api/v1/overview", async (context) => {
+    assertNoQuery(context.req.raw);
+    const identity = await requireWorkspaceIdentity(
+      dependencies.resolveIdentity,
+      context.req.raw,
+    );
+    const result = await dependencies.services.overview?.get(identity);
+    if (!result || result.kind === "not_found") throw notFound();
+    return context.json(result);
+  });
 
   routes.get("/api/v1/notifications", async (context) => {
     assertNoQuery(context.req.raw);
@@ -511,6 +524,63 @@ export function createV1Routes(
     );
     if (result.kind === "not_found") throw notFound();
     return context.json(result);
+  });
+
+  routes.post("/api/v1/artifacts/import", async (context) => {
+    assertNoQuery(context.req.raw);
+    const identity = await requireWorkspaceIdentity(
+      dependencies.resolveIdentity,
+      context.req.raw,
+    );
+    const origin = context.req.header("origin");
+    if (
+      !origin ||
+      !(dependencies.allowedOrigins ?? [new URL(context.req.url).origin])
+        .includes(origin)
+    ) {
+      throw new HttpAdapterError({
+        status: 403,
+        code: "invalid_request",
+        message: "A trusted browser origin is required.",
+      });
+    }
+    const request = importUrlSchema.safeParse(
+      await readJsonBody(context.req.raw, 8192),
+    );
+    if (!request.success) throw invalidRequest();
+    try {
+      const result = await dependencies.services.content?.importUrl?.(
+        identity,
+        request.data,
+        requireIdempotencyKey(context.req.raw),
+      );
+      if (!result || result.kind === "not_found") throw notFound();
+      if (result.kind === "quota_exceeded") {
+        throw new HttpAdapterError({
+          status: 403,
+          code: "upload_quota_exceeded",
+          message: "There isn’t enough storage available in this workspace.",
+        });
+      }
+      if (result.kind !== "authorized") {
+        throw new HttpAdapterError({
+          status: result.kind === "idempotency_conflict" ? 409 : 503,
+          code: "invalid_request",
+          message:
+            "The import couldn’t be completed. Please retry with the same details.",
+        });
+      }
+      return context.json(result, 201);
+    } catch (error) {
+      if (error instanceof RemoteContentError) {
+        throw new HttpAdapterError({
+          status: 400,
+          code: "invalid_request",
+          message: error.message,
+        });
+      }
+      throw error;
+    }
   });
 
   routes.post(HTTP_PATHS.artifactUploads, async (context) => {

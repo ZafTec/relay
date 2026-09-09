@@ -12,6 +12,7 @@ import type { ProtectMcpOptions } from "@relay/auth";
 import { RELAY_MCP_PROTOCOL_VERSION, RELAY_MCP_TOOL_NAMES } from "@relay/mcp";
 import {
   createStubServices,
+  RUN,
   RUN_ID,
   TOOL,
   TOOL_KEY,
@@ -244,10 +245,27 @@ for (
   Deno.test(`official v2 HTTP client (${mode}) discovers and calls Relay tools without sessions`, async () => {
     const responses: Response[] = [];
     const requests: Request[] = [];
-    const authState = { current: true };
+    const authState = {
+      current: true,
+      scopes: ["tools:read", "tools:execute"],
+    };
+    const admitted: unknown[] = [];
     const handler = createRelayMcpHttpHandler({
       auth: fakeAuth(authState),
-      services: createStubServices(),
+      services: createStubServices({
+        tools: { get: () => Promise.resolve({ kind: "found", tool: TOOL }) },
+        runs: {
+          create: (identity, request, key, versionId) => {
+            admitted.push({ identity, request, key, versionId });
+            return Promise.resolve({
+              kind: "accepted",
+              run: RUN,
+              replayed: false,
+              queueReason: "awaiting_dispatch",
+            });
+          },
+        },
+      }),
       allowedHostnames: ["relay.test"],
       allowedOrigins: ["https://app.relay.test"],
       serverInfo: { name: "relay-test", version: "1.0.0" },
@@ -298,6 +316,25 @@ for (
         items: [],
         nextCursor: null,
       });
+      const execution = await client.callTool({
+        name: RELAY_MCP_TOOL_NAMES.executeTool,
+        arguments: {
+          toolKey: TOOL_KEY,
+          input: { prompt: "mountain" },
+          idempotencyKey: "claude-compatible-0001",
+        },
+      });
+      assertEquals(execution.isError, undefined);
+      assertEquals(
+        (execution.structuredContent as { runId: string }).runId,
+        RUN_ID,
+      );
+      assertEquals(admitted, [{
+        identity: { workspaceId: WORKSPACE_ID, actorUserId: USER_ID },
+        request: { toolKey: TOOL_KEY, input: { prompt: "mountain" } },
+        key: "claude-compatible-0001",
+        versionId: TOOL.activeVersionId,
+      }]);
       assert(requests.length >= 3);
       assert(
         requests.some((request) =>
@@ -527,7 +564,7 @@ Deno.test("MCP returns an operation-specific insufficient-scope challenge", asyn
     jsonrpc: "2.0",
     id: 2,
     method: "tools/call",
-    params: { name: TOOL_KEY, arguments: {} },
+    params: { name: RELAY_MCP_TOOL_NAMES.executeTool, arguments: {} },
   }));
   assertEquals(executable.status, 403);
   assertStringIncludes(

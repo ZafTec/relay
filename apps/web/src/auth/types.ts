@@ -20,6 +20,7 @@ export interface RelayIdentity {
 }
 
 export interface RelayWorkspace {
+  logo?: string | null;
   id: string;
   name: string;
   slug: string;
@@ -53,7 +54,10 @@ export class AuthAdapterError extends Error {
   readonly status: number | null;
   readonly code: string | null;
 
-  constructor(message: string, options: { status?: number; code?: string } = {}) {
+  constructor(
+    message: string,
+    options: { status?: number; code?: string } = {},
+  ) {
     super(message);
     this.name = "AuthAdapterError";
     this.status = options.status ?? null;

@@ -111,14 +111,14 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     await panel.getByRole("button", { name: "Edit details" }).click();
     await expect(panel.getByRole("heading", { name: "Edit workspace details" })).toBeFocused();
     await panel.getByRole("textbox", { name: "Workspace name" }).fill("Field research");
-    await panel.getByRole("textbox", { name: "Workspace handle" }).fill("field-research");
+    await expect(panel.getByRole("textbox", { name: "Workspace handle" })).toHaveAttribute("readonly", "");
     await checkSurface(page, ".workspace-management", `workspace-edit-${viewport.width}.png`);
     await panel.getByRole("button", { name: "Save changes" }).click();
-    await expect(panel.getByText("@field-research", { exact: true })).toBeVisible();
-    expect(state.updated).toEqual([{ id: "ws_field_notes", name: "Field research", slug: "field-research" }]);
+    await expect(panel.getByText("@field-notes", { exact: true })).toBeVisible();
+    expect(state.updated).toEqual([{ id: "ws_field_notes", name: "Field research", slug: "field-notes", logo: null }]);
     await page.locator("summary").filter({ hasText: "Current session" }).click();
-    await expect(page.getByRole("region", { name: "Current session" }).getByText("@field-research")).toBeVisible();
-    await expect(page.getByRole("region", { name: "MCP connection" }).getByText("@field-research")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Current session" }).getByText("@field-notes")).toBeVisible();
+    await expect(page.getByRole("region", { name: "MCP connection" }).getByText("@field-notes")).toBeVisible();
 
     await panel.getByRole("button", { name: "New workspace" }).click();
     await expect(panel.getByRole("heading", { name: "Create a workspace" })).toBeFocused();

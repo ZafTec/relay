@@ -2,6 +2,8 @@ import { migration as superadminInvitations } from "./0005_superadmin_invitation
 import { migration as notifications } from "./0006_notifications.ts";
 import { migration as workspaceNames } from "./0007_workspace_names.ts";
 import { migration as superadminInvitationListing } from "./0008_superadmin_invitation_listing.ts";
+import { migration as workspaceLifecycle } from "./0009_workspace_lifecycle.ts";
+import { migration as mcpConnectionRevocation } from "./0010_mcp_connection_revocation.ts";
 import type { Migration } from "./types.ts";
 import { migration as relayBaseline } from "./0001_relay_baseline.ts";
 import { migration as allowanceManagement } from "./0002_allowance_management.ts";
@@ -24,4 +26,6 @@ export const MIGRATIONS: readonly Migration[] = [
   notifications,
   workspaceNames,
   superadminInvitationListing,
+  workspaceLifecycle,
+  mcpConnectionRevocation,
 ];

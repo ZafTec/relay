@@ -63,7 +63,7 @@ function canRequestCancellation(status: RunStatus): boolean {
 function stateDescription(status: RunStatus): string {
   switch (status) {
     case "queued":
-      return "Relay accepted this run and is waiting to begin execution.";
+      return "Your run is in the queue and will start when capacity is available.";
     case "running":
       return "Your tool is running. This page updates as work progresses.";
     case "succeeded":
@@ -71,7 +71,7 @@ function stateDescription(status: RunStatus): string {
     case "failed":
       return "The run could not finish. Review any returned results and error details below.";
     case "cancel_requested":
-      return "Cancellation was requested. A terminal result can still win if it completes first.";
+      return "We're stopping this run. It may finish before cancellation takes effect.";
     case "cancelled":
       return "Relay confirmed this run is cancelled.";
   }
@@ -121,10 +121,10 @@ function RunFacts({ run }: { readonly run: RunDetail }) {
         </dd>
       </div>
       <div>
-        <dt>Terminal</dt>
+        <dt>Finished</dt>
         <dd>
           {run.terminalAt === null
-            ? "Not terminal"
+            ? "Not finished"
             : <time dateTime={run.terminalAt}>{formatRunTimestamp(run.terminalAt)}</time>}
         </dd>
       </div>
@@ -141,15 +141,15 @@ function ReservationPanel({
     <section className="run-ledger-section" aria-labelledby="run-reservation-heading">
       <header className="run-section-heading">
         <div>
-          <h2 id="run-reservation-heading">Reservation</h2>
-          <p>Meter reservation fields returned with this run.</p>
+          <h2 id="run-reservation-heading">Reserved usage</h2>
+          <p>Usage set aside for this run.</p>
         </div>
         {reservation === null
           ? <StatusBadge tone="muted">Not returned</StatusBadge>
           : <StatusBadge tone={reservation.status === "active" ? "pending" : "ready"}>{reservation.status}</StatusBadge>}
       </header>
       {reservation === null ? (
-        <p className="run-section-empty">No reservation was returned for this run.</p>
+        <p className="run-section-empty">No reserved usage is recorded for this run.</p>
       ) : (
         <dl className="run-reservation-grid">
           <div>
@@ -187,8 +187,8 @@ function OutputPanel({ outputSet }: { readonly outputSet: RunOutputSet | null })
     <section className="run-ledger-section" aria-labelledby="run-output-heading">
       <header className="run-section-heading">
         <div>
-          <h2 id="run-output-heading">Output set</h2>
-          <p>Named outputs and artifact references returned by Relay.</p>
+          <h2 id="run-output-heading">Results</h2>
+          <p>Open the files created by this run.</p>
         </div>
         {outputSet === null ? (
           <StatusBadge tone="muted">Not returned</StatusBadge>
@@ -200,12 +200,12 @@ function OutputPanel({ outputSet }: { readonly outputSet: RunOutputSet | null })
       </header>
 
       {outputSet === null ? (
-        <p className="run-section-empty">No output set was returned for this run.</p>
+        <p className="run-section-empty">No results are available yet.</p>
       ) : (
         <>
           <dl className="run-output-summary">
             <div>
-              <dt>Output set ID</dt>
+              <dt>Result group ID</dt>
               <dd><code>{outputSet.id}</code></dd>
             </div>
             <div>
@@ -214,7 +214,7 @@ function OutputPanel({ outputSet }: { readonly outputSet: RunOutputSet | null })
             </div>
           </dl>
           {outputSet.items.length === 0 ? (
-            <p className="run-section-empty">The output set contains no output items.</p>
+            <p className="run-section-empty">No results are available yet.</p>
           ) : (
             <ol className="run-output-items">
               {outputSet.items.map((item) => (
@@ -239,7 +239,7 @@ function OutputPanel({ outputSet }: { readonly outputSet: RunOutputSet | null })
                     && item.artifactVersionId !== null ? (
                     <dl>
                       <div>
-                        <dt>Artifact</dt>
+                        <dt>File</dt>
                         <dd>
                           <Link to={`/dashboard/artifacts/${encodeURIComponent(item.artifactId)}`}>
                             <code>{item.artifactId}</code>
@@ -247,14 +247,14 @@ function OutputPanel({ outputSet }: { readonly outputSet: RunOutputSet | null })
                         </dd>
                       </div>
                       <div>
-                        <dt>Artifact version</dt>
+                        <dt>File version</dt>
                         <dd><code>{item.artifactVersionId}</code></dd>
                       </div>
                     </dl>
                   ) : item.status === "failed" ? (
                     <p>Error code: <code>{item.errorCode}</code></p>
                   ) : (
-                    <p>No artifact has been returned for this output.</p>
+                    <p>No file is available for this result yet.</p>
                   )}
                 </li>
               ))}
@@ -410,8 +410,8 @@ export function RunDetailPage({
         if (cancellationWasOpen) {
           setCancellationOutcome({
             tone: "info",
-            title: "Run reached a terminal state",
-            message: `The run finished as ${formatRunStatus(result.run.status).toLocaleLowerCase()}. Relay kept the terminal result.`,
+            title: "Run finished",
+            message: `The run has finished. Its final status is ${formatRunStatus(result.run.status).toLocaleLowerCase()}.`,
           });
           window.setTimeout(() => outcomeRef.current?.focus(), 0);
         }
@@ -423,7 +423,7 @@ export function RunDetailPage({
         && generation === readGenerationRef.current
         && runIdRef.current === requestedRunId
       ) {
-        setRefreshError("Relay could not refresh this run. Existing durable data remains visible.");
+        setRefreshError("We couldn't load the latest updates. You're viewing the last saved details.");
       }
     } finally {
       if (
@@ -509,14 +509,14 @@ export function RunDetailPage({
             }
           : {
               tone: "info",
-              title: "Run already terminal",
-              message: `The run finished as ${formatRunStatus(result.run.status).toLocaleLowerCase()} before cancellation took effect. Relay kept the terminal result.`,
+              title: "Run already finished",
+              message: `The run finished before cancellation took effect. Its final status is ${formatRunStatus(result.run.status).toLocaleLowerCase()}.`,
             }
         : result.kind === "cancel_requested"
           ? {
               tone: "info",
               title: "Cancellation requested",
-              message: "Relay recorded the request. A terminal result can still win if it completes first.",
+              message: "We're stopping this run. It may finish before cancellation takes effect.",
             }
           : {
               tone: "success",
@@ -605,7 +605,7 @@ export function RunDetailPage({
           <>
             {refreshError ? (
               <InlineNotice
-                title="Durable refresh unavailable"
+                title="Couldn't refresh this run"
                 tone="error"
                 action={
                   <Button variant="outline" onClick={() => void refreshDurableDetail()}>
@@ -628,15 +628,14 @@ export function RunDetailPage({
             {run.status === "cancel_requested" && cancellationOutcome === null ? (
               <InlineNotice title="Cancellation requested" tone="warning">
                 <p>
-                  Relay is waiting for the run to stop. A terminal result can still win
-                  if it completes before cancellation takes effect.
+                  We're stopping this run. It may finish before cancellation takes effect.
                 </p>
               </InlineNotice>
             ) : null}
 
             <section className={`run-state-panel run-state-panel--${run.status}`} aria-labelledby="run-state-heading">
               <div>
-                <h2 id="run-state-heading">Current state</h2>
+                <h2 id="run-state-heading">Run status</h2>
                 <p>{stateDescription(run.status)}</p>
               </div>
               <div className="run-state-panel__actions">
@@ -661,13 +660,13 @@ export function RunDetailPage({
               <RunFacts run={run} />
             </Disclosure>
 
-            <Disclosure title="Input and reservation" description="Review the submitted input and reserved usage">
+            <Disclosure title="Input and usage" description="Your inputs and the usage reserved for this run">
             <div className="run-detail-ledger">
               <section className="run-ledger-section" aria-labelledby="run-input-heading">
                 <header className="run-section-heading">
                   <div>
                     <h2 id="run-input-heading">Input</h2>
-                    <p>Accepted JSON stored with the run.</p>
+                    <p>The inputs used to create this run.</p>
                   </div>
                   <span className="run-section-format">JSON</span>
                 </header>

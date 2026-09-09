@@ -31,7 +31,7 @@ interface AuthContextValue {
   adapter: AuthAdapter;
   session: SessionState;
   workspace: WorkspaceState;
-  refreshSession(): Promise<void>;
+  refreshSession(options?: { preserveView?: boolean }): Promise<void>;
   refreshWorkspace(): Promise<void>;
   signOut(): Promise<void>;
   expireSession(expectedSessionId?: string): void;
@@ -132,12 +132,16 @@ export function AuthProvider({ children, adapter = betterAuthAdapter }: AuthProv
     }
   }, [adapter, transitionToAnonymous]);
 
-  const refreshSession = useCallback(async () => {
+  const refreshSession = useCallback(async (options?: { preserveView?: boolean }) => {
     const request = ++sessionRequest.current;
-    workspaceRequest.current += 1;
-    activeIdentity.current = null;
-    setWorkspace({ status: "idle" });
-    setSession({ status: "loading" });
+    const previous = activeIdentity.current;
+    const preserveView = options?.preserveView === true && previous !== null;
+    if (!preserveView) {
+      workspaceRequest.current += 1;
+      activeIdentity.current = null;
+      setWorkspace({ status: "idle" });
+      setSession({ status: "loading" });
+    }
     try {
       const identity = await adapter.getSession();
       if (request !== sessionRequest.current) return;
@@ -150,7 +154,10 @@ export function AuthProvider({ children, adapter = betterAuthAdapter }: AuthProv
       activeIdentity.current = identity;
       writeAuthenticatedMarker(true);
       setSession({ status: "authenticated", identity });
-      void loadWorkspace(identity);
+      if (!preserveView || previous?.session.id !== identity.session.id
+        || previous.session.activeWorkspaceId !== identity.session.activeWorkspaceId) {
+        void loadWorkspace(identity);
+      }
     } catch (error) {
       if (request !== sessionRequest.current) return;
       if (error instanceof AuthAdapterError && error.status === 401) {

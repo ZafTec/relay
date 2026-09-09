@@ -9,7 +9,7 @@
   top: 0;
   z-index: 20;
   border-bottom: 1px solid var(--surface-border);
-  background: rgb(245 244 237 / 94%);
+  background: color-mix(in srgb, var(--surface-bg) 94%, transparent);
   backdrop-filter: blur(6px);
 }
 
@@ -431,6 +431,13 @@
 .docs-contract-table td:nth-child(2) {
   width: 330px;
 }
+
+.docs-contract-table--mcp { min-width: 820px; }
+.docs-contract-table--mcp th:first-child,
+.docs-contract-table--mcp td:first-child { width: 310px; }
+.docs-contract-table--mcp td:first-child code { white-space: nowrap; }
+.docs-contract-table--mcp th:nth-child(2),
+.docs-contract-table--mcp td:nth-child(2) { width: 210px; }
 
 .docs-reference__list {
   margin-top: var(--relay-space-8);

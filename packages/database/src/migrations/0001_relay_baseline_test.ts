@@ -113,6 +113,8 @@ Deno.test("migration manifest preserves the baseline before additive changes", (
       "0006_notifications",
       "0007_workspace_names",
       "0008_superadmin_invitation_listing",
+      "0009_workspace_lifecycle",
+      "0010_mcp_connection_revocation",
     ],
   );
   assertEquals(

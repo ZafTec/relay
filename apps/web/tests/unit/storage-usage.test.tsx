@@ -16,11 +16,11 @@ import {
 
 const storage: StorageUsageSummary = {
   generatedAt: "2030-04-12T15:30:00.000Z",
-  storedBytes: "1073741824",
-  reservedBytes: "314572800",
-  cleanupPendingBytes: "104857600",
-  limitBytes: "2147483648",
-  availableBytes: "759169024",
+  storedBytes: "40000000",
+  reservedBytes: "15000000",
+  cleanupPendingBytes: "5000000",
+  limitBytes: "100000000",
+  availableBytes: "45000000",
 };
 const auth = createTestAuthAdapter({
   identity: {
@@ -68,16 +68,16 @@ describe("storage usage", () => {
   it("shows storage without tool buckets and keeps cleanup part of the reserved total", async () => {
     renderStorage({ getStorageSummary: async () => ({ kind: "ok", storage }) });
     const panel = await screen.findByRole("region", { name: "Storage" });
-    await within(panel).findByText("1.0 GiB");
-    expect(within(panel).getByText("200.0 MiB")).toBeVisible();
-    expect(within(panel).getByText("100.0 MiB")).toBeVisible();
-    expect(within(panel).getByText("724.0 MiB")).toBeVisible();
-    expect(within(panel).getByText("1.3 GiB")).toBeVisible();
-    expect(panel).toHaveTextContent("1.3 GiB used and reserved of 2.0 GiB");
-    expect(panel).toHaveTextContent("724.0 MiB available");
+    await within(panel).findByText("40.0 MB");
+    expect(within(panel).getByText("10.0 MB")).toBeVisible();
+    expect(within(panel).getByText("5.0 MB")).toBeVisible();
+    expect(within(panel).getByText("45.0 MB")).toBeVisible();
+    expect(within(panel).getByText("55.0 MB")).toBeVisible();
+    expect(panel).toHaveTextContent("55.0 MB used and reserved of 100.0 MB");
+    expect(panel).toHaveTextContent("45.0 MB available");
     expect(within(panel).getByRole("meter")).toHaveAttribute(
       "aria-valuenow",
-      "64.6",
+      "55",
     );
     expect(
       await screen.findByRole("heading", { name: "No current tool usage" }),
@@ -85,7 +85,7 @@ describe("storage usage", () => {
     const user = userEvent.setup();
     await user.type(screen.getByLabelText("Metric"), "image.generations");
     await user.click(screen.getByRole("button", { name: "Apply filters" }));
-    expect(within(panel).getByText("724.0 MiB")).toBeVisible();
+    expect(within(panel).getByText("45.0 MB")).toBeVisible();
   });
 
   it("distinguishes unavailable storage from real zero and retries independently", async () => {
@@ -157,7 +157,7 @@ describe("storage usage", () => {
     const view = render(tree(old));
     await waitFor(() => expect(resolve).toBeDefined());
     view.rerender(tree(current));
-    await screen.findByText("724.0 MiB");
+    await screen.findByText("45.0 MB");
     await act(async () =>
       resolve({
         kind: "ok",
@@ -170,7 +170,7 @@ describe("storage usage", () => {
         },
       })
     );
-    expect(screen.getByText("724.0 MiB")).toBeVisible();
+    expect(screen.getByText("45.0 MB")).toBeVisible();
   });
 });
 
@@ -187,7 +187,7 @@ describe("storage API precision", () => {
     expect(parseStorageUsageResponse({ kind: "ok", storage: large })).toEqual(
       large,
     );
-    expect(formatStorageBytes(large.storedBytes)).toBe("8.0 PiB");
+    expect(formatStorageBytes(large.storedBytes)).toBe("9.0 PB");
     expect(formatStorageBytes("0")).toBe("0 B");
     expect(() =>
       parseStorageUsageResponse({

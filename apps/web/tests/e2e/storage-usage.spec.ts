@@ -4,11 +4,11 @@ import path from "node:path";
 
 const storage = {
   generatedAt: "2030-04-12T15:30:00.000Z",
-  storedBytes: "1073741824",
-  reservedBytes: "314572800",
-  cleanupPendingBytes: "104857600",
-  limitBytes: "2147483648",
-  availableBytes: "759169024",
+  storedBytes: "40000000",
+  reservedBytes: "15000000",
+  cleanupPendingBytes: "5000000",
+  limitBytes: "100000000",
+  availableBytes: "45000000",
 };
 
 for (
@@ -86,9 +86,9 @@ for (
     await page.goto("/dashboard/usage");
     const panel = page.getByRole("region", { name: "Storage", exact: true });
     await expect(panel.getByRole("meter")).toBeVisible();
-    await expect(panel.getByText("1.0 GiB", { exact: true })).toBeVisible();
-    await expect(panel.getByText("200.0 MiB", { exact: true })).toBeVisible();
-    await expect(panel.getByText("100.0 MiB", { exact: true })).toBeVisible();
+    await expect(panel.getByText("40.0 MB", { exact: true })).toBeVisible();
+    await expect(panel.getByText("10.0 MB", { exact: true })).toBeVisible();
+    await expect(panel.getByText("5.0 MB", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "No current tool usage", exact: true }),
     ).toBeVisible();
@@ -118,7 +118,7 @@ for (
     await expect(panel.getByText("0 B", { exact: true })).toHaveCount(0);
     unavailable = false;
     await panel.getByRole("button", { name: "Retry storage" }).click();
-    await expect(panel.getByText("724.0 MiB", { exact: true })).toBeVisible();
+    await expect(panel.getByText("45.0 MB", { exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   });
 }

@@ -3,16 +3,16 @@ import {
   fromJsonSchema,
   type JsonSchemaType,
   McpServer,
-  type ServerContext,
 } from "@modelcontextprotocol/server";
 import {
-  validateIdempotencyKey,
   validateWorkspaceActorContext,
   type WorkspaceActorContext,
 } from "@relay/application/context";
 import type { ApplicationServices } from "@relay/application/services";
 import {
   contentAccessSchema,
+  importUrlSchema,
+  RemoteContentError,
   uploadContentSchema,
 } from "@relay/application/content";
 import { notificationSettingsSchema } from "@relay/notifications";
@@ -57,6 +57,7 @@ import {
   createArtifactUploadInputSchema,
   createShareLinkInputSchema,
   executableToolResultSchema,
+  executeToolInputSchema,
   getArtifactInputSchema,
   getRunInputSchema,
   getToolInputSchema,
@@ -65,10 +66,20 @@ import {
   listToolsInputSchema,
   revokeShareLinkInputSchema,
 } from "./schemas.ts";
+import {
+  checkedIdempotencyKey,
+  IDEMPOTENCY_INPUT_MESSAGE,
+  idempotencyKeySchema,
+  McpInputError,
+  requireMcpIdempotencyKey,
+  suppliedIdempotencyKey,
+} from "./idempotency.ts";
+export { RELAY_MCP_IDEMPOTENCY_META_KEY } from "./idempotency.ts";
 
 export const RELAY_MCP_TOOL_NAMES: Readonly<{
   listTools: "relay.tools.list";
   getTool: "relay.tools.get";
+  executeTool: "relay.tools.execute";
   getRun: "relay.runs.get";
   listRuns: "relay.runs.list";
   cancelRun: "relay.runs.cancel";
@@ -79,6 +90,7 @@ export const RELAY_MCP_TOOL_NAMES: Readonly<{
   createShareLink: "relay.artifacts.create_share_link";
   revokeShareLink: "relay.artifacts.revoke_share_link";
   uploadContent: "relay.artifacts.upload_content";
+  importUrl: "relay.artifacts.import_url";
   getAccess: "relay.artifacts.get_access";
   getNotifications: "relay.notifications.get";
   configureNotifications: "relay.notifications.configure";
@@ -86,6 +98,7 @@ export const RELAY_MCP_TOOL_NAMES: Readonly<{
 }> = Object.freeze({
   listTools: "relay.tools.list",
   getTool: "relay.tools.get",
+  executeTool: "relay.tools.execute",
   getRun: "relay.runs.get",
   listRuns: "relay.runs.list",
   cancelRun: "relay.runs.cancel",
@@ -96,6 +109,7 @@ export const RELAY_MCP_TOOL_NAMES: Readonly<{
   createShareLink: "relay.artifacts.create_share_link",
   revokeShareLink: "relay.artifacts.revoke_share_link",
   uploadContent: "relay.artifacts.upload_content",
+  importUrl: "relay.artifacts.import_url",
   getAccess: "relay.artifacts.get_access",
   getNotifications: "relay.notifications.get",
   configureNotifications: "relay.notifications.configure",
@@ -114,6 +128,7 @@ export const RELAY_MCP_MANAGEMENT_TOOL_SCOPES: Readonly<
 > = Object.freeze({
   [RELAY_MCP_TOOL_NAMES.listTools]: ["tools:read"],
   [RELAY_MCP_TOOL_NAMES.getTool]: ["tools:read"],
+  [RELAY_MCP_TOOL_NAMES.executeTool]: ["tools:execute"],
   [RELAY_MCP_TOOL_NAMES.getRun]: ["runs:read"],
   [RELAY_MCP_TOOL_NAMES.listRuns]: ["runs:read"],
   [RELAY_MCP_TOOL_NAMES.cancelRun]: ["runs:cancel"],
@@ -124,6 +139,7 @@ export const RELAY_MCP_MANAGEMENT_TOOL_SCOPES: Readonly<
   [RELAY_MCP_TOOL_NAMES.createShareLink]: ["artifacts:share"],
   [RELAY_MCP_TOOL_NAMES.revokeShareLink]: ["artifacts:share"],
   [RELAY_MCP_TOOL_NAMES.uploadContent]: ["artifacts:write", "artifacts:read"],
+  [RELAY_MCP_TOOL_NAMES.importUrl]: ["artifacts:write", "artifacts:read"],
   [RELAY_MCP_TOOL_NAMES.getAccess]: ["artifacts:read"],
   [RELAY_MCP_TOOL_NAMES.getNotifications]: ["notifications:read"],
   [RELAY_MCP_TOOL_NAMES.configureNotifications]: ["notifications:write"],
@@ -131,17 +147,12 @@ export const RELAY_MCP_MANAGEMENT_TOOL_SCOPES: Readonly<
 });
 
 export const RELAY_MCP_PROTOCOL_VERSION = "2026-07-28" as const;
-export const RELAY_MCP_IDEMPOTENCY_META_KEY =
-  "io.relay/idempotency-key" as const;
-
 const MANAGEMENT_TOOL_NAME_SET: ReadonlySet<string> = new Set(
   [
     ...Object.values(RELAY_MCP_TOOL_NAMES),
     ...Object.keys(RELAY_MCP_ADMIN_TOOL_SCOPES),
   ],
 );
-const MAX_CATALOG_PAGES = 100;
-const CATALOG_PAGE_SIZE = 100;
 
 export interface RelayMcpPrincipal {
   readonly identity: WorkspaceActorContext;
@@ -457,7 +468,8 @@ async function callManagementTool<T>(
     if (error instanceof McpInputError) {
       return toolErrorResult(
         "invalid_request",
-        "The required idempotency metadata is missing or invalid.",
+        IDEMPOTENCY_INPUT_MESSAGE,
+        { details: { field: "idempotencyKey" } },
       );
     }
     if (error instanceof ContractValidationError) {
@@ -470,94 +482,11 @@ async function callManagementTool<T>(
   }
 }
 
-async function collectExecutableTools(
-  services: ApplicationServices,
-  identity: WorkspaceActorContext,
-): Promise<readonly ToolDetail[]> {
-  const details: ToolDetail[] = [];
-  const seenKeys = new Set<string>();
-  const seenCursors = new Set<string>();
-  let cursor: string | null = null;
-
-  for (let page = 0; page < MAX_CATALOG_PAGES; page += 1) {
-    const request = listToolsRequestSchema.parse({
-      cursor,
-      limit: CATALOG_PAGE_SIZE,
-    });
-    const result = listToolsResultSchema.parse(
-      await services.tools.list(identity, request),
-    );
-    if (result.kind === "not_found") return [];
-
-    for (const summary of result.items) {
-      if (MANAGEMENT_TOOL_NAME_SET.has(summary.key)) {
-        throw new TypeError(
-          `catalog tool uses reserved MCP name: ${summary.key}`,
-        );
-      }
-      if (seenKeys.has(summary.key)) {
-        throw new TypeError(
-          `catalog returned duplicate tool key: ${summary.key}`,
-        );
-      }
-      seenKeys.add(summary.key);
-      const detailResult = getToolResultSchema.parse(
-        await services.tools.get(identity, summary.key),
-      );
-      if (detailResult.kind === "found") details.push(detailResult.tool);
-    }
-
-    if (result.nextCursor === null) {
-      return details.sort((left, right) => left.key.localeCompare(right.key));
-    }
-    if (seenCursors.has(result.nextCursor)) {
-      throw new TypeError("catalog pagination repeated a cursor");
-    }
-    seenCursors.add(result.nextCursor);
-    cursor = result.nextCursor;
-  }
-
-  throw new TypeError("catalog pagination exceeded the MCP registration limit");
-}
-
-class McpInputError extends TypeError {}
-
-function checkedIdempotencyKey(value: string): string {
-  try {
-    return validateIdempotencyKey(value);
-  } catch {
-    throw new McpInputError("MCP idempotency key has an invalid format");
-  }
-}
-
 function defaultIdempotencyKey(context: McpIdempotencyContext): string {
   if (context.suppliedKey === undefined) {
     throw new McpInputError("MCP idempotency key is required");
   }
   return checkedIdempotencyKey(context.suppliedKey);
-}
-
-function suppliedIdempotencyKey(context: ServerContext): string | undefined {
-  const metadata = context.mcpReq._meta;
-  if (
-    metadata === undefined ||
-    !Object.hasOwn(metadata, RELAY_MCP_IDEMPOTENCY_META_KEY)
-  ) {
-    return undefined;
-  }
-  const value = metadata[RELAY_MCP_IDEMPOTENCY_META_KEY];
-  if (typeof value !== "string") {
-    throw new McpInputError("MCP idempotency key must be a string");
-  }
-  return value;
-}
-
-function requireMcpIdempotencyKey(context: ServerContext): string {
-  const value = suppliedIdempotencyKey(context);
-  if (value === undefined) {
-    throw new McpInputError("MCP idempotency key is required");
-  }
-  return checkedIdempotencyKey(value);
 }
 
 function executableError(
@@ -592,6 +521,35 @@ function executableError(
           },
         },
       );
+    case "not_entitled":
+      return toolErrorResult(
+        "not_entitled",
+        "This workspace does not have permission to execute the tool. Ask an administrator for tools.execute access and the required usage allowance.",
+      );
+    case "allowance_exceeded":
+      return toolErrorResult(
+        "allowance_exceeded",
+        "This run exceeds the workspace's available usage allowance. Check Usage or ask an administrator to increase the allowance.",
+        {
+          details: {
+            metric: result.metric as string,
+            unit: result.unit as string,
+            limitAmount: result.limitAmount as string,
+            consumedAmount: result.consumedAmount as string,
+            reservedAmount: result.reservedAmount as string,
+            requestedAmount: result.requestedAmount as string,
+          },
+        },
+      );
+    case "usage_unavailable":
+      return toolErrorResult(
+        "dependency_unavailable",
+        "Relay could not verify the workspace's usage allowance. Retry with the same idempotency key after usage becomes available.",
+        {
+          retryable: result.reason === "unavailable",
+          details: { dependency: "usage" },
+        },
+      );
     default:
       return toolErrorResult("internal_error", "The tool call failed.");
   }
@@ -618,9 +576,33 @@ function executableSuccess(
   });
 }
 
-export async function createRelayMcpServer(
+async function validateToolInput(
+  tool: ToolDetail,
+  input: Record<string, unknown>,
+): Promise<CallToolResult | null> {
+  if (
+    tool.inputSchema === null || typeof tool.inputSchema !== "object" ||
+    Array.isArray(tool.inputSchema) ||
+    (tool.inputSchema as Record<string, unknown>).type !== "object"
+  ) throw new TypeError("Catalog input schema must describe an object");
+  const validation = await fromJsonSchema(
+    tool.inputSchema as JsonSchemaType,
+  )["~standard"].validate(input);
+  if (!validation.issues) return null;
+  const path = (validation.issues[0]?.path ?? []).map((part) =>
+    typeof part === "object" ? part.key : part
+  ).filter((part) => /^[A-Za-z0-9_]+$/.test(String(part))).join(".");
+  const field = `input${path ? `.${path}` : ""}`.slice(0, 128);
+  return toolErrorResult(
+    "invalid_request",
+    `Invalid ${field}. Read the inputSchema from relay.tools.get and provide the required fields with their documented types and limits.`,
+    { details: { field } },
+  );
+}
+
+export function createRelayMcpServer(
   options: CreateRelayMcpServerOptions,
-): Promise<McpServer> {
+): McpServer {
   if (options?.services === undefined) {
     throw new TypeError("services are required");
   }
@@ -648,7 +630,8 @@ export async function createRelayMcpServer(
     RELAY_MCP_TOOL_NAMES.listTools,
     {
       title: "List Relay tools",
-      description: "List tools available to the current workspace.",
+      description:
+        "Search the workspace catalog for image generation, image editing, OCR, and other available tools. Models are catalog entries, not separate MCP tools. Inspect a selected entry with relay.tools.get before calling relay.tools.execute.",
       inputSchema: listToolsInputSchema,
       outputSchema: fromJsonSchema(listToolsResultSchema.jsonSchema),
       annotations: { readOnlyHint: true, idempotentHint: true },
@@ -670,7 +653,8 @@ export async function createRelayMcpServer(
     RELAY_MCP_TOOL_NAMES.getTool,
     {
       title: "Get a Relay tool",
-      description: "Get the active contract for an available tool.",
+      description:
+        "Get a catalog tool's activeVersionId, inputSchema, outputSchema, and execution limits. Build input matching this schema, then call relay.tools.execute with its toolKey and toolVersionId.",
       inputSchema: getToolInputSchema,
       outputSchema: fromJsonSchema(getToolResultSchema.jsonSchema),
       annotations: { readOnlyHint: true, idempotentHint: true },
@@ -809,7 +793,9 @@ export async function createRelayMcpServer(
       title: "Create a Relay artifact upload",
       description:
         "Create metadata and a short-lived direct object-storage upload authorization. File bytes are not accepted.",
-      inputSchema: createArtifactUploadInputSchema,
+      inputSchema: createArtifactUploadInputSchema.extend({
+        idempotencyKey: idempotencyKeySchema.optional(),
+      }),
       outputSchema: fromJsonSchema(createArtifactUploadResultSchema.jsonSchema),
       annotations: { readOnlyHint: false, idempotentHint: true },
       _meta: requiredScopeMetadata(
@@ -826,12 +812,14 @@ export async function createRelayMcpServer(
         ],
         RELAY_MCP_TOOL_NAMES.createArtifactUpload,
         createArtifactUploadResultSchema,
-        () =>
-          services.artifacts.createUpload(
+        () => {
+          const { idempotencyKey, ...request } = args;
+          return services.artifacts.createUpload(
             identity,
-            createArtifactUploadRequestSchema.parse(args),
-            requireMcpIdempotencyKey(context),
-          ),
+            createArtifactUploadRequestSchema.parse(request),
+            requireMcpIdempotencyKey(context, idempotencyKey),
+          );
+        },
       ),
   );
 
@@ -841,7 +829,9 @@ export async function createRelayMcpServer(
       title: "Complete a Relay artifact upload",
       description:
         "Verify a direct upload and make the uploaded artifact version available.",
-      inputSchema: completeArtifactUploadInputSchema,
+      inputSchema: completeArtifactUploadInputSchema.extend({
+        idempotencyKey: idempotencyKeySchema.optional(),
+      }),
       outputSchema: fromJsonSchema(
         completeArtifactUploadResultSchema.jsonSchema,
       ),
@@ -864,7 +854,7 @@ export async function createRelayMcpServer(
           services.artifacts.completeUpload(
             identity,
             args.uploadId,
-            requireMcpIdempotencyKey(context),
+            requireMcpIdempotencyKey(context, args.idempotencyKey),
           ),
       ),
   );
@@ -875,7 +865,9 @@ export async function createRelayMcpServer(
       title: "Create a Relay artifact share link",
       description:
         "Create a revocable share link for a workspace artifact. Set expiresAt to null for no expiry. Anyone with the link can access it unless requireAuth is true.",
-      inputSchema: createShareLinkInputSchema,
+      inputSchema: createShareLinkInputSchema.extend({
+        idempotencyKey: idempotencyKeySchema.optional(),
+      }),
       outputSchema: fromJsonSchema(createShareLinkResultSchema.jsonSchema),
       annotations: { readOnlyHint: false, idempotentHint: true },
       _meta: requiredScopeMetadata(
@@ -892,12 +884,14 @@ export async function createRelayMcpServer(
         ],
         RELAY_MCP_TOOL_NAMES.createShareLink,
         createShareLinkResultSchema,
-        () =>
-          services.artifacts.createShareLink(
+        () => {
+          const { idempotencyKey, ...request } = args;
+          return services.artifacts.createShareLink(
             identity,
-            createShareLinkRequestSchema.parse(args),
-            requireMcpIdempotencyKey(context),
-          ),
+            createShareLinkRequestSchema.parse(request),
+            requireMcpIdempotencyKey(context, idempotencyKey),
+          );
+        },
       ),
   );
 
@@ -906,7 +900,9 @@ export async function createRelayMcpServer(
     {
       title: "Revoke a Relay artifact share link",
       description: "Revoke an existing workspace artifact share link.",
-      inputSchema: revokeShareLinkInputSchema,
+      inputSchema: revokeShareLinkInputSchema.extend({
+        idempotencyKey: idempotencyKeySchema.optional(),
+      }),
       outputSchema: fromJsonSchema(revokeShareLinkResultSchema.jsonSchema),
       annotations: { destructiveHint: true, idempotentHint: true },
       _meta: requiredScopeMetadata(
@@ -928,7 +924,7 @@ export async function createRelayMcpServer(
             identity,
             args.artifactId,
             args.shareLinkId,
-            requireMcpIdempotencyKey(context),
+            requireMcpIdempotencyKey(context, args.idempotencyKey),
           ),
       ),
   );
@@ -999,13 +995,21 @@ export async function createRelayMcpServer(
         "The requested operation is unavailable. Check the file and its access policy.",
       );
     } catch (error) {
+      if (error instanceof McpInputError) {
+        return toolErrorResult("invalid_request", IDEMPOTENCY_INPUT_MESSAGE, {
+          details: { field: "idempotencyKey" },
+        });
+      }
+      if (error instanceof RemoteContentError) {
+        return toolErrorResult("invalid_request", error.message);
+      }
       if (
         error instanceof TypeError || error instanceof RangeError ||
         error instanceof z.ZodError
       ) {
         return toolErrorResult(
           "invalid_request",
-          "Check the arguments and idempotency metadata. Inline uploads support up to 4 MiB of canonical base64 or UTF-8 text.",
+          "Check the tool arguments. Inline uploads support up to 4 MiB of canonical base64 or UTF-8 text.",
         );
       }
       return toolErrorResult(
@@ -1020,8 +1024,10 @@ export async function createRelayMcpServer(
     {
       title: "Save file content to Relay",
       description:
-        "Persist actual file bytes (PDF, image, text or other content) in workspace storage and return an access URL. Accepts at most 4 MiB decoded base64 or UTF-8 text; no local paths, remote URLs or chat attachment IDs. If your client cannot read the attachment bytes, ask for a direct upload instead. Use create_upload/complete_upload for larger files. Defaults to a 5-minute URL; permanent access creates a revocable link readable by anyone who has it and requires artifacts:share. Supply io.relay/idempotency-key in MCP request _meta and reuse it on retries.",
-      inputSchema: uploadContentSchema,
+        "Persist actual file bytes (PDF, image, text or other content) in workspace storage and return an access URL. Accepts at most 4 MiB decoded base64 or UTF-8 text; no local paths, remote URLs or chat attachment IDs. If your client cannot read the attachment bytes, ask for a direct upload instead. Use create_upload/complete_upload for larger files. Defaults to a 5-minute URL; permanent access creates a revocable link readable by anyone who has it and requires artifacts:share. Supply a unique idempotencyKey argument and reuse it on retries.",
+      inputSchema: uploadContentSchema.safeExtend({
+        idempotencyKey: idempotencyKeySchema.optional(),
+      }),
       annotations: { readOnlyHint: false, idempotentHint: true },
       _meta: requiredScopeMetadata(
         RELAY_MCP_MANAGEMENT_TOOL_SCOPES[RELAY_MCP_TOOL_NAMES.uploadContent],
@@ -1033,11 +1039,44 @@ export async function createRelayMcpServer(
         args.access === "permanent",
         async () => {
           if (!services.content) return { kind: "not_found" };
+          const { idempotencyKey, ...request } = args;
           return await services.content.upload(
             identity,
-            args,
-            requireMcpIdempotencyKey(context),
+            request,
+            requireMcpIdempotencyKey(context, idempotencyKey),
           );
+        },
+      ),
+  );
+  server.registerTool(
+    RELAY_MCP_TOOL_NAMES.importUrl,
+    {
+      title: "Import a file from a URL",
+      description:
+        "Download a public HTTP or HTTPS file URL, validate it, and save its bytes in this workspace. Maximum 20 MB. Local/private network addresses and sign-in pages are not supported. Defaults to private storage with a temporary access URL. Permanent access creates a revocable public link and requires artifacts:share. Reuse the same idempotencyKey and URL when retrying.",
+      inputSchema: importUrlSchema.safeExtend({
+        idempotencyKey: idempotencyKeySchema,
+      }),
+      annotations: {
+        readOnlyHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+      _meta: requiredScopeMetadata(
+        RELAY_MCP_MANAGEMENT_TOOL_SCOPES[RELAY_MCP_TOOL_NAMES.importUrl],
+      ),
+    },
+    (args, context) =>
+      callExtension(
+        RELAY_MCP_TOOL_NAMES.importUrl,
+        args.access === "permanent",
+        async () => {
+          const { idempotencyKey, ...request } = args;
+          return await services.content?.importUrl?.(
+            identity,
+            request,
+            requireMcpIdempotencyKey(context, idempotencyKey),
+          ) ?? { kind: "not_found" };
         },
       ),
   );
@@ -1046,8 +1085,10 @@ export async function createRelayMcpServer(
     {
       title: "Get a file access URL",
       description:
-        "Get a URL for an uploaded file or saved tool output. Temporary URLs expire after 1–3600 seconds (default 300). Permanent links have no expiry, can be revoked, and are readable by anyone who has the link; they require artifacts:share and io.relay/idempotency-key in request _meta. Links remain valid while the stored file is retained.",
-      inputSchema: contentAccessSchema,
+        "Get a URL for an uploaded file or saved tool output. Temporary URLs expire after 1–3600 seconds (default 300). Permanent links have no expiry, can be revoked, and are readable by anyone who has the link; they require artifacts:share and a unique idempotencyKey argument, reused on retries. Links remain valid while the stored file is retained.",
+      inputSchema: contentAccessSchema.safeExtend({
+        idempotencyKey: idempotencyKeySchema.optional(),
+      }),
       annotations: { readOnlyHint: false, idempotentHint: true },
       _meta: requiredScopeMetadata(
         RELAY_MCP_MANAGEMENT_TOOL_SCOPES[RELAY_MCP_TOOL_NAMES.getAccess],
@@ -1059,11 +1100,12 @@ export async function createRelayMcpServer(
         args.access === "permanent",
         async () => {
           if (!services.content) return { kind: "not_found" };
+          const { idempotencyKey, ...request } = args;
           return await services.content.access(
             identity,
-            args,
+            request,
             args.access === "permanent"
-              ? requireMcpIdempotencyKey(context)
+              ? requireMcpIdempotencyKey(context, idempotencyKey)
               : undefined,
           );
         },
@@ -1112,91 +1154,98 @@ export async function createRelayMcpServer(
   );
 
   if (grantedScopes.has("tools:execute")) {
-    const executableTools = await collectExecutableTools(
-      services,
-      identity,
-    );
-    for (const tool of executableTools) {
-      if (
-        tool.inputSchema === null || typeof tool.inputSchema !== "object" ||
-        Array.isArray(tool.inputSchema) ||
-        (tool.inputSchema as Record<string, unknown>).type !== "object"
-      ) {
-        throw new TypeError(
-          `catalog tool input schema must describe an object: ${tool.key}`,
-        );
-      }
-      const inputSchema = fromJsonSchema(
-        tool.inputSchema as JsonSchemaType,
-      );
-      server.registerTool(
-        tool.key,
-        {
-          title: tool.name,
-          description: tool.summary ?? `Execute ${tool.name}.`,
-          inputSchema,
-          outputSchema: executableToolResultSchema,
-          annotations: { readOnlyHint: false, idempotentHint: true },
-          _meta: {
-            ...requiredScopeMetadata(["tools:execute"]),
-            "io.relay/tool-version-id": tool.activeVersionId,
-            "io.relay/tool-version": tool.version,
-            "io.relay/catalog-output-schema": tool.outputSchema,
-          },
-        },
-        async (args, context) => {
-          if (!grantedScopes.has("tools:execute")) {
-            return missingScopeResult(["tools:execute"]);
-          }
-          try {
-            const keyFactory = options.createIdempotencyKey ??
-              defaultIdempotencyKey;
-            const idempotencyKey = checkedIdempotencyKey(
-              await keyFactory({
-                toolKey: tool.key,
-                workspaceId: identity.workspaceId,
-                actorUserId: identity.actorUserId,
-                clientId: options.principal.clientId ??
-                  context.http?.authInfo?.clientId,
-                requestId: context.mcpReq.id,
-                suppliedKey: suppliedIdempotencyKey(context),
-              }),
+    server.registerTool(
+      RELAY_MCP_TOOL_NAMES.executeTool,
+      {
+        title: "Execute a Relay tool",
+        description:
+          "Run an image generation, image editing, OCR, or other catalog tool asynchronously. First use relay.tools.list to choose a tool and relay.tools.get to read its inputSchema. Supply schema-valid input and a unique idempotencyKey (a UUID); reuse the same key and arguments only when retrying the same operation. Optionally pin toolVersionId to the inspected activeVersionId. Poll relay.runs.get using the returned runId, then use relay.artifacts.get_access for result files. Execution requires workspace access and usage allowance.",
+        inputSchema: executeToolInputSchema,
+        outputSchema: executableToolResultSchema,
+        annotations: { readOnlyHint: false, idempotentHint: true },
+        _meta: requiredScopeMetadata(["tools:execute"]),
+      },
+      async (args, context) => {
+        if (!grantedScopes.has("tools:execute")) {
+          return missingScopeResult(["tools:execute"]);
+        }
+        try {
+          if (MANAGEMENT_TOOL_NAME_SET.has(args.toolKey)) {
+            return toolErrorResult(
+              "invalid_request",
+              "Use relay.tools.execute only for catalog tools. Call run, file, and administrative tools directly.",
+              { details: { field: "toolKey" } },
             );
-            const request = createRunRequestSchema.parse({
+          }
+          const resolved = getToolResultSchema.parse(
+            await services.tools.get(identity, args.toolKey),
+          );
+          if (resolved.kind !== "found") {
+            return executableError({ kind: "not_found" });
+          }
+          const tool = resolved.tool;
+          if (
+            args.toolVersionId && args.toolVersionId !== tool.activeVersionId
+          ) {
+            return toolErrorResult(
+              "tool_unavailable",
+              "The tool contract has changed. Read relay.tools.get again before executing.",
+              { details: { toolKey: tool.key, reason: "version_changed" } },
+            );
+          }
+          const inputError = await validateToolInput(tool, args.input);
+          if (inputError) return inputError;
+          const keyFactory = options.createIdempotencyKey ??
+            defaultIdempotencyKey;
+          const idempotencyKey = checkedIdempotencyKey(
+            await keyFactory({
               toolKey: tool.key,
-              input: args,
-            });
-            const result = createRunResultSchema.parse(
-              await services.runs.create(
-                identity,
-                request,
-                idempotencyKey,
-                tool.activeVersionId,
-              ),
-            );
-            if (result.kind !== "accepted") {
-              return executableError(result);
-            }
-            const output = executableSuccess(result);
-            return structuredResult(
-              output,
-              `Run ${result.run.id} was accepted with status ${result.run.status}.`,
-            );
-          } catch (error) {
-            if (
-              error instanceof ContractValidationError ||
-              error instanceof McpInputError
-            ) {
-              return toolErrorResult(
-                "invalid_request",
-                "The tool arguments or service response were invalid.",
-              );
-            }
-            return toolErrorResult("internal_error", "The tool call failed.");
+              workspaceId: identity.workspaceId,
+              actorUserId: identity.actorUserId,
+              clientId: options.principal.clientId ??
+                context.http?.authInfo?.clientId,
+              requestId: context.mcpReq.id,
+              suppliedKey: suppliedIdempotencyKey(context, args.idempotencyKey),
+            }),
+          );
+          const request = createRunRequestSchema.parse({
+            toolKey: tool.key,
+            input: args.input,
+            ...(args.requestedModelVersion === undefined
+              ? {}
+              : { requestedModelVersion: args.requestedModelVersion }),
+          });
+          const result = createRunResultSchema.parse(
+            await services.runs.create(
+              identity,
+              request,
+              idempotencyKey,
+              tool.activeVersionId,
+            ),
+          );
+          if (result.kind !== "accepted") {
+            return executableError(result);
           }
-        },
-      );
-    }
+          const output = executableSuccess(result);
+          return structuredResult(
+            output,
+            `Run ${result.run.id} was accepted with status ${result.run.status}.`,
+          );
+        } catch (error) {
+          if (error instanceof McpInputError) {
+            return toolErrorResult(
+              "invalid_request",
+              IDEMPOTENCY_INPUT_MESSAGE,
+              { details: { field: "idempotencyKey" } },
+            );
+          }
+          return toolErrorResult(
+            "internal_error",
+            "Relay could not confirm the run. Check relay.runs.list before retrying, and reuse the same idempotencyKey to avoid duplicate work.",
+          );
+        }
+      },
+    );
   }
 
   server.registerTool(RELAY_MCP_TOOL_NAMES.getStorageUsage, {

@@ -13,6 +13,7 @@ import {
   RELAY_MCP_RESOURCE_SCOPES,
   type RelayMcpResourceScope,
 } from "@relay/contracts";
+import { suppliedIdempotencyKey } from "./idempotency.ts";
 
 /** IDs in this context come only from the verified OAuth principal. */
 export interface RelayMcpAdminContext {
@@ -435,12 +436,22 @@ export function mcpAdminError(
   };
 }
 
-function mutationKey(context: ServerContext): string | undefined {
-  const value = context.mcpReq._meta?.["io.relay/idempotency-key"];
-  return typeof value === "string" &&
-      /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(value)
-    ? value
-    : undefined;
+function mutationKey(
+  context: ServerContext,
+  argumentKey?: unknown,
+): string | undefined {
+  try {
+    if (argumentKey !== undefined && typeof argumentKey !== "string") {
+      return undefined;
+    }
+    const value = suppliedIdempotencyKey(context, argumentKey);
+    return typeof value === "string" &&
+        /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(value)
+      ? value
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function registerRelayAdminTools(
@@ -460,9 +471,26 @@ export function registerRelayAdminTools(
       title: definition.title,
       description: definition.description +
         (definition.write
-          ? " Requires a recently authenticated superadmin. Supply a stable io.relay/idempotency-key in call metadata."
+          ? " Requires a recently authenticated superadmin. Supply a unique idempotencyKey argument (a UUID) and reuse it with identical arguments when retrying."
           : ""),
-      inputSchema: fromJsonSchema(definition.input),
+      inputSchema: fromJsonSchema(
+        definition.write
+          ? {
+            ...definition.input,
+            properties: {
+              ...definition.input.properties,
+              idempotencyKey: {
+                type: "string",
+                minLength: 16,
+                maxLength: 128,
+                pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$",
+                description:
+                  "Unique key for this change. Reuse with identical arguments on retry. Required unless supplied in MCP metadata.",
+              },
+            },
+          }
+          : definition.input,
+      ),
       annotations: {
         readOnlyHint: !definition.write,
         destructiveHint: definition.write === true,
@@ -471,11 +499,15 @@ export function registerRelayAdminTools(
       },
       _meta: { "io.relay/required-scopes": [definition.scope] },
     }, async (args, callContext) => {
-      const idempotencyKey = mutationKey(callContext);
+      const { idempotencyKey: argumentKey, ...request } = args as Record<
+        string,
+        unknown
+      >;
+      const idempotencyKey = mutationKey(callContext, argumentKey);
       if (definition.write && !idempotencyKey) {
         return mcpAdminError(
           "invalid_request",
-          "Supply a stable 16-128 character io.relay/idempotency-key for this administrative change.",
+          "Supply a stable 16-128 character idempotencyKey argument for this administrative change. Reuse it on retries; argument and metadata keys must match if both are supplied.",
         );
       }
       const context: RelayMcpAdminContext = {
@@ -494,7 +526,7 @@ export function registerRelayAdminTools(
         const result = await services.invoke(
           definition.operation,
           context,
-          args as Readonly<Record<string, unknown>>,
+          request,
         );
         const structuredContent = { result };
         return {

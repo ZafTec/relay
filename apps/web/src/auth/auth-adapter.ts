@@ -1,7 +1,7 @@
 import { authClient } from "./auth-client";
 import {
-  AuthAdapterError,
   type AuthAdapter,
+  AuthAdapterError,
   type AuthProviderName,
   type OAuthClientProfile,
   type OAuthConsentInput,
@@ -15,7 +15,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function stringValue(record: Record<string, unknown> | null, ...keys: string[]): string | null {
+function stringValue(
+  record: Record<string, unknown> | null,
+  ...keys: string[]
+): string | null {
   for (const key of keys) {
     const value = record?.[key];
     if (typeof value === "string" && value.length > 0) return value;
@@ -45,13 +48,22 @@ function normalizeWorkspace(value: unknown): RelayWorkspace | null {
   const id = stringValue(record, "id");
   const name = stringValue(record, "name");
   const slug = stringValue(record, "slug");
-  return id && name && slug ? { id, name, slug } : null;
+  return id && name && slug
+    ? {
+      id,
+      name,
+      slug,
+      ...(typeof record?.logo === "string" ? { logo: record.logo } : {}),
+    }
+    : null;
 }
 
 export const betterAuthAdapter: AuthAdapter = {
   async getSession(): Promise<RelayIdentity | null> {
     const result = await authClient.getSession();
-    if (result.error) throw authError(result.error, "Relay could not check this session.");
+    if (result.error) {
+      throw authError(result.error, "Relay could not check this session.");
+    }
     if (!result.data) return null;
 
     const root = asRecord(result.data);
@@ -92,40 +104,69 @@ export const betterAuthAdapter: AuthAdapter = {
 
   async signOut(): Promise<void> {
     const result = await authClient.signOut();
-    if (result.error) throw authError(result.error, "Relay could not sign out.");
+    if (result.error) {
+      throw authError(result.error, "Relay could not sign out.");
+    }
   },
 
   async getActiveWorkspace(): Promise<RelayWorkspace | null> {
     const result = await authClient.organization.getOrganization();
     if (result.error) {
       if (result.error.status === 404) return null;
-      throw authError(result.error, "Relay could not load the active workspace.");
+      throw authError(
+        result.error,
+        "Relay could not load the active workspace.",
+      );
     }
     if (!result.data) return null;
     const workspace = normalizeWorkspace(result.data);
-    if (!workspace) throw new AuthAdapterError("Relay returned an incomplete workspace.");
+    if (!workspace) {
+      throw new AuthAdapterError("Relay returned an incomplete workspace.");
+    }
     return workspace;
   },
 
   async listWorkspaces(): Promise<RelayWorkspace[]> {
     const result = await authClient.organization.list();
-    if (result.error) throw authError(result.error, "Relay could not list workspaces.");
+    if (result.error) {
+      throw authError(result.error, "Relay could not list workspaces.");
+    }
     if (!Array.isArray(result.data)) return [];
-    return result.data.map(normalizeWorkspace).filter((item): item is RelayWorkspace => item !== null);
+    return result.data.map(normalizeWorkspace).filter((
+      item,
+    ): item is RelayWorkspace => item !== null);
   },
 
   async setActiveWorkspace(workspaceId: string): Promise<void> {
-    const result = await authClient.organization.setActive({ organizationId: workspaceId });
-    if (result.error) throw authError(result.error, "Relay could not set the active workspace.");
+    const result = await authClient.organization.setActive({
+      organizationId: workspaceId,
+    });
+    if (result.error) {
+      throw authError(
+        result.error,
+        "Relay could not set the active workspace.",
+      );
+    }
   },
 
   async getOAuthClient(clientId: string): Promise<OAuthClientProfile> {
-    const result = await authClient.oauth2.publicClient({ query: { client_id: clientId } });
-    if (result.error) throw authError(result.error, "Relay could not verify the requesting client.");
+    const result = await authClient.oauth2.publicClient({
+      query: { client_id: clientId },
+    });
+    if (result.error) {
+      throw authError(
+        result.error,
+        "Relay could not verify the requesting client.",
+      );
+    }
     const client = asRecord(result.data);
     const id = stringValue(client, "client_id", "clientId", "id") ?? clientId;
     const name = stringValue(client, "client_name", "name");
-    if (!name) throw new AuthAdapterError("The requesting client did not provide a display name.");
+    if (!name) {
+      throw new AuthAdapterError(
+        "The requesting client did not provide a display name.",
+      );
+    }
     return {
       id,
       name,
@@ -139,11 +180,15 @@ export const betterAuthAdapter: AuthAdapter = {
       ...(input.scope !== undefined ? { scope: input.scope } : {}),
       ...(input.claims ? { claims: input.claims } : {}),
     });
-    if (result.error) throw authError(result.error, "Relay could not complete consent.");
+    if (result.error) {
+      throw authError(result.error, "Relay could not complete consent.");
+    }
   },
 
   async continueOAuthWorkspace(): Promise<void> {
     const result = await authClient.oauth2.continue({ postLogin: true });
-    if (result.error) throw authError(result.error, "Relay could not continue authorization.");
+    if (result.error) {
+      throw authError(result.error, "Relay could not continue authorization.");
+    }
   },
 };

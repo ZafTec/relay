@@ -608,7 +608,7 @@ export function RunsPage({
                       </td>
                       <td>
                         {run.terminalAt === null
-                          ? "Not terminal"
+                          ? "Not finished"
                           : <time dateTime={run.terminalAt}>{formatRunTimestamp(run.terminalAt)}</time>}
                       </td>
                     </tr>

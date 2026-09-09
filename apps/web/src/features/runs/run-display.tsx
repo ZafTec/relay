@@ -57,19 +57,17 @@ function connectionLabel(state: WorkspaceEventConnectionState): string {
     case "connecting":
       return "Connecting to live updates";
     case "connected":
-      return "Connected · live";
+      return "Live updates on";
     case "reconnecting":
-      return `Reconnecting · attempt ${state.attempt}`;
+      return "Reconnecting…";
     case "stale":
-      return "Live updates stale";
+      return "Updates delayed";
     case "offline":
-      return "Offline · durable state shown";
+      return "Offline · showing the last saved update";
     case "resynchronized":
-      return "Resynchronized · durable state refreshed";
+      return "Live updates restored";
     case "permission_changed":
-      return state.reason === "role_changed"
-        ? "Role changed · refreshing permissions"
-        : "Membership changed · refreshing permissions";
+      return "Access changed · refreshing";
   }
 }
 

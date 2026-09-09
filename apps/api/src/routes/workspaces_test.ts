@@ -40,6 +40,9 @@ function fixture(
       auth,
       allowedOrigins: [origin],
       service: {
+        remove: () => Promise.resolve(),
+        connections: () => Promise.resolve([]),
+        revokeConnection: () => Promise.resolve(),
         list: (session) => {
           calls.push(["list", session]);
           return Promise.resolve([workspace]);

@@ -19,6 +19,11 @@ Deno.test({
     await client.query("begin");
     try {
       await client.query("set local role relay_owner");
+      // Exercise migration 7's historical schema before migration 9 makes handles immutable.
+      // The transaction rollback restores the current trigger afterwards.
+      await client.query(
+        "alter table auth.organization disable trigger workspace_identity_protected",
+      );
       const suffix = crypto.randomUUID();
       const ids = Array.from({ length: 3 }, () => crypto.randomUUID());
       const users = ids.map((_, index) =>

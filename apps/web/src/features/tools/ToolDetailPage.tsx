@@ -56,8 +56,8 @@ function lifecycleBadge(lifecycle: ToolLifecycle) {
 function pageHeading(state: DetailPageState, toolKey: string): string {
   if (state.kind === "found") return state.tool.name;
   if (state.kind === "not-found") return "Tool not found";
-  if (state.kind === "degraded") return "Tool contract unavailable";
-  return toolKey.length > 0 ? toolKey : "Tool contract";
+  if (state.kind === "degraded") return "Tool details unavailable";
+  return toolKey.length > 0 ? toolKey : "Tool details";
 }
 
 function schemaText(schema: ToolDetail["inputSchema"]): string {
@@ -95,8 +95,7 @@ function ToolContract({
             <div>
               <h2 id="tool-execution-title">Execution unavailable</h2>
               <p>
-                Execution is unavailable until a real provider and meter policy are
-                configured.
+                This tool is not ready to run yet. You can view its details below.
               </p>
             </div>
             <StatusBadge tone="pending">Read only</StatusBadge>
@@ -104,14 +103,14 @@ function ToolContract({
         )}
 
       <details className="tool-reference" open={!isProductionToolKey(tool.key)}>
-        <summary>Tool contract <span>Version, limits, and API schemas</span></summary>
+        <summary>Technical details <span>Version, limits, and API schemas</span></summary>
       <section
         className="tool-contract-section"
         aria-labelledby="tool-facts-title"
       >
         <div className="tool-contract-section__heading">
-          <h2 id="tool-facts-title">Contract facts</h2>
-          <p>Published fields returned by the active tool contract.</p>
+          <h2 id="tool-facts-title">Tool details</h2>
+          <p>Version and limits for this tool.</p>
         </div>
         <dl className="tool-facts">
           <div>
@@ -205,7 +204,7 @@ export function ToolDetailPage({
   const heading = pageHeading(state, resolvedToolKey);
   const title = state.kind === "found"
     ? `${state.tool.key} | Relay`
-    : "Tool contract | Relay";
+    : "Tool details | Relay";
   usePageMetadata(title, "#141A16");
 
   useEffect(() => {
@@ -230,7 +229,7 @@ export function ToolDetailPage({
       setState({
         kind: "degraded",
         message:
-          "Relay could not load the tool contract. No contract data was shown.",
+          "Couldn’t load this tool’s details. Please try again.",
       });
     });
 
@@ -273,7 +272,7 @@ export function ToolDetailPage({
         {state.kind === "loading"
           ? (
             <Skeleton
-              label={`Loading contract for ${resolvedToolKey || "tool"}`}
+              label={`Loading details for ${resolvedToolKey || "tool"}`}
               lines={6}
             />
           )
@@ -282,7 +281,7 @@ export function ToolDetailPage({
         {state.kind === "not-found"
           ? (
             <div className="tool-detail-state">
-              <InlineNotice title="No matching tool contract">
+              <InlineNotice title="No matching tool">
                 <p>
                   Relay could not find{" "}
                   <code>{resolvedToolKey || "the requested tool"}</code>{" "}
@@ -300,7 +299,7 @@ export function ToolDetailPage({
           ? (
             <div className="tool-detail-state">
               <InlineNotice
-                title="Tool contract unavailable"
+                title="Tool details unavailable"
                 tone="error"
                 action={
                   <Button
