@@ -18,17 +18,25 @@ export function WorkspaceSwitcher() {
   const [switching, setSwitching] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const alive = useRef(true);
 
   useEffect(() => () => { alive.current = false; }, []);
 
   useEffect(() => {
     if (!open) return;
+    function closeAndRestoreFocus() {
+      setOpen(false);
+      // Deferred: a click outside the panel still has its own default focus
+      // handling to run (e.g. blurring onto a non-focusable target), which
+      // would otherwise override a synchronous focus() call made here.
+      setTimeout(() => triggerRef.current?.focus(), 0);
+    }
     function onPointerDown(event: PointerEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) closeAndRestoreFocus();
     }
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") closeAndRestoreFocus();
     }
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -97,6 +105,7 @@ export function WorkspaceSwitcher() {
     <div className="workspace-switcher" ref={rootRef}>
       <button
         type="button"
+        ref={triggerRef}
         className="workspace-switcher__trigger"
         aria-haspopup="listbox"
         aria-expanded={open}

@@ -78,14 +78,30 @@ it("switches the active workspace when another one is chosen", async () => {
   expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 });
 
-it("closes the panel on Escape without switching", async () => {
+it("closes the panel on Escape without switching, and returns focus to the trigger", async () => {
   vi.mocked(httpWorkspaceAdapter.list).mockResolvedValue({ items, maxOwnedWorkspaces: 20 });
   const user = userEvent.setup();
   const { auth, mount } = setup();
   mount();
-  await user.click(await screen.findByRole("button", { name: "Zaftech" }));
+  const trigger = await screen.findByRole("button", { name: "Zaftech" });
+  await user.click(trigger);
   await screen.findByRole("listbox");
   await user.keyboard("{Escape}");
   await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
   expect(auth.setActiveWorkspace).not.toHaveBeenCalled();
+  expect(trigger).toHaveFocus();
+});
+
+it("closes the panel on an outside click and returns focus to the trigger", async () => {
+  vi.mocked(httpWorkspaceAdapter.list).mockResolvedValue({ items, maxOwnedWorkspaces: 20 });
+  const user = userEvent.setup();
+  const { auth, mount } = setup();
+  mount();
+  const trigger = await screen.findByRole("button", { name: "Zaftech" });
+  await user.click(trigger);
+  await screen.findByRole("listbox");
+  await user.click(document.body);
+  await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+  expect(auth.setActiveWorkspace).not.toHaveBeenCalled();
+  expect(trigger).toHaveFocus();
 });
