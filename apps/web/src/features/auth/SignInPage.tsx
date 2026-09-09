@@ -65,7 +65,6 @@ export function SignInPage() {
     <AuthLayout>
       <div className="sign-in-panel">
         <div>
-          <p className="mono-label">OAuth only</p>
           <h1>Sign in to Relay</h1>
           <p className="sign-in-panel__intro">Use Google or GitHub. Relay does not offer password sign-in.</p>
         </div>
@@ -129,7 +128,6 @@ export function SignInPage() {
         <div className="sign-in-panel__footnote">
           <p>Signing in creates or resumes your personal Relay workspace.</p>
           <p>By continuing, you agree to ZafTech’s <a href={legalLinks.terms}>Terms of Service</a> and <a href={legalLinks.acceptableUse}>Acceptable Use Policy</a>. Read the <a href={legalLinks.privacy}>Privacy Policy</a> and <a href={legalLinks.cookies}>Cookie Policy</a>.</p>
-          <p className="mono-label">RLY-01 / OAuth only</p>
         </div>
       </div>
     </AuthLayout>

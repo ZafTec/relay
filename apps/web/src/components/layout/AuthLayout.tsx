@@ -18,7 +18,6 @@ export function AuthLayout({ children, compactMessage = false }: AuthLayoutProps
             <p>Curated, metered tools for AI agents. Every durable result leaves through a Relay-managed URL.</p>
           ) : null}
         </div>
-        <p className="auth-shell__notation">RLY-01 / WORKSPACE-SCOPED / OAUTH ONLY</p>
       </section>
       <main className="auth-shell__main" id="main-content">
         {children}
