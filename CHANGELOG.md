@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/ZafTec/relay/compare/v0.4.0...v0.5.0) (2026-09-09)
+
+
+### Features
+
+* complete workspace, artifact, and MCP workflows ([#62](https://github.com/ZafTec/relay/issues/62)) ([01f8127](https://github.com/ZafTec/relay/commit/01f81277e8399350077af37086623baa9b820c28))
+
 ## 0.4.0 (2026-09-09)
 
 ## What's Changed
