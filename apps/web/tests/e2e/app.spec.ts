@@ -591,7 +591,7 @@ test("dashboard uses session, workspace, and API responses without fake counts",
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: width <= 390 ? 844 : 900 });
     await page.goto("/dashboard");
-    await expect(page.locator(".workspace-label:visible").getByText("Browser workspace")).toBeVisible();
+    await expect(page.locator(".workspace-switcher:visible").getByText("Browser workspace")).toBeVisible();
     await expect(page.getByText("No overview data is exposed yet")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Overview", exact: true })).toBeVisible();
     await expect(page.getByText("Not requested")).toBeVisible();
