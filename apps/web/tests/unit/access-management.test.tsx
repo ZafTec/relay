@@ -60,8 +60,8 @@ it("requires confirmation and refresh after an ambiguous rotation", async () => 
   await waitFor(() => expect(screen.getByRole("button", { name: "Rotate secret" })).toBeEnabled());
 });
 
-it("expires the session when client management gets a stale-session response", async () => {
-  vi.mocked(oauthClients.list).mockRejectedValue(new ApiError("Fresh session required", 401, "reauthentication_required"));
+it.each([[401, "reauthentication_required"], [403, "SESSION_TOO_OLD"]] as const)("expires the session when client management gets a %s %s response", async (status, code) => {
+  vi.mocked(oauthClients.list).mockRejectedValue(new ApiError("Fresh session required", status, code));
   mountClients();
   await waitFor(() => expect(expireSession).toHaveBeenCalledWith("session-one"));
 });

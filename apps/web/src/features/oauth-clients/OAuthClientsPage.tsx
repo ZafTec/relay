@@ -71,7 +71,8 @@ function ClientManager() {
   const endpoint = new URL("/mcp", window.location.origin).href;
 
   function showFailure(failure: unknown) {
-    if (failure instanceof ApiError && failure.status === 401) {
+    if (failure instanceof ApiError && (failure.status === 401
+      || (failure.status === 403 && ["SESSION_TOO_OLD", "reauthentication_required"].includes(failure.code ?? "")))) {
       setCredentials(null);
       expireSession(sessionId);
     } else setError(oauthClientError(failure));

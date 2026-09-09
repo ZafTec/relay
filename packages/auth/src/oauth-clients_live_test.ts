@@ -197,11 +197,87 @@ Deno.test({
           }),
         );
       };
-      assert(
-        [401, 403].includes(
-          (await call("create-client", member.headers, payload)).status,
-        ),
+      // Exercise the actual native HTTP endpoints used by the dashboard with
+      // a non-superadmin session, including their ownership boundary.
+      const memberCreated = await call(
+        "create-client",
+        member.headers,
+        payload,
       );
+      assertEquals(memberCreated.status, 201);
+      const memberClient = await memberCreated.json();
+      assert(typeof memberClient.client_secret === "string");
+      const memberList = await call("get-clients", member.headers);
+      assertEquals(memberList.status, 200);
+      assertEquals(
+        (await memberList.json()).map((item: { client_id: string }) =>
+          item.client_id
+        ),
+        [memberClient.client_id],
+      );
+      assertEquals(
+        (await (await call("get-clients", admin.headers)).json()).length,
+        0,
+      );
+      assertEquals(
+        (await call(
+          `get-client?client_id=${memberClient.client_id}`,
+          member.headers,
+        )).status,
+        200,
+      );
+      for (const headers of [admin.headers, other.headers]) {
+        assertEquals(
+          (await call(
+            `get-client?client_id=${memberClient.client_id}`,
+            headers,
+          )).status,
+          401,
+        );
+        for (
+          const path of [
+            "delete-client",
+            "client/rotate-secret",
+            "update-client",
+          ]
+        ) {
+          assertEquals(
+            (await call(path, headers, {
+              client_id: memberClient.client_id,
+              ...(path === "update-client"
+                ? { update: { client_name: "Foreign edit" } }
+                : {}),
+            })).status,
+            401,
+          );
+        }
+      }
+      assertEquals(
+        (await call("update-client", member.headers, {
+          client_id: memberClient.client_id,
+          update: { client_name: "Member-owned client" },
+        })).status,
+        200,
+      );
+      const memberRotation = await call(
+        "client/rotate-secret",
+        member.headers,
+        {
+          client_id: memberClient.client_id,
+        },
+      );
+      assertEquals(memberRotation.status, 200);
+      assertNotEquals(
+        (await memberRotation.json()).client_secret,
+        memberClient.client_secret,
+      );
+      assertEquals(
+        (await call("delete-client", member.headers, {
+          client_id: memberClient.client_id,
+        })).status,
+        200,
+      );
+      assertEquals((await call("get-clients", new Headers())).status, 401);
       const created = await call("create-client", admin.headers, payload);
       assertEquals(created.status, 201);
       const client = await created.json();
@@ -411,8 +487,9 @@ Deno.test({
         "update relay.system_role_assignments set revoked_at=now(),revoked_by=user_id where user_id=$1 and revoked_at is null",
         [admin.id],
       );
-      assert(
-        [401, 403].includes((await call("get-clients", admin.headers)).status),
+      assertEquals((await call("get-clients", admin.headers)).status, 200);
+      await assertRejects(() =>
+        management(operatorSession, admin.id, "list", {})
       );
     } finally {
       await jwksServer?.shutdown();

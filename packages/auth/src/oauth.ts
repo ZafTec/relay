@@ -1,6 +1,5 @@
 import type { McpOptions } from "@better-auth/mcp";
 import { APIError } from "better-auth/api";
-import { isSuperadmin } from "./system-roles.ts";
 import { createInsufficientScopeError } from "better-auth/oauth2";
 import {
   RELAY_MCP_ADMIN_SCOPES,
@@ -267,15 +266,11 @@ export function createMcpOAuthOptions(
     clientRegistrationAllowedScopes: [...RELAY_MCP_ADMIN_SCOPES],
     clientRegistrationRequirePKCE: true,
     storeClientSecret: "hashed",
-    clientPrivileges: async ({ user, session, action }) => {
+    clientPrivileges: ({ user, session, action }) => {
       if (!user || !session) return false;
-      if (!await isSuperadmin(queryable, user.id)) {
-        throw new APIError("FORBIDDEN", {
-          code: "AUTHORIZATION_DENIED",
-          message:
-            "A current superadmin role is required to manage OAuth clients.",
-        });
-      }
+      // Better Auth enforces client ownership on each endpoint. Self-service
+      // management is available to every signed-in user; platform admin tools
+      // and admin-scope tokens retain their separate superadmin checks.
       if (action === "read" || action === "list") return true;
       // MCP integrations act through user consent, never a machine-only grant.
       if (action === "configure-client-credentials-scopes") return false;
