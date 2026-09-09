@@ -1,0 +1,11 @@
+.landing-faq { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: clamp(32px, 6vw, 88px); align-items: start; }
+.landing-faq__intro h2 { margin: 16px 0; max-width: 14ch; }
+.landing-faq__intro > p:not(.kicker) { color: var(--surface-copy); line-height: 1.7; max-width: 34ch; }
+.landing-faq__intro > a { display: inline-flex; align-items: center; gap: 12px; min-height: 44px; color: var(--surface-accent); font-size: 0.86rem; }
+.landing-faq__questions { display: grid; gap: 10px; }
+.landing-faq__questions .disclosure > summary { min-height: 64px; padding: 18px 20px; }
+.landing-faq__questions .disclosure__title { font-size: 0.95rem; }
+.landing-faq__questions .disclosure__body { padding: 4px 20px 20px; border-top: 0; }
+.landing-faq__questions p { margin: 0; color: var(--surface-copy); font-size: 0.9rem; line-height: 1.8; }
+.landing-step { color: var(--surface-accent); font-family: var(--relay-font-mono); font-size: 0.85rem; }
+@media (max-width: 760px) { .landing-faq { grid-template-columns: minmax(0, 1fr); gap: 24px; } .landing-faq__intro h2 { max-width: 20ch; } }

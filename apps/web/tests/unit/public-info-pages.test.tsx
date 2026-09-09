@@ -92,7 +92,7 @@ describe("public docs", () => {
   });
 });
 
-describe("public status", () => {
+describe("admin status content", () => {
   it("announces loading while both endpoint requests are pending", () => {
     const adapter: StatusAdapter = {
       loadReadiness: vi.fn(() => new Promise<StatusReadinessSnapshot>(() => undefined)),

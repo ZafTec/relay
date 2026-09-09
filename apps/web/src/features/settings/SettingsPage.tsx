@@ -6,6 +6,7 @@ import "./settings.css";
 import { NotificationSettings } from "./NotificationSettings";
 import { LegalLinks } from "../../components/layout/LegalLinks";
 import { WorkspaceManagement } from "./WorkspaceManagement";
+import { Disclosure } from "../../components/ui/Disclosure";
 
 const MCP_ENDPOINT = "/mcp";
 const MCP_RESOURCE_METADATA = "/.well-known/oauth-protected-resource/mcp";
@@ -98,6 +99,11 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
         <LinkButton to="/dashboard/oauth-clients" variant="outline">Manage OAuth clients</LinkButton>
       </header>
 
+      <div className="settings-mcp__quick">
+        <div><span className="settings-mcp__endpoint-label">Your MCP URL</span><code>{new URL(MCP_ENDPOINT, window.location.origin).href}</code></div>
+        <AuthorizationWorkspace state={workspace} />
+      </div>
+      <Disclosure title="Connection instructions" description="Automatic setup, manual clients, and workspace access">
       <ol className="settings-mcp__steps">
         <li>
           <span className="settings-step__number" aria-hidden="true">01</span>
@@ -111,7 +117,7 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
               </div>
               <div>
                 <dt>Request</dt>
-                <dd><code>{new URL(MCP_ENDPOINT, window.location.origin).href}</code></dd>
+                <dd><code>{MCP_ENDPOINT}</code></dd>
               </div>
               <div>
                 <dt>OAuth metadata</dt>
@@ -136,11 +142,12 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
           <div>
             <h3>Sign in and choose a workspace</h3>
             <p>Approve the permissions you want the agent to use. Running tools also requires a usage allowance.</p>
-            <AuthorizationWorkspace state={workspace} />
           </div>
         </li>
       </ol>
+      </Disclosure>
 
+      <Disclosure title="Permission reference" description="Browse the 10 permissions an agent can request">
       <div className="settings-scopes">
         <div className="settings-scopes__intro">
           <div>
@@ -171,6 +178,7 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
           </table>
         </div>
       </div>
+      </Disclosure>
     </section>
   );
 }
@@ -197,9 +205,11 @@ export function SettingsPage() {
       </header>
 
       <div className="settings-page__body">
+        <McpConnectionGuide workspace={workspace} />
         <div className="settings-context">
           <WorkspaceManagement />
 
+          <Disclosure title="Current session" description={displayEmail}>
           <section className="settings-panel" aria-labelledby="settings-session-title">
             <header className="settings-panel__header">
               <div>
@@ -245,11 +255,11 @@ export function SettingsPage() {
               </dl>
             </div>
           </section>
+          </Disclosure>
         </div>
 
         {workspace.status === "ready" ? <NotificationSettings key={`${session.identity.session.id}:${workspace.workspace.id}`} email={displayEmail} /> : null}
-        <McpConnectionGuide workspace={workspace} />
-        <section className="settings-panel" aria-label="Legal and privacy"><header className="settings-panel__header"><h2>Legal and privacy</h2></header><div className="settings-panel__body"><LegalLinks /></div></section>
+        <Disclosure title="Legal and privacy"><section aria-label="Legal and privacy"><LegalLinks /></section></Disclosure>
       </div>
     </div>
   );

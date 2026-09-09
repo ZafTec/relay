@@ -80,6 +80,8 @@ describe("workspace settings page", () => {
     expect(within(workspaceSection).getByText("workspace-northstar-fixture")).toBeInTheDocument();
     expect(within(workspaceSection).getByText("Current")).toBeInTheDocument();
 
+    const user = userEvent.setup();
+    await user.click(screen.getByText("Current session", { selector: ".disclosure__title" }));
     const sessionSection = screen.getByRole("region", { name: "Current session" });
     expect(within(sessionSection).getByText("Morgan Lee")).toBeInTheDocument();
     expect(within(sessionSection).getByText("morgan@example.test")).toBeInTheDocument();
@@ -89,6 +91,8 @@ describe("workspace settings page", () => {
     expect(sessionSection.querySelector('time[datetime="2031-04-12T15:30:00.000Z"]'))
       .toBeInTheDocument();
 
+    await user.click(screen.getByText("Connection instructions"));
+    await user.click(screen.getByText("Permission reference"));
     const mcpSection = screen.getByRole("region", { name: "MCP connection" });
     expect(within(mcpSection).getByText(new URL("/mcp", window.location.origin).href)).toBeInTheDocument();
     expect(within(mcpSection).getByText("/.well-known/oauth-protected-resource/mcp"))

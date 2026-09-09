@@ -460,6 +460,8 @@ describe("artifact detail and sharing", () => {
     );
 
     expect(await screen.findByRole("heading", { level: 1, name: "Campaign master" })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByText("Version history", { selector: ".disclosure__title" }));
+    await userEvent.setup().click(screen.getByText("File details"));
     expect(screen.getByRole("table", { name: "Immutable versions for Campaign master" })).toBeInTheDocument();
     expect(screen.getByRole("table", {
       name: /Share records for Campaign master.*do not expose the token value shown at creation/i,

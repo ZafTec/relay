@@ -51,6 +51,7 @@ it("requires confirmation and refresh after an ambiguous rotation", async () => 
   vi.mocked(oauthClients.list).mockResolvedValue([client]);
   vi.mocked(oauthClients.rotate).mockRejectedValue(new Error("Connection lost"));
   mountClients();
+  await user.click(await screen.findByText("Manage client"));
   await user.click(await screen.findByRole("button", { name: "Rotate secret" }));
   expect(oauthClients.rotate).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Replace secret" }));

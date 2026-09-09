@@ -21,7 +21,6 @@ import { NotFoundPage } from "../features/not-found/NotFoundPage";
 import { OAuthConsentPage } from "../features/oauth/OAuthConsentPage";
 import { OAuthWorkspacePage } from "../features/oauth/OAuthWorkspacePage";
 import { ProfilePage } from "../features/profile/ProfilePage";
-import { StatusPage } from "../features/status/StatusPage";
 import { RouteErrorPage } from "./RouteErrorPage";
 
 const ToolsPage = lazy(() => import("../features/tools").then((module) => ({
@@ -72,6 +71,7 @@ const AdminAllowancesPage = lazy(() => import("../features/admin-allowances/Admi
 const SuperadminsPage = lazy(() => import("../features/admin-access/SuperadminsPage").then((module) => ({ default: module.SuperadminsPage })));
 const AcceptSuperadminInvitationPage = lazy(() => import("../features/admin-access/AcceptSuperadminInvitationPage").then((module) => ({ default: module.AcceptSuperadminInvitationPage })));
 const OAuthClientsPage = lazy(() => import("../features/oauth-clients/OAuthClientsPage").then((module) => ({ default: module.OAuthClientsPage })));
+const StatusPage = lazy(() => import("../features/status/StatusPage").then((module) => ({ default: module.StatusPage })));
 
 function productRoute(content: ReactNode, loadingLabel: string) {
   return (
@@ -119,11 +119,6 @@ export const relayRoutes = [
   {
     path: "/docs",
     element: <DocsPage />,
-    errorElement: <RouteErrorPage />,
-  },
-  {
-    path: "/status",
-    element: <StatusPage />,
     errorElement: <RouteErrorPage />,
   },
   {
@@ -213,6 +208,7 @@ export const relayRoutes = [
                 element: productRoute(<AdminAllowancesPage />, "Loading allowances"),
               },
               { path: "superadmins", element: protectedLazyRoute(<SuperadminsPage />, "Loading platform access") },
+              { path: "status", element: productRoute(<StatusPage />, "Loading service status") },
             ],
           },
         ],

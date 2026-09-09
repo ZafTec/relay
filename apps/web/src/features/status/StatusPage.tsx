@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { usePageMetadata } from "../../app/usePageMetadata";
-import { RelayBrand } from "../../components/brand/RelayBrand";
-import { Button, LinkButton } from "../../components/ui/Button";
+import { Button } from "../../components/ui/Button";
 import { Skeleton } from "../../components/ui/Skeleton";
 import {
   type StatusAdapter,
@@ -25,25 +23,6 @@ function isAbortError(error: unknown): boolean {
     && error !== null
     && "name" in error
     && error.name === "AbortError";
-}
-
-function StatusHeader() {
-  return (
-    <header className="service-status-header">
-      <div className="service-status-header__inner">
-        <div className="service-status-header__brand">
-          <RelayBrand />
-          <span>Status</span>
-        </div>
-        <nav className="service-status-header__nav" aria-label="Primary">
-          <Link className="service-status-header__link" to="/docs">Docs</Link>
-          <Link className="service-status-header__link" to="/status" aria-current="page">Status</Link>
-          <LinkButton className="service-status-header__dashboard" to="/dashboard">Open dashboard</LinkButton>
-        </nav>
-        <a className="service-status-header__json" href="/health/ready">JSON</a>
-      </div>
-    </header>
-  );
 }
 
 function readinessPresentation(state: ReadinessState): {
@@ -197,7 +176,7 @@ function LoadingReadiness() {
 }
 
 export function StatusPage({ statusAdapter = httpStatusAdapter }: StatusPageProps) {
-  usePageMetadata("Service status | Relay", "#F5F4ED");
+  usePageMetadata("Service status | Relay admin", "#141A16");
   const [readiness, setReadiness] = useState<ReadinessState>({ kind: "loading" });
   const [build, setBuild] = useState<BuildState>({ kind: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
@@ -240,12 +219,9 @@ export function StatusPage({ statusAdapter = httpStatusAdapter }: StatusPageProp
   const refreshing = readiness.kind === "loading" || build.kind === "loading";
 
   return (
-    <div className="service-status-page public-surface">
-      <a className="skip-link" href="#main-content">Skip to content</a>
-      <StatusHeader />
-
-      <main id="main-content" className="service-status-main">
-        <p className="kicker"><span>// 01</span> Service status</p>
+    <div className="service-status-page product-surface">
+      <div className="service-status-main">
+        <p className="mono-label">Service status</p>
         <StatusSummary
           readiness={readiness}
           refreshing={refreshing}
@@ -284,15 +260,7 @@ export function StatusPage({ statusAdapter = httpStatusAdapter }: StatusPageProp
             </dl>
           </div>
         </details>
-      </main>
-
-      <footer className="service-status-footer">
-        <p>Current service facts only. No sample incidents or historical availability.</p>
-        <nav aria-label="Status footer">
-          <Link to="/docs">Docs</Link>
-          <a href="/health/ready">Readiness JSON</a>
-        </nav>
-      </footer>
+      </div>
     </div>
   );
 }

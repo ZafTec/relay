@@ -116,6 +116,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     await panel.getByRole("button", { name: "Save changes" }).click();
     await expect(panel.getByText("@field-research", { exact: true })).toBeVisible();
     expect(state.updated).toEqual([{ id: "ws_field_notes", name: "Field research", slug: "field-research" }]);
+    await page.locator("summary").filter({ hasText: "Current session" }).click();
     await expect(page.getByRole("region", { name: "Current session" }).getByText("@field-research")).toBeVisible();
     await expect(page.getByRole("region", { name: "MCP connection" }).getByText("@field-research")).toBeVisible();
 
@@ -185,6 +186,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     const { state, errors } = await workspaceFixture(page);
     await page.goto("/dashboard/settings");
     const guide = page.getByRole("region", { name: "MCP connection" });
+    await guide.locator("summary").filter({ hasText: "Connection instructions" }).click();
     await expect(guide.getByText(/Compatible agents register automatically/)).toBeVisible();
     await guide.getByRole("link", { name: "Manage OAuth clients" }).click();
     await expect(page.getByRole("heading", { name: "OAuth clients", exact: true })).toBeVisible();

@@ -54,7 +54,7 @@ Relay is infrastructure for MCP clients and engineering teams. It combines:
 - OAuth through Google and GitHub
 - Future entitlements, subscriptions, transformations, and streaming
 
-Public routes:
+Routes and access:
 
 ```text
 /             Marketing landing page
@@ -62,8 +62,11 @@ Public routes:
 /dashboard    Authenticated application
 /docs         Product and MCP documentation
 /changelog    Published release notes
-/status       Operational status
+/admin/status Operational status (superadmins only)
 ```
+
+Operational status belongs only in the superadmin console. Do not link it from
+public navigation or workspace navigation.
 
 Superadmin functionality eventually includes changelog drafting, preview, and
 publication.

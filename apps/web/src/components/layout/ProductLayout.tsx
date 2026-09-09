@@ -6,6 +6,7 @@ import { RelayBrand } from "../brand/RelayBrand";
 import { Button } from "../ui/Button";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { InlineNotice } from "../ui/InlineNotice";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 const AdminAccessLink = lazy(() =>
   import("../../features/admin-changelog/AdminAccessLink").then((module) => ({
@@ -26,43 +27,6 @@ function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "R";
   return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
-}
-
-function WorkspaceLabel() {
-  const { workspace } = useAuth();
-
-  if (workspace.status === "ready") {
-    return (
-      <div className="workspace-label">
-        <span className="workspace-label__eyebrow">Workspace</span>
-        <strong>{workspace.workspace.name}</strong>
-        <span className="workspace-label__id">@{workspace.workspace.slug}</span>
-        <Link to="/dashboard/settings#workspaces" className="workspace-label__manage">Switch or create workspace</Link>
-      </div>
-    );
-  }
-  if (workspace.status === "loading" || workspace.status === "idle") {
-    return (
-      <div className="workspace-label" role="status">
-        <span className="workspace-label__eyebrow">Workspace</span>
-        <strong>Loading workspace</strong>
-      </div>
-    );
-  }
-  if (workspace.status === "empty") {
-    return (
-      <div className="workspace-label">
-        <span className="workspace-label__eyebrow">Workspace</span>
-        <strong>No active workspace</strong>
-      </div>
-    );
-  }
-  return (
-    <div className="workspace-label">
-      <span className="workspace-label__eyebrow">Workspace</span>
-      <strong>Workspace unavailable</strong>
-    </div>
-  );
 }
 
 function SectionNavigation({
@@ -126,7 +90,7 @@ export function ProductLayout() {
       <a className="skip-link" href="#main-content">Skip to content</a>
       <aside className="product-rail" aria-label="Workspace navigation">
         <div className="product-rail__brand"><RelayBrand surface="product" compact showParent={false} /></div>
-        <div className="product-rail__workspace"><WorkspaceLabel /></div>
+        <div className="product-rail__workspace"><WorkspaceSwitcher /></div>
         <SectionNavigation>
           <Suspense fallback={null}>
             <AdminAccessLink className="product-nav__item" />
@@ -171,7 +135,7 @@ export function ProductLayout() {
             </Button>
           </div>
         </header>
-        <div className="product-mobile-workspace"><WorkspaceLabel /></div>
+        <div className="product-mobile-workspace"><WorkspaceSwitcher /></div>
         <SectionNavigation mobile>
           <Suspense fallback={null}>
             <AdminAccessLink className="product-nav__item" />

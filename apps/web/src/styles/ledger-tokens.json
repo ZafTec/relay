@@ -61,6 +61,57 @@
       "accent-hover": {
         "value": "#86D6CD",
         "role": "hover"
+      },
+      "light": {
+        "$comment": "Light-mode variant of the product surface. Applied when the viewer's OS/browser prefers light, or has no preference. Kept distinct from the public paper tone (cooler, white raised panels) so /dashboard stays visually distinct from / in both modes.",
+        "bg": {
+          "value": "#F3F5F3",
+          "role": "page background"
+        },
+        "bg-rail": {
+          "value": "#EAEEEB",
+          "role": "sidebar / rail"
+        },
+        "surface": {
+          "value": "#FFFFFF",
+          "role": "raised panel"
+        },
+        "surface-2": {
+          "value": "#E1E7E3",
+          "role": "hairline divider, avatar tile"
+        },
+        "border": {
+          "value": "#DCE3DF",
+          "role": "default 1px border"
+        },
+        "border-strong": {
+          "value": "#C4CDC7",
+          "role": "input + secondary button border"
+        },
+        "ink": {
+          "value": "#141A16",
+          "role": "primary text",
+          "contrastOnBg": "15.6:1"
+        },
+        "ink-secondary": {
+          "value": "#46514B",
+          "role": "body text",
+          "contrastOnBg": "7.3:1"
+        },
+        "ink-muted": {
+          "value": "#5F6B64",
+          "role": "mono labels, metadata",
+          "contrastOnBg": "5.0:1"
+        },
+        "accent": {
+          "value": "#1F776E",
+          "role": "interactive, current, primary button",
+          "contrastOnBg": "4.9:1"
+        },
+        "accent-hover": {
+          "value": "#145B54",
+          "role": "hover"
+        }
       }
     },
     "public": {

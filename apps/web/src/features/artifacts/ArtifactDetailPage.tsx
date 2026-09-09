@@ -5,6 +5,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { Button, LinkButton } from "../../components/ui/Button";
 import { InlineNotice } from "../../components/ui/InlineNotice";
 import { Skeleton } from "../../components/ui/Skeleton";
+import { Disclosure } from "../../components/ui/Disclosure";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import {
   type ArtifactDetail,
@@ -627,7 +628,7 @@ export function ArtifactDetailPage({
           <Link className="artifact-back-link" to="/dashboard/artifacts">Back to artifacts</Link>
           <div>
             <p className="mono-label">
-              {workspaceId === null ? "Artifact registry" : `Workspace ${workspaceId}`}
+              Workspace file
             </p>
             <h1>{artifact === null ? "Artifact detail" : artifact.name}</h1>
           </div>
@@ -701,8 +702,7 @@ export function ArtifactDetailPage({
               <div className="artifact-detail-overview__content">
                 <div className="artifact-section-heading">
                   <div>
-                    <p className="mono-label">Registry record</p>
-                    <h2 id="artifact-overview-title">Artifact facts</h2>
+                    <h2 id="artifact-overview-title">File overview</h2>
                   </div>
                   {artifact.currentVersion === null ? (
                     <StatusBadge tone="muted">No current version</StatusBadge>
@@ -710,7 +710,10 @@ export function ArtifactDetailPage({
                     <VerificationBadge status={artifact.currentVersion.verificationStatus} />
                   )}
                 </div>
-                <DetailFacts artifact={artifact} />
+                <p className="artifact-section-copy">{artifact.mediaKind} · {artifact.currentVersion ? `Version ${artifact.currentVersion.sequence}` : "No current version"} · {artifact.shared ? "Shared" : "Private"}</p>
+                <Disclosure title="File details" description="Created date, source run, and reference IDs">
+                  <DetailFacts artifact={artifact} />
+                </Disclosure>
                 {artifact.versions.length === 0 ? (
                   <InlineNotice title="No versions available" tone="warning">
                     <p>A share link cannot be created until this artifact has an immutable version.</p>
@@ -719,6 +722,7 @@ export function ArtifactDetailPage({
               </div>
             </section>
 
+            <Disclosure title="Version history" description={`${artifact.versions.length} ${artifact.versions.length === 1 ? "version" : "versions"} · Newest first`}>
             <section className="artifact-ledger-section" aria-labelledby="artifact-versions-title">
               <div className="artifact-section-heading">
                 <div>
@@ -731,6 +735,7 @@ export function ArtifactDetailPage({
               </div>
               <VersionTable artifact={artifact} />
             </section>
+            </Disclosure>
 
             <section className="artifact-ledger-section" aria-labelledby="artifact-shares-title">
               <div className="artifact-section-heading">
