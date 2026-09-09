@@ -127,7 +127,7 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
             <p>
               Choose Connect in your agent. Compatible agents register automatically and open
               Relay for sign-in. If it asks for a client ID and secret, copy its redirect URI;
-              a superadmin can create the client in Manage OAuth clients.
+              create your client in Manage OAuth clients.
             </p>
           </div>
         </li>

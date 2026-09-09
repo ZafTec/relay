@@ -337,7 +337,9 @@ Deno.test({
         await authorizeMcpAccessTokenClaims(pool, resource, claims),
         null,
       );
-      assertEquals((await call("get-clients", admin.headers)).status, 403);
+      // Losing the platform role revokes admin tokens, but personal OAuth
+      // clients remain manageable through the ordinary session boundary.
+      assertEquals((await call("get-clients", admin.headers)).status, 200);
       const revokedRefresh = await fetchFn(`${issuer}/oauth2/token`, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },

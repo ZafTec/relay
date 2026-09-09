@@ -7,10 +7,9 @@ import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { createMcpOAuthOptions } from "./oauth.ts";
 import { APIError } from "better-auth/api";
 
-Deno.test("OAuth client management requires a current superadmin and fresh session for mutations", async () => {
-  let allowed = true;
+Deno.test("OAuth self-service requires a session and fresh sign-in for mutations", async () => {
   const queryable = {
-    query: <T>() => Promise.resolve({ rows: allowed ? [{} as T] : [] }),
+    query: <T>() => Promise.resolve({ rows: [] as T[] }),
   };
   const options = createMcpOAuthOptions(
     queryable,
@@ -24,16 +23,20 @@ Deno.test("OAuth client management requires a current superadmin and fresh sessi
     headers: new Headers(),
     action: "create",
   } as Input;
-  assertEquals(await privileges(request), true);
-  allowed = false;
-  await assertRejects(() => Promise.resolve(privileges(request)), APIError);
-  allowed = true;
   const stale = {
     ...request,
     session: { ...request.session, createdAt: new Date(0) },
   } as Input;
-  await assertRejects(() => Promise.resolve(privileges(stale)), APIError);
-  assertEquals(await privileges({ ...stale, action: "list" }), true);
+  for (const action of ["create", "update", "rotate", "delete"] as const) {
+    assertEquals(await privileges({ ...request, action }), true);
+    await assertRejects(
+      async () => await privileges({ ...stale, action }),
+      APIError,
+    );
+  }
+  for (const action of ["read", "list"] as const) {
+    assertEquals(await privileges({ ...stale, action }), true);
+  }
   assertEquals(
     await privileges({
       ...request,
@@ -42,6 +45,7 @@ Deno.test("OAuth client management requires a current superadmin and fresh sessi
     false,
   );
   assertEquals(await privileges({ ...request, user: undefined }), false);
+  assertEquals(await privileges({ ...request, session: undefined }), false);
   assertEquals(options.allowDynamicClientRegistration, true);
   assertEquals(options.storeClientSecret, "hashed");
 });
