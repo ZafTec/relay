@@ -95,7 +95,7 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
             Connect Gemini or another AI agent, then sign in and approve access to your workspace.
           </p>
         </div>
-        <LinkButton to="/admin/oauth-clients" variant="outline">Manage OAuth clients</LinkButton>
+        <LinkButton to="/dashboard/oauth-clients" variant="outline">Manage OAuth clients</LinkButton>
       </header>
 
       <ol className="settings-mcp__steps">
@@ -127,7 +127,7 @@ function McpConnectionGuide({ workspace }: { workspace: WorkspaceState }) {
             <p>
               Choose Connect in your agent. Compatible agents register automatically and open
               Relay for sign-in. If it asks for a client ID and secret, copy its redirect URI;
-              a superadmin can create the client in Manage OAuth clients.
+              create your client in Manage OAuth clients.
             </p>
           </div>
         </li>

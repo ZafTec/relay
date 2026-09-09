@@ -18,6 +18,7 @@ const sections = [
   { label: "Runs", to: "/dashboard/runs" },
   { label: "Artifacts", to: "/dashboard/artifacts" },
   { label: "Usage", to: "/dashboard/usage" },
+  { label: "OAuth clients", to: "/dashboard/oauth-clients" },
   { label: "Settings", to: "/dashboard/settings" },
 ] as const;
 

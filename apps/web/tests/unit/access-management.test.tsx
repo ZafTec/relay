@@ -7,11 +7,13 @@ import { SuperadminsPage } from "../../src/features/admin-access/SuperadminsPage
 import { AcceptSuperadminInvitationPage } from "../../src/features/admin-access/AcceptSuperadminInvitationPage";
 import { oauthClients } from "../../src/lib/api/oauth-clients";
 import { superadminAccess } from "../../src/lib/api/superadmin-access";
+import { checkAdminAccess } from "../../src/lib/api/admin-access";
 import { ApiError } from "../../src/lib/api/client";
 
-const { reportAccessFailure } = vi.hoisted(() => ({ reportAccessFailure: vi.fn() }));
-vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: () => ({ session: { status: "authenticated", identity: { session: { id: "session-one" }, user: { id: "user-one" } } } }) }));
+const { expireSession, reportAccessFailure } = vi.hoisted(() => ({ expireSession: vi.fn(), reportAccessFailure: vi.fn() }));
+vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: () => ({ session: { status: "authenticated", identity: { session: { id: "session-one" }, user: { id: "user-one" } } }, expireSession }) }));
 vi.mock("../../src/features/admin-changelog/AdminChangelogContext", () => ({ useAdminChangelog: () => ({ reportAccessFailure }) }));
+vi.mock("../../src/lib/api/admin-access", () => ({ checkAdminAccess: vi.fn(async () => ({ kind: "ok" })) }));
 vi.mock("../../src/lib/api/oauth-clients", async (original) => ({ ...await original<typeof import("../../src/lib/api/oauth-clients")>(), oauthClients: { list: vi.fn(), create: vi.fn(), rotate: vi.fn(), remove: vi.fn() } }));
 vi.mock("../../src/lib/api/superadmin-access", () => ({ superadminAccess: { list: vi.fn(), invite: vi.fn(), revoke: vi.fn(), invitation: vi.fn() } }));
 const client = { client_id: "test-client", client_name: "My agent", redirect_uris: ["https://agent.example.test/callback"], token_endpoint_auth_method: "client_secret_post" };
@@ -20,6 +22,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(oauthClients.list).mockResolvedValue([]);
   vi.mocked(superadminAccess.list).mockResolvedValue({ admins: [], invitations: [] });
+  vi.mocked(checkAdminAccess).mockResolvedValue({ kind: "ok" });
 });
 const mountClients = () => render(<MemoryRouter><OAuthClientsPage /></MemoryRouter>);
 
@@ -57,10 +60,10 @@ it("requires confirmation and refresh after an ambiguous rotation", async () => 
   await waitFor(() => expect(screen.getByRole("button", { name: "Rotate secret" })).toBeEnabled());
 });
 
-it("hands expired client-management sessions back to the admin access boundary", async () => {
-  vi.mocked(oauthClients.list).mockRejectedValue(new ApiError("Fresh session required", 401, "reauthentication_required"));
+it.each([[401, "reauthentication_required"], [403, "SESSION_TOO_OLD"]] as const)("expires the session when client management gets a %s %s response", async (status, code) => {
+  vi.mocked(oauthClients.list).mockRejectedValue(new ApiError("Fresh session required", status, code));
   mountClients();
-  await waitFor(() => expect(reportAccessFailure).toHaveBeenCalledWith({ kind: "reauthentication-required" }, "session-one"));
+  await waitFor(() => expect(expireSession).toHaveBeenCalledWith("session-one"));
 });
 
 it("retries an uncertain invitation using the original idempotency key", async () => {
