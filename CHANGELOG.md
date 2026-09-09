@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 (2026-09-09)
+
+## What's Changed
+* fix: enable self-service OAuth clients and simplify sign-in by @Euaell in https://github.com/ZafTec/relay/pull/59
+* feat: compact workspace UI, add FAQ, and restrict status to superadmins by @Euaell in https://github.com/ZafTec/relay/pull/60
+
+
+**Full Changelog**: https://github.com/ZafTec/relay/compare/v0.3.0...v0.4.0
+
 ## 0.3.0 (2026-09-07)
 
 ## What's Changed
